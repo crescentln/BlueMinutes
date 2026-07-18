@@ -1,8 +1,8 @@
 # MVP Acceptance Baseline
 
-Status: Accepted measurement plan; no product criteria pass yet
+Status: Task 003A contract gates verified; end-to-end MVP remains untested
 Owner: Codex
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 Purpose: Define the acceptance boundary for the first local recorded-meeting
 vertical slice and prevent documentation or scaffolding from being mistaken for
 product completion.
@@ -85,5 +85,14 @@ kept current in the execution ledger and implementation plan.
 
 ## Current status
 
-Task 002 changes documentation and governance only. All product assertions are
-`NOT TESTED` or `NOT APPLICABLE`; none is `PASS` yet.
+Task 003A verifies only the foundational semantic-object and revision
+contracts: immutable values, exact revision references, fail-closed
+classification, deterministic validation, native semantic-hash verification,
+stable v1 serialization, realistic compatibility behavior, and domain
+boundary isolation. Its 40 synthetic tests
+pass.
+
+The end-to-end assertions above remain `NOT TESTED` or `NOT APPLICABLE` until
+their owning tasks are implemented. Task 003A does not establish persistence,
+stale propagation, provider routing, media, briefing, recovery, or user-facing
+MVP behavior.

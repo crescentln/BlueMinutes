@@ -65,5 +65,40 @@ authorized.
 
 ## Build-command status
 
-No build, test, format, or lint command exists in Task 002. Task 003A must add
-and document the first deterministic commands when it creates the Swift module.
+Task 003A introduces the first deterministic package commands:
+
+```sh
+swift package dump-package
+swift package show-dependencies --format json
+swift build --configuration debug -Xswiftc -warnings-as-errors
+swift build --configuration release -Xswiftc -warnings-as-errors
+swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors
+```
+
+The standard test command requires a complete, correctly selected Apple
+developer-tool installation. On the current machine, only Command Line Tools
+are selected. Their bundled Swift Testing framework is not added to the search
+path automatically and contains an incorrect interop-library rpath. Task 003A
+was therefore verified locally with the following environment-scoped command;
+these paths are not embedded in `Package.swift`:
+
+```sh
+MB_CLT_FRAMEWORKS=/Library/Developer/CommandLineTools/Library/Developer/Frameworks
+MB_CLT_INTEROP=/Library/Developer/CommandLineTools/Library/Developer/usr/lib
+swift test \
+  --disable-xctest \
+  --enable-swift-testing \
+  --parallel \
+  -Xswiftc -F \
+  -Xswiftc "$MB_CLT_FRAMEWORKS" \
+  -Xswiftc -warnings-as-errors \
+  -Xlinker -F \
+  -Xlinker "$MB_CLT_FRAMEWORKS" \
+  -Xlinker -rpath \
+  -Xlinker "$MB_CLT_FRAMEWORKS" \
+  -Xlinker -rpath \
+  -Xlinker "$MB_CLT_INTEROP"
+```
+
+This command passed 40 tests in seven suites. Full Xcode project integration is
+not part of Task 003A and remains unverified.
