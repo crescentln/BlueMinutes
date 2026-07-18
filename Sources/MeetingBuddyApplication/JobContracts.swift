@@ -189,6 +189,56 @@ public struct JobCheckpoint: Codable, Hashable, Sendable {
     }
 }
 
+/// A bounded, versioned feature-specific input carried by a durable job.
+///
+/// The Task Manager treats this as opaque data. Executors decode only their
+/// own format, which keeps feature state out of the operational schema while
+/// allowing an interrupted job to reconstruct the exact approved inputs.
+public struct JobInputPayload: Codable, Hashable, Sendable {
+    public static let maximumPayloadBytes = 65_536
+
+    public let formatIdentifier: String
+    public let formatVersion: UInt32
+    public let payload: Data
+
+    public init(
+        formatIdentifier: String,
+        formatVersion: UInt32,
+        payload: Data
+    ) throws {
+        guard JobContractValidation.isOpaqueIdentifier(
+            formatIdentifier,
+            maximumBytes: 96
+        ),
+            formatVersion > 0,
+            !payload.isEmpty,
+            payload.count <= Self.maximumPayloadBytes
+        else {
+            throw JobContractError.invalidRequest(
+                "A job input needs a bounded format, positive version, and 1–65,536 bytes."
+            )
+        }
+        self.formatIdentifier = formatIdentifier
+        self.formatVersion = formatVersion
+        self.payload = payload
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case formatIdentifier = "format_identifier"
+        case formatVersion = "format_version"
+        case payload
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            formatIdentifier: container.decode(String.self, forKey: .formatIdentifier),
+            formatVersion: container.decode(UInt32.self, forKey: .formatVersion),
+            payload: container.decode(Data.self, forKey: .payload)
+        )
+    }
+}
+
 public struct ProviderUsageMetadata: Codable, Hashable, Sendable {
     public let provider: ProviderMetadata
     public let inputUnitCount: UInt64?
@@ -263,6 +313,7 @@ public struct JobRequest: Sendable {
     public let meetingID: MeetingID?
     public let origin: JobOrigin
     public let requestedBy: JobRequester
+    public let inputPayload: JobInputPayload?
     public let inputRevisionIDs: [SemanticRevisionReference]
     public let dependencyJobIDs: [JobID]
     public let privacyRoute: PrivacyRoute
@@ -279,6 +330,7 @@ public struct JobRequest: Sendable {
         meetingID: MeetingID? = nil,
         origin: JobOrigin,
         requestedBy: JobRequester,
+        inputPayload: JobInputPayload? = nil,
         inputRevisionIDs: [SemanticRevisionReference] = [],
         dependencyJobIDs: [JobID] = [],
         privacyRoute: PrivacyRoute = .localOnly,
@@ -311,6 +363,7 @@ public struct JobRequest: Sendable {
         self.meetingID = meetingID
         self.origin = origin
         self.requestedBy = requestedBy
+        self.inputPayload = inputPayload
         self.inputRevisionIDs = sortedInputs
         self.dependencyJobIDs = sortedDependencies
         self.privacyRoute = privacyRoute
@@ -334,6 +387,7 @@ public struct JobRecord: Codable, Hashable, Sendable {
     public let meetingID: MeetingID?
     public let origin: JobOrigin
     public let requestedBy: JobRequester
+    public let inputPayload: JobInputPayload?
     public let createdAt: UTCInstant
     public let startedAt: UTCInstant?
     public let finishedAt: UTCInstant?
@@ -360,6 +414,7 @@ public struct JobRecord: Codable, Hashable, Sendable {
         case meetingID = "meeting_id"
         case origin
         case requestedBy = "requested_by"
+        case inputPayload = "input_payload"
         case createdAt = "created_at"
         case startedAt = "started_at"
         case finishedAt = "finished_at"
@@ -392,6 +447,7 @@ public struct JobRecord: Codable, Hashable, Sendable {
         self.meetingID = request.meetingID
         self.origin = request.origin
         self.requestedBy = request.requestedBy
+        self.inputPayload = request.inputPayload
         self.createdAt = createdAt
         self.startedAt = nil
         self.finishedAt = nil
@@ -598,6 +654,7 @@ public struct JobRecord: Codable, Hashable, Sendable {
             meetingID: meetingID,
             origin: origin,
             requestedBy: requestedBy,
+            inputPayload: inputPayload,
             createdAt: createdAt,
             startedAt: startedAt ?? self.startedAt,
             finishedAt: finishedAt ?? self.finishedAt,
@@ -628,6 +685,7 @@ public struct JobRecord: Codable, Hashable, Sendable {
         meetingID: MeetingID?,
         origin: JobOrigin,
         requestedBy: JobRequester,
+        inputPayload: JobInputPayload?,
         createdAt: UTCInstant,
         startedAt: UTCInstant?,
         finishedAt: UTCInstant?,
@@ -653,6 +711,7 @@ public struct JobRecord: Codable, Hashable, Sendable {
         self.meetingID = meetingID
         self.origin = origin
         self.requestedBy = requestedBy
+        self.inputPayload = inputPayload
         self.createdAt = createdAt
         self.startedAt = startedAt
         self.finishedAt = finishedAt
@@ -694,6 +753,7 @@ public enum JobStateMachine {
              (.paused, .running),
              (.paused, .cancellationRequested),
              (.paused, .interrupted),
+             (.cancellationRequested, .succeeded),
              (.cancellationRequested, .cancelled),
              (.cancellationRequested, .failed),
              (.cancellationRequested, .interrupted),

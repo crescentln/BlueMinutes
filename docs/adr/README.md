@@ -20,7 +20,7 @@ task authorization.
 | ADR | Status | Decision |
 | --- | --- | --- |
 | [ADR-0001](ADR-0001-language-ui-and-platform.md) | Accepted | Swift 6, native macOS UI, modular monolith, initial platform baseline |
-| [ADR-0002](ADR-0002-distribution-and-sandbox.md) | Proposed | Distribution channel and final sandbox policy remain open |
+| [ADR-0002](ADR-0002-distribution-and-sandbox.md) | Accepted | Option A: independent Developer ID direction, App Sandbox, persistent workspace bookmark, transient source authority |
 | [ADR-0003](ADR-0003-persistence-and-recovery.md) | Accepted | SQLite metadata authority, file-based assets, explicit recovery boundary |
 | [ADR-0004](ADR-0004-immutable-revisions.md) | Accepted | Immutable semantic revisions and active published pointers |
 | [ADR-0005](ADR-0005-dependency-invalidation.md) | Accepted | Exact dependency edges and deterministic stale propagation |
@@ -32,8 +32,6 @@ task authorization.
 
 | Decision | Must be resolved before |
 | --- | --- |
-| Final distribution channel, sandbox, bookmarks, and app-update path | Task 005A implementation plan |
-| Canonical audio representation, timeline tolerance, and chunk parameters | Task 005A |
 | Production transcription and translation routes | Task 005B |
 | Production inference and optional independent review routes | Task 006A/006B |
 | UN Web TV acquisition and live-capture entitlement boundaries | Task 008B, after Task 008A |

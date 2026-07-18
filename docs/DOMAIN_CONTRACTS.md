@@ -1,7 +1,7 @@
 # Domain Contract Baseline
 
 Status: Task 004A semantic persistence and Task 004B operational job contracts
-accepted
+accepted; Task 005A media contracts implemented pending full-Xcode gate
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define semantic invariants and task ownership without reproducing the
@@ -362,6 +362,12 @@ contract: jobs reference exact immutable semantic input/output revisions, and a
 success transaction fails if an input has become stale or lost its active
 selection. Job snapshots and state events never replace semantic revisions.
 
-Task 004B also adds one Task Manager implementation, but only synthetic
-executors exist. There is still no application executable, media conversion,
-provider call, UI, stale recomputation executor, or briefing analysis.
+The accepted Task 005A implementation adds validated local-media intake and canonical-audio
+job payloads, exact 16 kHz half-open frame ranges, deterministic chunk plans,
+range issues, and persistent original/generated `SourceAsset.v1` revisions.
+The first production executors perform task-managed local acquisition and
+canonical conversion; the native SwiftUI executable exposes source and status
+review without changing domain dependency direction. Full-Xcode build, test,
+sandbox, workspace-panel, and scoped-bookmark evidence passes. There is still
+no provider call, transcript/translation executor, stale recomputation
+executor, or briefing analysis.

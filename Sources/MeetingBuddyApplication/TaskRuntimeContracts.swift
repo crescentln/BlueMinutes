@@ -82,6 +82,27 @@ public struct TaskTemporaryFileDescriptor: Codable, Hashable, Sendable {
     }
 }
 
+/// A narrowly scoped capability for one not-yet-finalized task-owned file.
+///
+/// Only trusted local executors receive the URL. The temporary-storage
+/// implementation validates the job, relative path, symlinks, size, and hash
+/// again before returning a durable descriptor.
+public struct TaskWritableFileLease: Hashable, Sendable {
+    public let jobID: JobID
+    public let relativePathWithinTask: WorkspaceRelativePath
+    public let fileURL: URL
+
+    public init(
+        jobID: JobID,
+        relativePathWithinTask: WorkspaceRelativePath,
+        fileURL: URL
+    ) {
+        self.jobID = jobID
+        self.relativePathWithinTask = relativePathWithinTask
+        self.fileURL = fileURL
+    }
+}
+
 public struct TaskDirectoryUsage: Codable, Hashable, Sendable {
     public let byteSize: UInt64
     public let entryCount: UInt32
@@ -193,6 +214,36 @@ public protocol TaskTemporaryStorage: Sendable {
         to relativePathWithinTask: WorkspaceRelativePath,
         in lease: TaskDirectoryLease
     ) async throws -> TaskTemporaryFileDescriptor
+
+    func prepareWritableFile(
+        at relativePathWithinTask: WorkspaceRelativePath,
+        in lease: TaskDirectoryLease
+    ) async throws -> TaskWritableFileLease
+
+    func finalizeWritableFile(
+        _ writableFile: TaskWritableFileLease,
+        in lease: TaskDirectoryLease
+    ) async throws -> TaskTemporaryFileDescriptor
+
+    func inspectFile(
+        at relativePathWithinTask: WorkspaceRelativePath,
+        in lease: TaskDirectoryLease
+    ) async throws -> TaskTemporaryFileDescriptor?
+
+    func verifiedFileURL(
+        for descriptor: TaskTemporaryFileDescriptor,
+        in lease: TaskDirectoryLease
+    ) async throws -> URL
+
+    func discardWritableFile(
+        _ writableFile: TaskWritableFileLease,
+        in lease: TaskDirectoryLease
+    ) async throws
+
+    func discardFile(
+        at relativePathWithinTask: WorkspaceRelativePath,
+        in lease: TaskDirectoryLease
+    ) async throws
 
     func usage(of lease: TaskDirectoryLease) async throws -> TaskDirectoryUsage
     func cleanupDirectory(_ lease: TaskDirectoryLease) async throws
@@ -413,6 +464,24 @@ public struct JobExecutionContext: Sendable {
         Data,
         WorkspaceRelativePath
     ) async throws -> TaskTemporaryFileDescriptor
+    private let prepareWritableFileOperation: @Sendable (
+        WorkspaceRelativePath
+    ) async throws -> TaskWritableFileLease
+    private let finalizeWritableFileOperation: @Sendable (
+        TaskWritableFileLease
+    ) async throws -> TaskTemporaryFileDescriptor
+    private let inspectFileOperation: @Sendable (
+        WorkspaceRelativePath
+    ) async throws -> TaskTemporaryFileDescriptor?
+    private let verifiedFileURLOperation: @Sendable (
+        TaskTemporaryFileDescriptor
+    ) async throws -> URL
+    private let discardWritableFileOperation: @Sendable (
+        TaskWritableFileLease
+    ) async throws -> Void
+    private let discardFileOperation: @Sendable (
+        WorkspaceRelativePath
+    ) async throws -> Void
 
     public init(
         job: JobRecord,
@@ -423,12 +492,36 @@ public struct JobExecutionContext: Sendable {
         writeOperation: @escaping @Sendable (
             Data,
             WorkspaceRelativePath
-        ) async throws -> TaskTemporaryFileDescriptor
+        ) async throws -> TaskTemporaryFileDescriptor,
+        prepareWritableFileOperation: @escaping @Sendable (
+            WorkspaceRelativePath
+        ) async throws -> TaskWritableFileLease,
+        finalizeWritableFileOperation: @escaping @Sendable (
+            TaskWritableFileLease
+        ) async throws -> TaskTemporaryFileDescriptor,
+        inspectFileOperation: @escaping @Sendable (
+            WorkspaceRelativePath
+        ) async throws -> TaskTemporaryFileDescriptor?,
+        verifiedFileURLOperation: @escaping @Sendable (
+            TaskTemporaryFileDescriptor
+        ) async throws -> URL,
+        discardWritableFileOperation: @escaping @Sendable (
+            TaskWritableFileLease
+        ) async throws -> Void,
+        discardFileOperation: @escaping @Sendable (
+            WorkspaceRelativePath
+        ) async throws -> Void
     ) {
         self.job = job
         self.temporaryDirectory = job.temporaryDirectory
         self.checkpointOperation = checkpointOperation
         self.writeOperation = writeOperation
+        self.prepareWritableFileOperation = prepareWritableFileOperation
+        self.finalizeWritableFileOperation = finalizeWritableFileOperation
+        self.inspectFileOperation = inspectFileOperation
+        self.verifiedFileURLOperation = verifiedFileURLOperation
+        self.discardWritableFileOperation = discardWritableFileOperation
+        self.discardFileOperation = discardFileOperation
     }
 
     public func checkpoint(
@@ -445,6 +538,46 @@ public struct JobExecutionContext: Sendable {
     ) async throws -> TaskTemporaryFileDescriptor {
         try Task.checkCancellation()
         return try await writeOperation(data, relativePathWithinTask)
+    }
+
+    public func prepareWritableFile(
+        at relativePathWithinTask: WorkspaceRelativePath
+    ) async throws -> TaskWritableFileLease {
+        try Task.checkCancellation()
+        return try await prepareWritableFileOperation(relativePathWithinTask)
+    }
+
+    public func finalizeWritableFile(
+        _ writableFile: TaskWritableFileLease
+    ) async throws -> TaskTemporaryFileDescriptor {
+        try Task.checkCancellation()
+        return try await finalizeWritableFileOperation(writableFile)
+    }
+
+    public func inspectTemporaryFile(
+        at relativePathWithinTask: WorkspaceRelativePath
+    ) async throws -> TaskTemporaryFileDescriptor? {
+        try Task.checkCancellation()
+        return try await inspectFileOperation(relativePathWithinTask)
+    }
+
+    public func verifiedTemporaryFileURL(
+        for descriptor: TaskTemporaryFileDescriptor
+    ) async throws -> URL {
+        try Task.checkCancellation()
+        return try await verifiedFileURLOperation(descriptor)
+    }
+
+    public func discardWritableFile(
+        _ writableFile: TaskWritableFileLease
+    ) async throws {
+        try await discardWritableFileOperation(writableFile)
+    }
+
+    public func discardTemporaryFile(
+        at relativePathWithinTask: WorkspaceRelativePath
+    ) async throws {
+        try await discardFileOperation(relativePathWithinTask)
     }
 }
 

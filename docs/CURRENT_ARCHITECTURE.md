@@ -1,6 +1,6 @@
 # Current Architecture
 
-Status: Task 004B accepted
+Status: Task 005A accepted after full-Xcode validation
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Record the observed repository state only; target design belongs in
@@ -13,31 +13,36 @@ audit on 2026-07-17 and confirmed this directory as the canonical root.
 
 The repository contains the accepted Task 002 governance baseline, accepted
 Task 003A/003B domain work, accepted Task 004A persistence foundation, and
-accepted Task 004B operational runtime. Task 004B adds the unified operational
-job contract, concrete Task Manager, bounded task storage/logging, and crash
-reconciliation. There is still no application executable, UI, production job
-executor, or user meeting data.
+accepted Task 004B operational runtime, and accepted Task 005A native local-
+media implementation. Task 005A adds the first native SwiftUI executable,
+task-managed local media acquisition, AVFoundation canonical audio/chunking,
+and minimal source/status review. No
+real user meeting data, provider, network route, transcription, translation,
+briefing, capture, or automation implementation is present.
 
 ## Repository state
 
-- Git repository: local `main`; the Task 004B acceptance commit is the current
-  checkout, and its predecessor `2ccf57fe8d42c1a6d21bb1cfe3765d1b41687500`
-  is the accepted Task 004A rollback anchor.
+- Git repository: local `main`; predecessor
+  `c6f91058fef868ff033eb28e71d4d3c885afa7dd` is the accepted Task 004B
+  rollback anchor for the authorized Task 005A acceptance commit. No push was
+  authorized.
 - Product source files: `Sources/MeetingBuddyDomain/`,
   `Sources/MeetingBuddyApplication/`, `Sources/MeetingBuddyPersistence/`, and
-  `Sources/MeetingBuddyTasks/`.
+  `Sources/MeetingBuddyTasks/`, plus Task 005A `Sources/MeetingBuddyMedia/`,
+  `Sources/MeetingBuddyFeatures/`, and `Sources/MeetingBuddyApp/`.
 - Xcode projects/workspaces: none.
 - Swift Package Manager manifest: `Package.swift`, Swift tools 6.1, Swift 6
   language mode, macOS 15 minimum.
-- Build targets: `MeetingBuddyDomain`, `MeetingBuddyApplication`,
-  `MeetingBuddyPersistence`, and `MeetingBuddyTasks` libraries plus domain,
-  persistence, and task test targets; there is no application entry point.
+- Build products: six libraries (`MeetingBuddyDomain`,
+  `MeetingBuddyApplication`, `MeetingBuddyPersistence`, `MeetingBuddyTasks`,
+  `MeetingBuddyMedia`, and `MeetingBuddyFeatures`) plus the
+  `MeetingBuddyApp` executable; five corresponding test targets are present.
 - Dependency: exact GRDB 7.11.1 pin with `Package.resolved`; GRDB is isolated to
   persistence implementation and persistence tests.
-- Tests: 125 synthetic Swift Testing cases in 21 suites, including exactly five
-  Task 003B Golden fixtures, 24 disposable persistence/recovery integration
-  cases, and 15 Task 004B job/runtime cases; no CI, formatter, or linter
-  configuration yet.
+- Tests: 145 Swift Testing cases in 25 suites, including exactly five Task 003B
+  Golden fixtures, 24 disposable persistence/recovery cases, 18 task/runtime
+  cases, 13 media cases, and four feature-model cases; no CI, formatter, or
+  linter configuration yet.
 - No database, recovery snapshot, managed media, credential, or runtime
   workspace is committed. Integration tests create and remove only unique
   system-temporary workspaces.
@@ -49,20 +54,21 @@ The accepted evidence and original commands are preserved in
 
 | Layer | Current implementation |
 | --- | --- |
-| Application/UI | Storage-neutral persistence/workspace/recovery ports plus Task 004B job/runtime ports; no UI or executable |
+| Application/UI | Application-owned storage/task/media/review ports; a native SwiftUI `MeetingBuddyApp` composition root with workspace, meeting/source policy, track/provenance selection, source verification, progress, cancellation, and retry review |
 | Domain | Task 003A foundation plus Task 003B input contracts, explicit active selection, dependency edges, pure graph validation, and deterministic stale planning |
 | Persistence and workspace | Task 004A Workspace/Storage services plus Task 004B schema v2 job repository, durable managed-asset operation journal, bounded task directories, and rotated logs |
-| Task execution and recovery | One `LocalTaskManager` actor with explicit job state/progress/checkpoint/cancellation/retry contracts, bounded concurrency, startup health, interrupted-job recovery, orphan cleanup, and stale-input publication checks |
-| Media | None |
+| Task execution and recovery | One `LocalTaskManager` actor with explicit job state/progress/checkpoint/cancellation/retry contracts, bounded concurrency, startup health, interrupted-job recovery, orphan cleanup, stale-input publication checks, and Task 005A intake/canonical executors |
+| Media | AVFoundation inspection for MOV/MP4/M4A/MP3/WAV, task-managed copy/hash intake, canonical 16 kHz mono signed-int16 CAF, exact range issues, deterministic overlapped chunks, checkpointed retry, and persistent canonical publication |
 | Transcription, translation, and AI | None |
 | Automation/CLI/MCP | None |
 | Historical retrieval | None |
 
-Executable package behavior now covers pure domain creation/validation plus
-disposable local workspace, file-storage, SQLite persistence/migration,
-recovery snapshots, Trash integration, and synthetic long-running job
-execution. There is no application executable, network I/O, provider call,
-media conversion, or UI.
+Executable package behavior now covers pure domain creation/validation,
+workspace and bookmark selection, managed local-file intake, SQLite
+persistence/migration, recovery and Trash integration, task execution, native
+media conversion, and minimal SwiftUI review. Xcode 26.6 can stage, ad-hoc sign,
+and launch `dist/MeetingBuddy.app` under App Sandbox; no network I/O, provider
+call, capture, transcription, translation, or briefing generation exists.
 
 ## Governance now present
 
@@ -176,35 +182,61 @@ The accepted Task 004B implementation adds:
   restart, migration, redaction/rotation, confinement, orphan, and
   filesystem/SQLite interruption tests.
 
+## Task 005A local media and native review
+
+The Task 005A implementation adds:
+
+- accepted ADR-0002 Option A entitlements: App Sandbox, app-scoped bookmarks,
+  and user-selected read/write file authority only;
+- one persistent app-scoped bookmark for the validated user-selected workspace,
+  plus transient source-file scope that ends after the task-managed verified
+  copy; no source path or bookmark enters durable job state;
+- a SwiftUI `NavigationSplitView` for workspace choice, meeting title,
+  classification/language, media selection, explicit multi-track choice,
+  speech provenance, managed hash/status, progress, cancellation, and retry;
+- real AVFoundation inspection/import coverage for MOV, MP4, M4A, MP3, and WAV,
+  with one explicit audio track and no external executable;
+- persistent untouched original and generated canonical `SourceAsset.v1`
+  revisions, with canonical signed-int16 little-endian interleaved mono PCM in
+  CAF at 16 kHz;
+- zero-based half-open frame timelines, exact missing/corrupt/decode-failed
+  issues, a 50 ms duration tolerance, 30-second cores, and one second of
+  context on each side;
+- Task-Manager-owned acquisition, streamed output leases, digest/size
+  revalidation, compact three-hour checkpoints, chunk-level retry reuse,
+  cooperative cancellation, and bounded cleanup;
+- a local build/run script and Codex Run action that stage an ad-hoc signed app
+  bundle for development verification without claiming release signing.
+
 ## Known limitations
 
-- There is no native app target, Xcode project, UI, production executor, media
-  conversion, provider, network, briefing, or automation implementation. The
-  Task Manager is a library exercised only through synthetic executors.
-- The active developer directory contains Command Line Tools rather than the
-  full Xcode application. SwiftPM builds pass, but full Xcode integration and
-  macOS 15 runtime compatibility have not been verified.
-- This Command Line Tools installation does not automatically expose the
-  bundled Swift Testing framework and has an incorrect runtime search path.
-  Tests passed with explicit paths to the CLT-owned framework and interop
-  library; a standard `swift test` invocation still requires a complete or
-  repaired Apple developer-tool installation.
-- Git history provides accepted Task 004A commit `2ccf57f` as the rollback
-  anchor immediately before the Task 004B acceptance commit.
+- There is no Xcode project, provider, network, transcription, translation,
+  briefing, capture, or automation implementation. The native UI is the
+  deliberately minimal Task 005A review surface, not final UI polish.
+- Xcode 26.6 build 17F113 is installed and selected. Standard debug/release
+  builds and `swift test` pass, and a native run verifies sandbox initialization,
+  the workspace Open panel, synthetic-workspace bookmark persistence, and
+  scoped-bookmark restoration after relaunch.
+- The staged bundle is ad-hoc signed and therefore is not release evidence.
+  No valid Developer ID identity is installed; provisioning, Gatekeeper,
+  notarization, and clean-machine validation remain Task 011 work.
+- Commit predecessor `c6f9105` is the Task 004B rollback anchor for the accepted
+  Task 005A change.
 - The semantic JSONL recovery artifact is deliberately export-only; exact
   operational recovery relies on the verified SQLite online backup. A user-
   facing restore workflow is not implemented.
 - Managed-asset process-crash windows now have a durable journal and bounded
   startup reconciliation. A user-facing repair/restore UI and automatic Trash
   purge remain unimplemented.
-- Final distribution/sandbox and security-scoped bookmark details remain open
-  for Task 005A.
-- End-to-end product quality gates remain untested; current evidence covers
-  Task 003A/003B domain, Task 004A persistence, and Task 004B operational
-  runtime/recovery boundaries only.
+- ADR-0002 and the canonical media parameters are resolved. Release signing,
+  notarization, automatic updates, capture entitlements, and any later
+  distribution changes remain separately task-gated.
+- End-to-end product quality gates remain untested; current evidence extends
+  through Task 005A local media code but does not cover providers or the first
+  full briefing vertical slice.
 
 ## Next permitted transition
 
-Task 004B is accepted. Task 005A is next eligible but remains unauthorized;
-its distribution/sandbox and canonical media-parameter checkpoints must be
-resolved before implementation.
+Tasks 004B and 005A are accepted, and the Task 005A full-Xcode native gate
+passes. Task 005B is eligible but not authorized; resolve its production
+transcription/translation route P1 decision before implementation.

@@ -6,6 +6,66 @@ import Testing
 @Suite(.serialized)
 struct TemporaryStorageAndLoggingTests {
     @Test
+    func streamingFileLeasesAreReverifiedAndCannotBeForgedOutsideTheTask() async throws {
+        let workspace = try TaskTestWorkspace()
+        defer { workspace.cleanup() }
+        let lease = try await workspace.temporaryStorage.allocateDirectory(
+            for: testJobID(30),
+            diskBudgetBytes: 4_096
+        )
+        let path = try WorkspaceRelativePath("stream/canonical.caf")
+        let writable = try await workspace.temporaryStorage.prepareWritableFile(
+            at: path,
+            in: lease
+        )
+        let handle = try FileHandle(forWritingTo: writable.fileURL)
+        try handle.write(contentsOf: Data(repeating: 0x55, count: 1_000))
+        try handle.synchronize()
+        try handle.close()
+        let descriptor = try await workspace.temporaryStorage.finalizeWritableFile(
+            writable,
+            in: lease
+        )
+        #expect(descriptor.byteSize == 1_000)
+        #expect(try await workspace.temporaryStorage.inspectFile(at: path, in: lease) == descriptor)
+        #expect(try await workspace.temporaryStorage.verifiedFileURL(
+            for: descriptor,
+            in: lease
+        ) == writable.fileURL)
+
+        let forged = TaskWritableFileLease(
+            jobID: lease.jobID,
+            relativePathWithinTask: path,
+            fileURL: workspace.container.appendingPathComponent("outside.caf")
+        )
+        await #expect(throws: TaskRuntimeError.self) {
+            _ = try await workspace.temporaryStorage.finalizeWritableFile(
+                forged,
+                in: lease
+            )
+        }
+
+        try await workspace.temporaryStorage.discardFile(at: path, in: lease)
+        #expect(try await workspace.temporaryStorage.inspectFile(at: path, in: lease) == nil)
+
+        let overBudget = try await workspace.temporaryStorage.prepareWritableFile(
+            at: WorkspaceRelativePath("stream/over-budget.caf"),
+            in: lease
+        )
+        let overBudgetHandle = try FileHandle(forWritingTo: overBudget.fileURL)
+        try overBudgetHandle.write(contentsOf: Data(repeating: 0x56, count: 4_097))
+        try overBudgetHandle.close()
+        await #expect(throws: TaskRuntimeError.self) {
+            _ = try await workspace.temporaryStorage.finalizeWritableFile(
+                overBudget,
+                in: lease
+            )
+        }
+        try await workspace.temporaryStorage.cleanupDirectory(lease)
+        #expect(!FileManager.default.fileExists(atPath: writable.fileURL.deletingLastPathComponent().path))
+    }
+
+    @Test
     func taskFilesStayConfinedAndWithinTheirOwnedBudget() async throws {
         let workspace = try TaskTestWorkspace()
         defer { workspace.cleanup() }

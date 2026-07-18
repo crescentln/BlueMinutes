@@ -25,8 +25,10 @@ public final class LocalStorageService: @unchecked Sendable {
         createdAt: UTCInstant,
         dataClassification: DataClassification,
         retentionClass: RetentionClass,
-        operationID: UUID? = nil
+        operationID: UUID? = nil,
+        cancellationCheck: @Sendable () throws -> Void = {}
     ) throws -> ManagedAssetRecord {
+        try cancellationCheck()
         guard dataClassification.isKnown, retentionClass.isKnown else {
             throw WorkspaceContractError.managedAssetMismatch(
                 "Managed asset classification and retention must be recognized before intake."
@@ -74,7 +76,11 @@ public final class LocalStorageService: @unchecked Sendable {
         try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: staging.path)
         var movedToDestination = false
         do {
-            let (digest, byteSize) = try copyAndHash(from: source, to: staging)
+            let (digest, byteSize) = try copyAndHash(
+                from: source,
+                to: staging,
+                cancellationCheck: cancellationCheck
+            )
             guard byteSize > 0 else {
                 throw WorkspaceContractError.managedAssetMismatch(
                     "A managed asset must contain at least one byte."
@@ -120,6 +126,16 @@ public final class LocalStorageService: @unchecked Sendable {
                 "Managed asset bytes do not match recorded hash and size."
             )
         }
+    }
+
+    func verifiedFileURL(for record: ManagedAssetRecord) throws -> URL {
+        guard record.state == .active else {
+            throw WorkspaceContractError.managedAssetMismatch(
+                "Only an active managed asset can be opened for media processing."
+            )
+        }
+        try verifyFile(for: record)
+        return try confinedURL(for: record.relativePath)
     }
 
     func containsVerifiedFile(for record: ManagedAssetRecord) throws -> Bool {
@@ -286,7 +302,11 @@ public final class LocalStorageService: @unchecked Sendable {
         return restored
     }
 
-    private func copyAndHash(from source: URL, to destination: URL) throws -> (ContentDigest, UInt64) {
+    private func copyAndHash(
+        from source: URL,
+        to destination: URL,
+        cancellationCheck: @Sendable () throws -> Void
+    ) throws -> (ContentDigest, UInt64) {
         let sourceHandle = try FileHandle(forReadingFrom: source)
         let destinationHandle = try FileHandle(forWritingTo: destination)
         defer {
@@ -297,6 +317,7 @@ public final class LocalStorageService: @unchecked Sendable {
         var hasher = SHA256()
         var total: UInt64 = 0
         while let data = try sourceHandle.read(upToCount: Self.chunkSize), !data.isEmpty {
+            try cancellationCheck()
             hasher.update(data: data)
             try destinationHandle.write(contentsOf: data)
             let (next, overflow) = total.addingReportingOverflow(UInt64(data.count))
@@ -307,6 +328,7 @@ public final class LocalStorageService: @unchecked Sendable {
             }
             total = next
         }
+        try cancellationCheck()
         try destinationHandle.synchronize()
         return (try digest(from: hasher.finalize()), total)
     }

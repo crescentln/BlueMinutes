@@ -109,6 +109,113 @@ public actor LocalTaskTemporaryStorage: TaskTemporaryStorage {
         )
     }
 
+    public func prepareWritableFile(
+        at relativePathWithinTask: WorkspaceRelativePath,
+        in lease: TaskDirectoryLease
+    ) async throws -> TaskWritableFileLease {
+        try validate(lease)
+        try await reuseDirectory(lease)
+        _ = try directoryUsage(at: taskURL(for: lease), budget: lease.diskBudgetBytes)
+        let destination = try prepareDestination(
+            relativePathWithinTask,
+            in: lease,
+            createParents: true
+        )
+        guard !fileManager.fileExists(atPath: destination.path),
+              fileManager.createFile(atPath: destination.path, contents: nil)
+        else {
+            throw TaskRuntimeError.temporaryPathInvalid(relativePathWithinTask.rawValue)
+        }
+        do {
+            try fileManager.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: destination.path
+            )
+        } catch {
+            try? fileManager.removeItem(at: destination)
+            throw error
+        }
+        return TaskWritableFileLease(
+            jobID: lease.jobID,
+            relativePathWithinTask: relativePathWithinTask,
+            fileURL: destination
+        )
+    }
+
+    public func finalizeWritableFile(
+        _ writableFile: TaskWritableFileLease,
+        in lease: TaskDirectoryLease
+    ) async throws -> TaskTemporaryFileDescriptor {
+        try validate(writableFile, in: lease)
+        let descriptor = try descriptor(
+            at: writableFile.fileURL,
+            relativePath: writableFile.relativePathWithinTask
+        )
+        _ = try directoryUsage(at: taskURL(for: lease), budget: lease.diskBudgetBytes)
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: writableFile.fileURL.path
+        )
+        return descriptor
+    }
+
+    public func inspectFile(
+        at relativePathWithinTask: WorkspaceRelativePath,
+        in lease: TaskDirectoryLease
+    ) async throws -> TaskTemporaryFileDescriptor? {
+        try validate(lease)
+        try await reuseDirectory(lease)
+        let file = try prepareDestination(
+            relativePathWithinTask,
+            in: lease,
+            createParents: false
+        )
+        guard fileManager.fileExists(atPath: file.path) else { return nil }
+        let result = try descriptor(at: file, relativePath: relativePathWithinTask)
+        _ = try directoryUsage(at: taskURL(for: lease), budget: lease.diskBudgetBytes)
+        return result
+    }
+
+    public func verifiedFileURL(
+        for descriptor: TaskTemporaryFileDescriptor,
+        in lease: TaskDirectoryLease
+    ) async throws -> URL {
+        guard let current = try await inspectFile(
+            at: descriptor.relativePathWithinTask,
+            in: lease
+        ), current == descriptor else {
+            throw TaskRuntimeError.temporaryPathInvalid(
+                descriptor.relativePathWithinTask.rawValue
+            )
+        }
+        return try prepareDestination(
+            descriptor.relativePathWithinTask,
+            in: lease,
+            createParents: false
+        )
+    }
+
+    public func discardWritableFile(
+        _ writableFile: TaskWritableFileLease,
+        in lease: TaskDirectoryLease
+    ) async throws {
+        try validate(writableFile, in: lease)
+        try discard(file: writableFile.fileURL)
+    }
+
+    public func discardFile(
+        at relativePathWithinTask: WorkspaceRelativePath,
+        in lease: TaskDirectoryLease
+    ) async throws {
+        try validate(lease)
+        let file = try prepareDestination(
+            relativePathWithinTask,
+            in: lease,
+            createParents: false
+        )
+        try discard(file: file)
+    }
+
     public func usage(of lease: TaskDirectoryLease) async throws -> TaskDirectoryUsage {
         try validate(lease)
         return try directoryUsage(at: taskURL(for: lease), budget: lease.diskBudgetBytes)
@@ -278,6 +385,114 @@ public actor LocalTaskTemporaryStorage: TaskTemporaryStorage {
 
     private func taskURL(for lease: TaskDirectoryLease) -> URL {
         workspace.layout.root.appendingPathComponent(lease.relativePath.rawValue, isDirectory: true)
+    }
+
+    private func prepareDestination(
+        _ relativePathWithinTask: WorkspaceRelativePath,
+        in lease: TaskDirectoryLease,
+        createParents: Bool
+    ) throws -> URL {
+        let root = taskURL(for: lease)
+        let components = relativePathWithinTask.rawValue.split(separator: "/").map(String.init)
+        guard let leaf = components.last else {
+            throw TaskRuntimeError.temporaryPathInvalid(relativePathWithinTask.rawValue)
+        }
+        var parent = root
+        for component in components.dropLast() {
+            parent = parent.appendingPathComponent(component, isDirectory: true)
+            if createParents {
+                _ = try WorkspacePathSecurity.createPrivateDirectory(
+                    parent,
+                    within: root,
+                    fileManager: fileManager
+                )
+            } else if fileManager.fileExists(atPath: parent.path) {
+                _ = try WorkspacePathSecurity.confinedURL(parent, within: root)
+                let values = try parent.resourceValues(
+                    forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+                )
+                guard values.isDirectory == true, values.isSymbolicLink != true else {
+                    throw TaskRuntimeError.temporaryPathInvalid(
+                        relativePathWithinTask.rawValue
+                    )
+                }
+            } else {
+                return parent.appendingPathComponent(leaf)
+            }
+        }
+        let destination = parent.appendingPathComponent(leaf)
+        _ = try WorkspacePathSecurity.confinedURL(
+            destination,
+            within: root,
+            allowMissingLeaf: true
+        )
+        return destination.standardizedFileURL
+    }
+
+    private func validate(
+        _ writableFile: TaskWritableFileLease,
+        in lease: TaskDirectoryLease
+    ) throws {
+        try validate(lease)
+        guard writableFile.jobID == lease.jobID else {
+            throw TaskRuntimeError.temporaryPathInvalid(
+                writableFile.relativePathWithinTask.rawValue
+            )
+        }
+        let expected = try prepareDestination(
+            writableFile.relativePathWithinTask,
+            in: lease,
+            createParents: false
+        )
+        guard expected == writableFile.fileURL.standardizedFileURL else {
+            throw TaskRuntimeError.temporaryPathInvalid(
+                writableFile.relativePathWithinTask.rawValue
+            )
+        }
+    }
+
+    private func descriptor(
+        at file: URL,
+        relativePath: WorkspaceRelativePath
+    ) throws -> TaskTemporaryFileDescriptor {
+        let values = try file.resourceValues(
+            forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+        )
+        guard values.isRegularFile == true, values.isSymbolicLink != true else {
+            throw TaskRuntimeError.temporaryPathInvalid(relativePath.rawValue)
+        }
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        var byteSize: UInt64 = 0
+        while let data = try handle.read(upToCount: 1_048_576), !data.isEmpty {
+            hasher.update(data: data)
+            let (next, overflow) = byteSize.addingReportingOverflow(UInt64(data.count))
+            guard !overflow else {
+                throw TaskRuntimeError.temporaryPathInvalid(relativePath.rawValue)
+            }
+            byteSize = next
+        }
+        guard byteSize > 0 else {
+            throw TaskRuntimeError.temporaryPathInvalid(relativePath.rawValue)
+        }
+        let hash = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        return try TaskTemporaryFileDescriptor(
+            relativePathWithinTask: relativePath,
+            contentHash: ContentDigest(algorithm: .sha256, lowercaseHex: hash),
+            byteSize: byteSize
+        )
+    }
+
+    private func discard(file: URL) throws {
+        guard fileManager.fileExists(atPath: file.path) else { return }
+        let values = try file.resourceValues(
+            forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+        )
+        guard values.isRegularFile == true, values.isSymbolicLink != true else {
+            throw WorkspaceContractError.symbolicLinkNotAllowed(file.path)
+        }
+        try fileManager.removeItem(at: file)
     }
 
     private func directoryUsage(at root: URL, budget: UInt64) throws -> TaskDirectoryUsage {

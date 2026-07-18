@@ -14,17 +14,43 @@ update, and security complexity.
 
 ## Decision
 
-- Prefer AVFoundation and other approved Apple APIs for media inspection,
-  extraction, normalization, timing, and playback.
-- Process long media in stable bounded chunks without loading the entire file
-  into memory.
-- Preserve the original source and one canonical timeline; user source files
-  are never modified.
-- Track missing, corrupt, or failed ranges and resume from verified
-  checkpoints.
-- Temporary chunks are job-owned, rebuildable, bounded, and cleaned according
-  to storage policy.
-- No external media or model executable is approved by Task 002.
+- The approved Task 005A local formats are MOV, MP4, M4A, MP3, and WAV. The
+  filename extension selects the candidate format and AVFoundation must still
+  confirm a positive duration and at least one readable audio track.
+- One audio track is processed. A single track may be selected automatically;
+  multiple tracks require an explicit user selection. Track count, language,
+  or channel metadata never infers original speech, interpretation, or
+  translated-audio provenance; the user records that choice separately.
+- Product media inspection and conversion use `AVURLAsset`, `AVAssetReader`,
+  `AVAssetWriter`, Core Media, and AudioToolbox. Product code does not use an
+  export preset or external executable.
+- Canonical audio v1 is CAF containing signed 16-bit little-endian interleaved
+  linear PCM, mono, at exactly 16,000 Hz. Its stable identifier is
+  `meetingbuddy.canonical-audio.v1` and codec label is `lpcm_s16le`.
+- The canonical timeline is zero-based, uses half-open integer frame ranges at
+  16 kHz, and remains anchored to source-asset time zero. Timestamp gaps are
+  not collapsed. Missing, corrupt, and decode-failed ranges retain exact
+  half-open frame coordinates and bounded safe summaries.
+- Source-asset duration is the expected canonical timeline. Canonical output
+  may differ by at most 800 frames, equal to 50 ms at 16 kHz; a shorter result
+  records the exact trailing missing range. A larger difference fails before
+  publication.
+- Each deterministic chunk has a 480,000-frame (30-second) core and up to
+  16,000 frames (one second) of physical context on each side. Adjacent
+  interior physical chunks therefore overlap by two seconds; edge and final
+  ranges clamp exactly to the canonical timeline.
+- Long operations stream data and use the one Task Manager. Local source
+  authority is process-local and absent from durable job payloads. A cancelled
+  intake removes its partial staging copy, and an interrupted intake requires
+  source reselection.
+- The untouched managed original and the generated canonical CAF are persistent
+  hash-bound `SourceAsset.v1` revisions. Canonical audio has one explicit
+  generated owner/lifecycle. Chunks are job-owned, rebuildable task artifacts;
+  verified chunks remain only for an eligible checkpoint retry and are cleaned
+  after success, cancellation, or a non-retained failure.
+- Processing resumes only from hash- and size-reverified canonical/chunk
+  descriptors. Completed chunks are not regenerated unnecessarily.
+- No external media or model executable is approved.
 - Any future executable requires a dependency/ADR review and a narrow adapter
   with explicit path, argument arrays, bounded directory/output, timeout,
   cancellation, version validation, signing/quarantine checks, and redacted
@@ -33,9 +59,11 @@ update, and security complexity.
 
 ## Consequences
 
-- Task 005A begins with an AVFoundation-only proof using licensed or synthetic
-  fixtures.
-- Canonical audio representation, timestamp tolerance, chunk duration/overlap,
-  and approved formats must be fixed in the Task 005A plan and tests.
+- Task 005A uses project-authored synthetic fixtures, including native fixtures
+  for all five formats, and tests canonical format, duration tolerance,
+  deterministic ranges, three-hour checkpoint size, cancellation, retry, and
+  cleanup.
+- Downstream transcription must use exact core/physical mappings and must not
+  infer that a missing range contains silence or speech.
 - FFmpeg or another external tool cannot be added merely for exploratory
   convenience.

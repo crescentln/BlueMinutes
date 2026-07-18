@@ -121,19 +121,20 @@ and prompt metadata, cancellation behavior, and a safe publication gate.
 - External agents use the Automation Command Layer and cannot bypass the same
   application services used by the UI.
 
-The accepted Task 004B implementation realizes the `MeetingBuddyTasks`
-boundary and its application-owned job ports without adding a composition root
-or feature dependency. `MeetingBuddyPersistence` remains the only GRDB consumer
-and now also implements operational job storage, task files/logs, and
-managed-asset recovery adapters.
+The accepted Task 005A implementation realizes `MeetingBuddyApp` as the sole
+composition root plus `MeetingBuddyFeatures` and `MeetingBuddyMedia` targets.
+Both user-authorized source acquisition and canonical conversion use the one
+`MeetingBuddyTasks` runtime. `MeetingBuddyPersistence` remains the only GRDB
+consumer and owns managed files, job storage, task files/logs, and recovery
+adapters. The Task 005A full-Xcode native gate passes. Task 005B may extend
+these boundaries only after separate authorization and resolution of its
+production transcription/translation route decision.
 
 ## Deliberately deferred choices
 
-- exact Xcode project/application/feature target layout beyond the four current
-  SwiftPM libraries;
-- final distribution channel and sandbox configuration;
-- concrete media and provider dependencies;
-- canonical audio parameters and chunk tolerances;
+- whether a later task needs an Xcode project in addition to the current
+  SwiftPM application/product layout;
+- Developer ID provisioning, notarization, and clean-machine release mechanics;
 - production transcription, translation, and inference providers;
 - UN Web TV acquisition mechanics and live-capture entitlements.
 

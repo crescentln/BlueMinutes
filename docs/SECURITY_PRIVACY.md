@@ -1,7 +1,7 @@
 # Security and Privacy Baseline
 
-Status: Task 004B local runtime controls accepted; provider-route enforcement
-remains deferred
+Status: Task 005A local file-authority and full-Xcode native gates verified;
+provider-route enforcement remains deferred
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define classification, routing, secret, logging, and trust-boundary
@@ -62,6 +62,36 @@ history.
 - Subscription-backed clients must never be treated as APIs or used through
   extracted cookies, OAuth material, or undocumented protocols.
 
+## Sandbox and local file authority
+
+ADR-0002 Option A fixes the Task 005A authority boundary:
+
+- `MeetingBuddyApp` declares App Sandbox, app-scoped security-scoped bookmarks,
+  and user-selected read/write file access;
+- the app persists exactly one bookmark for the user-selected MeetingBuddy
+  workspace in its app preferences and retains that scope only while the
+  workspace runtime is active;
+- an invalid or unhealthy workspace selection is released and forgotten rather
+  than retried silently on every launch;
+- a user-selected media source receives transient scope through inspection and
+  the Task-Manager-owned streamed copy/hash/registration operation;
+- the source URL and source bookmark are never persisted in job payloads,
+  checkpoints, SQLite, source metadata, logs, or preferences;
+- the managed copy is re-inspected and must match the approved pre-copy
+  inspection and byte size before a source revision is published;
+- source and managed-file symlinks, traversal, mismatched hashes/sizes, and
+  changed sources fail closed; partial cancelled copies are removed;
+- no network-client, microphone, screen-recording, or application-audio
+  entitlement exists in Task 005A.
+
+The checked-in entitlement declaration and ad-hoc signed bundle verify the
+approved capability set. A full-Xcode native run observed App Sandbox
+initialization and its application container, presented the workspace Open
+panel, persisted one app-scoped bookmark for a synthetic workspace, and
+restored scoped authority after relaunch. The single importer is regression-
+tested to route workspace and approved-media selections without retaining a
+source bookmark. Developer ID and notarization remain Task 011 release gates.
+
 ## Logging, diagnostics, and telemetry
 
 - Use structured `Logger`/OSLog-compatible logging with privacy annotations.
@@ -91,6 +121,8 @@ recording require direct confirmation appropriate to their risk.
 
 - Task 003A/003B: classification and provenance contracts.
 - Task 004A/004B: safe storage, recovery, temporary data, and redacted logs.
+- Task 005A: App Sandbox/file authority, transient source intake, native local
+  media processing, and no-network/no-capture entitlement boundary.
 - Task 005B: Keychain integration and enforced provider routing.
 - Task 006A/006B: prompt isolation, claim/evidence validation, and safe output.
 - Task 007: dedicated security, privacy, recovery, and failure hardening.
@@ -108,7 +140,7 @@ and user confirmation remain explicit. Synthetic source text is preserved as
 untrusted data and is never interpreted as a control instruction by the
 domain layer.
 
-Task 004B adds only local operational controls: job requests reject unknown or
+Task 004B adds local operational controls: job requests reject unknown or
 unsafe classification/privacy routes and restricted cloud routes; task files
 are confined to private job-owned directories with explicit budgets; structured
 task logs remove private values, bound public values, redact common credential
@@ -116,8 +148,18 @@ patterns, rotate by size/count/age, and mark OSLog message text private. Job
 failure records accept only bounded caller-declared safe summaries, while raw
 diagnostics are private log values. No task test uses a provider or network.
 
-No credential, Keychain, provider-call, network, permission, entitlement, or
-telemetry runtime exists yet. Cloud routing still requires the Task 005B
-application/provider gate; the meeting-level policy, job privacy route, and
-provider-usage fields do not authorize an external call by themselves. Those
-provider runtime controls are therefore not marked as passing.
+Task 005A adds a local-only native app composition, the exact sandbox/file
+entitlement declaration above, persistent workspace bookmark handling, and
+transient source authority. Both source acquisition and canonical conversion
+run through the single Task Manager; durable intake payloads contain only
+bounded policy, technical metadata, and opaque IDs. AVFoundation diagnostics
+are reduced to bounded safe summaries, while raw local framework errors remain
+private task-log values.
+
+No credential, Keychain, provider call, network call, microphone/screen/app-
+audio permission, telemetry, or third-party crash-reporting runtime exists.
+Cloud routing still requires the Task 005B application/provider gate; meeting
+policy, job privacy route, and provider-usage fields do not authorize an
+external call by themselves. The full-Xcode sandbox, workspace picker, and
+bookmark-restoration gate passes using synthetic data; no provider or capture
+authority was added.

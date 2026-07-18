@@ -12,6 +12,7 @@ struct JobContractTests {
         #expect(JobStateMachine.allows(from: .pauseRequested, to: .succeeded))
         #expect(JobStateMachine.allows(from: .paused, to: .running))
         #expect(JobStateMachine.allows(from: .running, to: .succeeded))
+        #expect(JobStateMachine.allows(from: .cancellationRequested, to: .succeeded))
         #expect(!JobStateMachine.allows(from: .queued, to: .succeeded))
         #expect(!JobStateMachine.allows(from: .succeeded, to: .running))
         #expect(!JobStateMachine.allows(from: .failed, to: .running))

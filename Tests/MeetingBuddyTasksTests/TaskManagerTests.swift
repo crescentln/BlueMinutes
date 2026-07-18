@@ -171,6 +171,33 @@ struct TaskManagerTests {
     }
 
     @Test
+    func naturalCompletionWinsWhenCancellationArrivesAfterExecutorCommit() async throws {
+        let workspace = try TaskTestWorkspace()
+        defer { workspace.cleanup() }
+        let release = ExecutionRelease()
+        let jobType = try JobType("cancellation-completion-race")
+        let executor = ClosureTaskExecutor(jobType: jobType) { _ in
+            await release.wait()
+            return try JobExecutionResult()
+        }
+        let manager = try LocalTaskManager(
+            repository: workspace.repository,
+            temporaryStorage: workspace.temporaryStorage,
+            logStore: workspace.logStore,
+            clock: SteppingTaskClock(),
+            maximumConcurrentJobs: 1,
+            executors: [executor]
+        )
+        let request = try makeTaskRequest(suffix: 53, jobType: jobType)
+        _ = try await manager.enqueue(request)
+        _ = try await waitForJob(manager, jobID: request.jobID, state: .running)
+        let cancellationRequested = try await manager.cancel(jobID: request.jobID)
+        #expect(cancellationRequested.state == .cancellationRequested)
+        await release.release()
+        _ = try await waitForJob(manager, jobID: request.jobID, state: .succeeded)
+    }
+
+    @Test
     func cancellationIsCooperativeAndCleansJobOwnedTemporaryData() async throws {
         let workspace = try TaskTestWorkspace()
         defer { workspace.cleanup() }
@@ -328,6 +355,66 @@ struct TaskManagerTests {
         #expect(await observation.checkpointPayload == Data("resume-chunk-2".utf8))
         let directory = workspace.root.appendingPathComponent(
             ".tasks/\(request.jobID.canonicalString)"
+        )
+        #expect(!FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    @Test
+    func startupRecoveryCleansAnInterruptedJobWithNoRetryAuthority() async throws {
+        let workspace = try TaskTestWorkspace()
+        defer { workspace.cleanup() }
+        let request = try makeTaskRequest(
+            suffix: 83,
+            jobType: JobType("nonretryable-crash-recovery")
+        )
+        let lease = try await workspace.temporaryStorage.allocateDirectory(
+            for: request.jobID,
+            diskBudgetBytes: request.diskBudgetBytes
+        )
+        let queued = try JobRecord(
+            request: request,
+            lease: lease,
+            createdAt: testInstant(1_800_000_650_000)
+        )
+        try await workspace.repository.create(queued)
+        let running = try queued.transitioning(
+            to: .running,
+            at: testInstant(1_800_000_650_001)
+        )
+        try await workspace.repository.replace(
+            running,
+            expectedVersion: queued.recordVersion,
+            changedAt: testInstant(1_800_000_650_001)
+        )
+        _ = try await workspace.temporaryStorage.write(
+            Data("nonretryable-interrupted-data".utf8),
+            to: WorkspaceRelativePath("intake/partial.bin"),
+            in: lease
+        )
+
+        let manager = try LocalTaskManager(
+            repository: workspace.repository,
+            temporaryStorage: workspace.temporaryStorage,
+            logStore: workspace.logStore,
+            clock: SteppingTaskClock(start: 1_800_000_700_000),
+            executors: []
+        )
+        let report = try await manager.recoverAtStartup(
+            policy: StartupRecoveryPolicy(
+                maximumOrphansToInspect: 16,
+                maximumOrphansToRemove: 4,
+                orphanGracePeriodMilliseconds: 0,
+                minimumAvailableCapacityBytes: 0,
+                maximumManagedAssetOperations: 16
+            )
+        )
+        #expect(report.interruptedJobIDs == [request.jobID])
+        let interrupted = try #require(await manager.job(id: request.jobID))
+        #expect(interrupted.state == .interrupted)
+        #expect(interrupted.errorRecord?.retryable == false)
+        let directory = workspace.root.appendingPathComponent(
+            ".tasks/\(request.jobID.canonicalString)",
+            isDirectory: true
         )
         #expect(!FileManager.default.fileExists(atPath: directory.path))
     }

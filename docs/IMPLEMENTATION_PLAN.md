@@ -1,6 +1,6 @@
 # Implementation Plan
 
-Status: Task 004B accepted; later tasks still require explicit authorization
+Status: Task 005A accepted after implementation and full-Xcode native validation
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Map repository work to controller tasks without granting autonomous
@@ -53,7 +53,11 @@ Codex must stop after every task report.
   adds no dependency and migrates schema version 1 to version 2 only through a
   verified disposable rollback-anchor test.
 - Before 005A: distribution/sandbox/file-access direction and media acceptance
-  parameters.
+  parameters. Resolved by accepted ADR-0002 Option A and ADR-0008: independent
+  Developer ID direction, App Sandbox, one persistent workspace bookmark,
+  transient source authority, five local formats, canonical 16 kHz mono
+  signed-int16 CAF, 50 ms tolerance, and deterministic 30-second cores with
+  one-second context.
 - Before 005B: approved transcription and translation routes plus cloud policy.
 - Before 006A: approved inference route and analysis-fixture provenance.
 - Before 008B: user-accepted 008A technical/legal boundaries.
@@ -80,34 +84,22 @@ swift build --configuration release -Xswiftc -warnings-as-errors
 swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors
 ```
 
-The standard test command requires a complete, correctly selected Apple
-developer-tool installation. On the current machine, only Command Line Tools
-are selected. Their bundled Swift Testing framework is not added to the search
-path automatically and contains an incorrect interop-library rpath. Tasks 003A
-through 004B were therefore verified locally with the following
-environment-scoped command; these paths are not embedded in `Package.swift`:
+Xcode 26.6 build 17F113 is installed and selected at
+`/Applications/Xcode.app/Contents/Developer`. Its first-launch status is
+complete, so the standard commands above now run without Command Line Tools
+framework or runtime overrides. Task 005A was verified with:
 
 ```sh
-MB_CLT_FRAMEWORKS=/Library/Developer/CommandLineTools/Library/Developer/Frameworks
-MB_CLT_INTEROP=/Library/Developer/CommandLineTools/Library/Developer/usr/lib
-swift test \
-  --disable-xctest \
-  --enable-swift-testing \
-  --parallel \
-  -Xswiftc -F \
-  -Xswiftc "$MB_CLT_FRAMEWORKS" \
-  -Xswiftc -warnings-as-errors \
-  -Xlinker -F \
-  -Xlinker "$MB_CLT_FRAMEWORKS" \
-  -Xlinker -rpath \
-  -Xlinker "$MB_CLT_FRAMEWORKS" \
-  -Xlinker -rpath \
-  -Xlinker "$MB_CLT_INTEROP"
+xcode-select -p
+xcodebuild -version
+xcodebuild -checkFirstLaunchStatus
+swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors
 ```
 
-This command passes 125 tests in 21 suites for the accepted Task 004B
-implementation. The 24 persistence/recovery integration tests and 15 Task 004B
-runtime tests use unique disposable on-disk workspaces and cover
+The standard test command passes 145 tests in 25 suites for the accepted Task
+005A implementation. The 24 persistence/recovery integration tests and 18 task/runtime
+tests use unique
+disposable on-disk workspaces and cover
 workspace identity, path and symlink guards; missing, empty, current, foreign,
 and unknown-future database states; injected migration rollback and portable
 backup, including accepted schema-v1 to schema-v2 migration; all eight semantic
@@ -120,4 +112,42 @@ repository integrity, bounded concurrency, pause/resume, cancellation, retry,
 interrupted startup recovery, stale-input success refusal, disk budgets,
 over-budget cleanup, orphan bounds, log redaction/rotation, and journaled
 import/Trash/restore reconciliation across close/reopen.
-Full Xcode project integration remains unverified.
+
+Task 005A adds 13 media tests and four feature-model tests. They cover all five
+approved native formats through real AVFoundation inspection and managed
+intake; exact canonical PCM settings and duration; deterministic 30-second
+core/one-second-context ranges; a compact three-hour checkpoint below the
+65,536-byte job limit; process-local source authority; Task-Manager-owned
+streamed acquisition; partial-copy cancellation cleanup; persistent original
+and canonical source revisions; chunk retry reuse; exact gap reporting; source
+immutability; terminal task cleanup; and exact routing of one SwiftUI importer
+between workspace folders and the five approved media types. Test-only MOV
+construction may use an AVFoundation export session; product conversion uses
+readers/writers only.
+
+The following Task 005A development gates also pass:
+
+```sh
+swift build --configuration debug -Xswiftc -warnings-as-errors
+swift build --configuration release -Xswiftc -warnings-as-errors
+./script/build_and_run.sh --verify
+codesign --verify --deep --strict --verbose=2 dist/MeetingBuddy.app
+codesign -dvvv --entitlements :- dist/MeetingBuddy.app
+```
+
+The script stages `dist/MeetingBuddy.app`, applies an ad-hoc signature with only
+App Sandbox, app-scoped bookmarks, and user-selected read/write entitlements,
+launches the app, and verifies a live process. A full-Xcode native run also
+observed App Sandbox initialization and its application container, presented
+the native workspace Open panel, selected only a synthetic workspace, verified
+its SQLite integrity, persisted exactly one app-scoped bookmark, and restored
+that authority after relaunch. That run exposed competing SwiftUI
+`fileImporter` modifiers; the implementation now uses one purpose-routed
+importer and the new regression test verifies both workspace and media routes.
+
+The current app is ad-hoc signed development evidence. Gatekeeper rejection is
+expected for that signature, and no valid Developer ID identity is installed.
+Developer ID provisioning, notarization, and clean-machine release validation
+remain Task 011 gates. Task 005A is accepted. Task 005B remains unauthorized,
+and its production transcription/translation route P1 decision must be resolved
+before implementation.

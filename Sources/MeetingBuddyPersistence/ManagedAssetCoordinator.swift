@@ -13,7 +13,7 @@ public enum ManagedAssetCoordinationError: Error, Sendable {
 /// SQLite and the filesystem cannot share one transaction. Every operation is
 /// journaled before bytes move, and startup reconciliation deterministically
 /// completes or rolls back interrupted work without deleting managed bytes.
-public final class ManagedAssetCoordinator: StorageService, ManagedAssetRecoveryService,
+public final class ManagedAssetCoordinator: MediaIntakeStorage, ManagedAssetRecoveryService,
     @unchecked Sendable
 {
     private enum ReconciliationOutcome {
@@ -55,7 +55,30 @@ public final class ManagedAssetCoordinator: StorageService, ManagedAssetRecovery
         dataClassification: DataClassification,
         retentionClass: RetentionClass
     ) throws -> ManagedAssetRecord {
+        try importFile(
+            from: authorizedSource,
+            meetingID: meetingID,
+            storageObjectID: storageObjectID,
+            fileExtension: fileExtension,
+            createdAt: createdAt,
+            dataClassification: dataClassification,
+            retentionClass: retentionClass,
+            cancellationCheck: {}
+        )
+    }
+
+    public func importFile(
+        from authorizedSource: URL,
+        meetingID: MeetingID,
+        storageObjectID: StorageObjectID,
+        fileExtension: ManagedFileExtension?,
+        createdAt: UTCInstant,
+        dataClassification: DataClassification,
+        retentionClass: RetentionClass,
+        cancellationCheck: @Sendable () throws -> Void
+    ) throws -> ManagedAssetRecord {
         try withOperationLock {
+            try cancellationCheck()
             let operationID = UUID()
             let plan = try ManagedAssetImportPlan(
                 meetingID: meetingID,
@@ -82,7 +105,8 @@ public final class ManagedAssetCoordinator: StorageService, ManagedAssetRecovery
                     createdAt: createdAt,
                     dataClassification: dataClassification,
                     retentionClass: retentionClass,
-                    operationID: operationID
+                    operationID: operationID,
+                    cancellationCheck: cancellationCheck
                 )
             } catch {
                 try? metadata.rollBackManagedAssetOperation(

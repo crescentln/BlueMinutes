@@ -8,3 +8,4 @@ DerivedData/
 .env.*
 !.env.example
 *.log
+dist/

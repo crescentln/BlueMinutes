@@ -263,10 +263,11 @@ public actor LocalTaskManager: TaskRuntimeManaging {
         let unfinished = try await repository.jobs(states: activeStates)
         var interruptedIDs: [JobID] = []
         for record in unfinished {
+            let canRetry = record.retryCount < record.maximumRetryCount
             let failure = try JobFailureRecord(
                 code: "process_interrupted",
                 safeSummary: "The previous process ended before the job reached a terminal state.",
-                retryable: true,
+                retryable: canRetry,
                 occurredAt: checkedAt
             )
             let interrupted = try record.transitioning(
@@ -280,20 +281,25 @@ public actor LocalTaskManager: TaskRuntimeManaging {
                 changedAt: checkedAt
             )
             interruptedIDs.append(record.jobID)
+            if !canRetry {
+                try await temporaryStorage.cleanupDirectory(record.temporaryDirectory)
+            }
         }
 
         let allJobs = try await repository.jobs(states: nil)
         let expectedDirectoryIDs = Set(
             allJobs.filter { record in
                 record.state == .queued
-                    || record.state == .interrupted
+                    || (record.state == .interrupted
+                        && record.errorRecord?.retryable == true
+                        && record.retryCount < record.maximumRetryCount)
                     || (record.state == .failed
                         && record.errorRecord?.retryable == true
                         && record.resumeCapability == .checkpointed
                         && record.checkpoint != nil
                         && record.retryCount < record.maximumRetryCount)
             }.map(\.jobID)
-        ).union(interruptedIDs)
+        )
         let orphanScan = try await temporaryStorage.scanOrphans(
             expectedJobIDs: expectedDirectoryIDs,
             maximumEntries: policy.maximumOrphansToInspect
@@ -403,12 +409,59 @@ public actor LocalTaskManager: TaskRuntimeManaging {
                     path: path,
                     lease: started.temporaryDirectory
                 )
+            },
+            prepareWritableFileOperation: { [weak self] path in
+                guard let self else { throw CancellationError() }
+                return try await self.prepareWritableFile(
+                    path: path,
+                    lease: started.temporaryDirectory
+                )
+            },
+            finalizeWritableFileOperation: { [weak self] writableFile in
+                guard let self else { throw CancellationError() }
+                return try await self.finalizeWritableFile(
+                    writableFile,
+                    lease: started.temporaryDirectory
+                )
+            },
+            inspectFileOperation: { [weak self] path in
+                guard let self else { throw CancellationError() }
+                return try await self.inspectTemporaryFile(
+                    path: path,
+                    lease: started.temporaryDirectory
+                )
+            },
+            verifiedFileURLOperation: { [weak self] descriptor in
+                guard let self else { throw CancellationError() }
+                return try await self.verifiedTemporaryFileURL(
+                    descriptor: descriptor,
+                    lease: started.temporaryDirectory
+                )
+            },
+            discardWritableFileOperation: { [weak self] writableFile in
+                guard let self else { throw CancellationError() }
+                try await self.discardWritableFile(
+                    writableFile,
+                    lease: started.temporaryDirectory
+                )
+            },
+            discardFileOperation: { [weak self] path in
+                guard let self else { throw CancellationError() }
+                try await self.discardTemporaryFile(
+                    path: path,
+                    lease: started.temporaryDirectory
+                )
             }
         )
         do {
             let result = try await executor.execute(context)
-            try await repository.validateInputRevisionsAreCurrent(started.inputRevisionIDs)
-            try await finishSucceeded(jobID: started.jobID, result: result)
+            try await Task.detached { [weak self] in
+                guard let self else { throw CancellationError() }
+                try await self.repository.validateInputRevisionsAreCurrent(
+                    started.inputRevisionIDs
+                )
+                try await self.finishSucceeded(jobID: started.jobID, result: result)
+            }.value
         } catch is CancellationError {
             await Task.detached { [weak self] in
                 await self?.finishCancelled(jobID: started.jobID)
@@ -525,15 +578,53 @@ public actor LocalTaskManager: TaskRuntimeManaging {
         try await temporaryStorage.write(data, to: path, in: lease)
     }
 
+    private func prepareWritableFile(
+        path: WorkspaceRelativePath,
+        lease: TaskDirectoryLease
+    ) async throws -> TaskWritableFileLease {
+        try await temporaryStorage.prepareWritableFile(at: path, in: lease)
+    }
+
+    private func finalizeWritableFile(
+        _ writableFile: TaskWritableFileLease,
+        lease: TaskDirectoryLease
+    ) async throws -> TaskTemporaryFileDescriptor {
+        try await temporaryStorage.finalizeWritableFile(writableFile, in: lease)
+    }
+
+    private func inspectTemporaryFile(
+        path: WorkspaceRelativePath,
+        lease: TaskDirectoryLease
+    ) async throws -> TaskTemporaryFileDescriptor? {
+        try await temporaryStorage.inspectFile(at: path, in: lease)
+    }
+
+    private func verifiedTemporaryFileURL(
+        descriptor: TaskTemporaryFileDescriptor,
+        lease: TaskDirectoryLease
+    ) async throws -> URL {
+        try await temporaryStorage.verifiedFileURL(for: descriptor, in: lease)
+    }
+
+    private func discardWritableFile(
+        _ writableFile: TaskWritableFileLease,
+        lease: TaskDirectoryLease
+    ) async throws {
+        try await temporaryStorage.discardWritableFile(writableFile, in: lease)
+    }
+
+    private func discardTemporaryFile(
+        path: WorkspaceRelativePath,
+        lease: TaskDirectoryLease
+    ) async throws {
+        try await temporaryStorage.discardFile(at: path, in: lease)
+    }
+
     private func finishSucceeded(
         jobID: JobID,
         result: JobExecutionResult
     ) async throws {
         let current = try await requireJob(jobID)
-        if current.state == .cancellationRequested {
-            await finishCancelled(jobID: jobID)
-            return
-        }
         let now = clock.now()
         let succeeded = try current.transitioning(
             to: .succeeded,

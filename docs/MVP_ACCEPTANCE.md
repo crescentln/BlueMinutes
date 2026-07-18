@@ -1,6 +1,6 @@
 # MVP Acceptance Baseline
 
-Status: Task 004B runtime gates accepted; end-to-end MVP remains untested
+Status: Task 005A accepted; end-to-end MVP remains untested
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define the acceptance boundary for the first local recorded-meeting
@@ -108,10 +108,19 @@ reconciliation. The success transaction atomically rejects semantic inputs that
 became stale after execution started. Unknown disk capacity and truncated
 orphan or managed-asset recovery scans fail the startup health result closed.
 
-The 125 synthetic tests in 21 suites include exactly five clearly labeled
-Golden fixtures, 24 disposable persistence/recovery integration tests, and 15
-Task 004B runtime tests. They pass with the documented environment-scoped CLT
-command. No test opened or migrated a real user workspace.
+Task 005A adds the native local-media portion of the path: sandbox-scoped
+workspace/source selection, task-managed streamed copy and SHA-256 binding,
+persistent untouched original and generated canonical source revisions,
+AVFoundation inspection of MOV/MP4/M4A/MP3/WAV, canonical 16 kHz mono signed-
+int16 CAF, exact half-open timeline issues, deterministic recoverable chunks,
+checkpoint reuse, cancellation cleanup, and minimal source/status review. The
+source URL/bookmark never enters durable task state, and no source fixture is
+modified.
+
+The 145 tests in 25 suites include exactly five clearly labeled Golden
+fixtures, 24 disposable persistence/recovery tests, 18 task/runtime tests, 13
+media tests, and four feature-model tests. They pass with the standard selected-
+Xcode command. No test opened or migrated a real user workspace.
 
 At the contract and persistence levels, the evidence confirms that translation does not replace
 source text, interpretation cannot claim original wording, uncertain speakers
@@ -122,10 +131,24 @@ together, while close/reopen tests prove retained state.
 
 Task 004B evidence passes the cancellation/retry/crash-consistency,
 temporary-file ownership, and log-default assertions at the infrastructure
-level with synthetic executors. It does not establish a production media or
-provider job, UI integration, or end-to-end vertical slice.
+level. Task 005A supplies the first production executors and proves task-owned
+local acquisition/canonical processing, partial-copy cancellation, verified
+chunk retry reuse, exact-range checkpoints, and terminal cleanup. A
+completion/cancellation race is explicit: an executor that has returned its
+committed publication succeeds; a cancellation observed before publication
+rolls back or publishes no canonical output.
 
 The remaining end-to-end assertions stay `NOT TESTED` or `NOT APPLICABLE`
-until their owning tasks are implemented. Provider routing, media processing,
-briefing analysis, UI review, and user-facing MVP behavior are not claimed.
-Recovery restore UX and JSONL-only reconstruction are also not claimed.
+until their owning tasks are implemented. Provider routing, transcription,
+translation, briefing analysis, full review, and user-facing end-to-end MVP
+behavior are not claimed. Recovery restore UX and JSONL-only reconstruction
+are also not claimed.
+
+Xcode 26.6 can build, ad-hoc sign, launch, and process-verify the SwiftPM app
+bundle. The native run observed App Sandbox initialization, presented the
+workspace Open panel, persisted one app-scoped workspace bookmark, and restored
+it after relaunch using only a synthetic workspace. The purpose-routed importer
+regression test covers the workspace and five-format media routes. Developer ID
+provisioning, Gatekeeper/notarization, and clean-machine validation remain
+Task 011 release gates. Task 005A is accepted. Task 005B is not started and its
+production transcription/translation route decision remains unresolved.

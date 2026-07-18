@@ -3,7 +3,8 @@ import GRDB
 import MeetingBuddyApplication
 import MeetingBuddyDomain
 
-public final class SQLitePersistenceStore: SemanticRevisionRepository, @unchecked Sendable
+public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAssetCatalog,
+    @unchecked Sendable
 {
     public let workspace: LocalWorkspaceDescriptor
     public let migrationOutcome: MigrationOutcome
@@ -367,10 +368,18 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, @unchecke
         }
     }
 
-    func managedAsset(storageObjectID: StorageObjectID) throws -> ManagedAssetRecord? {
+    public func managedAsset(storageObjectID: StorageObjectID) throws -> ManagedAssetRecord? {
         try databasePool.read { db in
             try managedAsset(storageObjectID: storageObjectID, in: db)
         }
+    }
+
+    public func sourceAsset(revisionID: RevisionID) throws -> SourceAssetV1? {
+        try fetch(SourceAssetV1.self, revisionID: revisionID)
+    }
+
+    public func insertSourceAsset(_ sourceAsset: SourceAssetV1) throws {
+        try insert(sourceAsset)
     }
 
     func recordTrashMove(_ record: ManagedAssetRecord) throws {

@@ -23,6 +23,18 @@ let package = Package(
         .library(
             name: "MeetingBuddyTasks",
             targets: ["MeetingBuddyTasks"]
+        ),
+        .library(
+            name: "MeetingBuddyMedia",
+            targets: ["MeetingBuddyMedia"]
+        ),
+        .library(
+            name: "MeetingBuddyFeatures",
+            targets: ["MeetingBuddyFeatures"]
+        ),
+        .executable(
+            name: "MeetingBuddyApp",
+            targets: ["MeetingBuddyApp"]
         )
     ],
     dependencies: [
@@ -54,6 +66,31 @@ let package = Package(
                 "MeetingBuddyDomain"
             ]
         ),
+        .target(
+            name: "MeetingBuddyMedia",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain"
+            ]
+        ),
+        .target(
+            name: "MeetingBuddyFeatures",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain"
+            ]
+        ),
+        .executableTarget(
+            name: "MeetingBuddyApp",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain",
+                "MeetingBuddyFeatures",
+                "MeetingBuddyMedia",
+                "MeetingBuddyPersistence",
+                "MeetingBuddyTasks"
+            ]
+        ),
         .testTarget(
             name: "MeetingBuddyDomainTests",
             dependencies: ["MeetingBuddyDomain"]
@@ -75,6 +112,25 @@ let package = Package(
                 "MeetingBuddyPersistence",
                 "MeetingBuddyTasks",
                 .product(name: "GRDB", package: "GRDB.swift")
+            ]
+        ),
+        .testTarget(
+            name: "MeetingBuddyMediaTests",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain",
+                "MeetingBuddyMedia",
+                "MeetingBuddyPersistence",
+                "MeetingBuddyTasks",
+                .product(name: "GRDB", package: "GRDB.swift")
+            ]
+        ),
+        .testTarget(
+            name: "MeetingBuddyFeaturesTests",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain",
+                "MeetingBuddyFeatures"
             ]
         )
     ],
