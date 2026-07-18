@@ -1,6 +1,6 @@
 # MVP Acceptance Baseline
 
-Status: Task 004A persistence gates accepted; end-to-end MVP remains untested
+Status: Task 004B runtime gates accepted; end-to-end MVP remains untested
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define the acceptance boundary for the first local recorded-meeting
@@ -98,10 +98,20 @@ private Workspace/Trash services, ordered SQLite migration with online rollback
 anchors, and integrity-checked recovery artifacts. The recovery SQLite backup is
 authoritative; semantic JSONL is explicitly export-only.
 
-The 105 synthetic tests in 17 suites include exactly five clearly labeled
-Golden fixtures and 19 disposable persistence integration tests, and pass with
-the documented environment-scoped CLT command. No test opened or migrated a
-real user workspace.
+Task 004B adds the single operational job state machine and Task Manager,
+bounded concurrency, monotonic progress and durable checkpoint pause/resume,
+cooperative cancellation, whole-attempt or durable-node retry, exact
+dependency/idempotency indexes,
+job-owned temporary storage, redacted/rotated logs, startup database/disk/orphan
+health, interrupted-job recovery, and durable filesystem/SQLite operation
+reconciliation. The success transaction atomically rejects semantic inputs that
+became stale after execution started. Unknown disk capacity and truncated
+orphan or managed-asset recovery scans fail the startup health result closed.
+
+The 125 synthetic tests in 21 suites include exactly five clearly labeled
+Golden fixtures, 24 disposable persistence/recovery integration tests, and 15
+Task 004B runtime tests. They pass with the documented environment-scoped CLT
+command. No test opened or migrated a real user workspace.
 
 At the contract and persistence levels, the evidence confirms that translation does not replace
 source text, interpretation cannot claim original wording, uncertain speakers
@@ -110,9 +120,12 @@ replacement yields stable causal stale marks without mutating history. Injected
 failures prove that a pointer change and its stale-state writes roll back
 together, while close/reopen tests prove retained state.
 
+Task 004B evidence passes the cancellation/retry/crash-consistency,
+temporary-file ownership, and log-default assertions at the infrastructure
+level with synthetic executors. It does not establish a production media or
+provider job, UI integration, or end-to-end vertical slice.
+
 The remaining end-to-end assertions stay `NOT TESTED` or `NOT APPLICABLE`
-until their owning tasks are implemented. Task 004A does not establish a Task
-Manager, filesystem/database crash reconciliation after process termination,
-provider routing, media processing, briefing analysis, UI review, or a
-user-facing MVP behavior. Recovery restore UX and JSONL-only reconstruction are
-also not claimed.
+until their owning tasks are implemented. Provider routing, media processing,
+briefing analysis, UI review, and user-facing MVP behavior are not claimed.
+Recovery restore UX and JSONL-only reconstruction are also not claimed.

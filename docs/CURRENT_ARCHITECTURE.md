@@ -1,6 +1,6 @@
 # Current Architecture
 
-Status: Task 004A accepted
+Status: Task 004B accepted
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Record the observed repository state only; target design belongs in
@@ -11,30 +11,33 @@ Purpose: Record the observed repository state only; target design belongs in
 MeetingBuddy is a confirmed greenfield project. The user accepted the Task 001
 audit on 2026-07-17 and confirmed this directory as the canonical root.
 
-The repository contains the accepted Task 002 governance baseline and accepted
-Task 003A/003B domain work. The accepted Task 004A implementation adds
-application storage ports and a concrete local persistence implementation. It
-is a modular Swift package with domain, application, and persistence libraries;
-there is still no application executable, UI, or user meeting data.
+The repository contains the accepted Task 002 governance baseline, accepted
+Task 003A/003B domain work, accepted Task 004A persistence foundation, and
+accepted Task 004B operational runtime. Task 004B adds the unified operational
+job contract, concrete Task Manager, bounded task storage/logging, and crash
+reconciliation. There is still no application executable, UI, production job
+executor, or user meeting data.
 
 ## Repository state
 
-- Git repository: local `main`; the Task 004A acceptance commit is the current
-  checkout, and its predecessor `e712f01890d68dffa6ef843fa550962448ef0474`
-  is the accepted Task 003B rollback anchor.
+- Git repository: local `main`; the Task 004B acceptance commit is the current
+  checkout, and its predecessor `2ccf57fe8d42c1a6d21bb1cfe3765d1b41687500`
+  is the accepted Task 004A rollback anchor.
 - Product source files: `Sources/MeetingBuddyDomain/`,
-  `Sources/MeetingBuddyApplication/`, and `Sources/MeetingBuddyPersistence/`.
+  `Sources/MeetingBuddyApplication/`, `Sources/MeetingBuddyPersistence/`, and
+  `Sources/MeetingBuddyTasks/`.
 - Xcode projects/workspaces: none.
 - Swift Package Manager manifest: `Package.swift`, Swift tools 6.1, Swift 6
   language mode, macOS 15 minimum.
-- Build targets: `MeetingBuddyDomain`, `MeetingBuddyApplication`, and
-  `MeetingBuddyPersistence` libraries plus domain and persistence test targets;
-  there is no application entry point.
+- Build targets: `MeetingBuddyDomain`, `MeetingBuddyApplication`,
+  `MeetingBuddyPersistence`, and `MeetingBuddyTasks` libraries plus domain,
+  persistence, and task test targets; there is no application entry point.
 - Dependency: exact GRDB 7.11.1 pin with `Package.resolved`; GRDB is isolated to
   persistence implementation and persistence tests.
-- Tests: 105 synthetic Swift Testing cases in 17 suites, including exactly five
-  Task 003B Golden fixtures and 19 disposable Task 004A integration cases; no
-  CI, formatter, or linter configuration yet.
+- Tests: 125 synthetic Swift Testing cases in 21 suites, including exactly five
+  Task 003B Golden fixtures, 24 disposable persistence/recovery integration
+  cases, and 15 Task 004B job/runtime cases; no CI, formatter, or linter
+  configuration yet.
 - No database, recovery snapshot, managed media, credential, or runtime
   workspace is committed. Integration tests create and remove only unique
   system-temporary workspaces.
@@ -46,19 +49,20 @@ The accepted evidence and original commands are preserved in
 
 | Layer | Current implementation |
 | --- | --- |
-| Application/UI | Task 004A storage-neutral persistence/workspace/recovery ports; no UI or executable |
+| Application/UI | Storage-neutral persistence/workspace/recovery ports plus Task 004B job/runtime ports; no UI or executable |
 | Domain | Task 003A foundation plus Task 003B input contracts, explicit active selection, dependency edges, pure graph validation, and deterministic stale planning |
-| Persistence and workspace | Task 004A Workspace/Storage services, GRDB-backed SQLite repositories/migration, managed-file/Trash coordination, and recovery-snapshot foundation |
-| Task execution and recovery | No Task Manager; Task 004A provides only migration rollback anchors and integrity-checked recovery artifacts |
+| Persistence and workspace | Task 004A Workspace/Storage services plus Task 004B schema v2 job repository, durable managed-asset operation journal, bounded task directories, and rotated logs |
+| Task execution and recovery | One `LocalTaskManager` actor with explicit job state/progress/checkpoint/cancellation/retry contracts, bounded concurrency, startup health, interrupted-job recovery, orphan cleanup, and stale-input publication checks |
 | Media | None |
 | Transcription, translation, and AI | None |
 | Automation/CLI/MCP | None |
 | Historical retrieval | None |
 
 Executable package behavior now covers pure domain creation/validation plus
-disposable local workspace, file-storage, SQLite persistence, migration,
-recovery-snapshot, and Trash integration. There is no application executable,
-network I/O, provider call, media conversion, or UI.
+disposable local workspace, file-storage, SQLite persistence/migration,
+recovery snapshots, Trash integration, and synthetic long-running job
+execution. There is no application executable, network I/O, provider call,
+media conversion, or UI.
 
 ## Governance now present
 
@@ -141,10 +145,42 @@ The accepted Task 004A implementation adds:
 - synchronous compensation for managed-file import/Trash metadata failures and
   disposable failure-injection tests.
 
+## Task 004B task runtime and crash recovery
+
+The accepted Task 004B implementation adds:
+
+- one application-owned job contract with stable IDs, idempotency digests,
+  explicit queued/running/pause/cancellation/terminal states, monotonic
+  progress, durable checkpoints, retry metadata, provider-usage metadata,
+  exact semantic input/output revision references, and job-owned disk leases;
+- one `LocalTaskManager` actor with a 1–16 bounded concurrency limit,
+  dependency scheduling, cooperative checkpoint pause/resume and cancellation,
+  explicit whole-attempt or durable-node retry, synthetic executor injection,
+  deterministic startup conversion of unfinished work to `interrupted`, and a
+  fail-closed health result when disk capacity is unknown or a bounded orphan
+  or managed-asset recovery scan is truncated;
+- SQLite schema version 2 with canonical digest-checked job snapshots,
+  optimistic replacement, immutable state events, dependency/input/output
+  indexes, uniqueness-backed idempotency, health checks, and an atomic
+  stale-input recheck in the success transaction;
+- `.tasks/<job-id>` allocation with per-job byte budgets, private permissions,
+  confined writes, bounded entry scans, safe terminal cleanup, and
+  age/count/symlink-bounded orphan cleanup;
+- structured JSONL plus OSLog-compatible logging with private-value removal,
+  credential-pattern redaction, value/file/count/retention bounds, rotation,
+  and private permissions;
+- a durable managed-asset intent/event journal and deterministic startup
+  reconciliation for interrupted import, Trash, and restore operations,
+  including exact owned-staging cleanup and fail-closed repair reporting;
+- disposable state-machine, concurrency, pause/resume, cancellation, retry,
+  restart, migration, redaction/rotation, confinement, orphan, and
+  filesystem/SQLite interruption tests.
+
 ## Known limitations
 
-- There is no native app target, Xcode project, UI, Task Manager, media
-  conversion, provider, network, briefing, or automation implementation.
+- There is no native app target, Xcode project, UI, production executor, media
+  conversion, provider, network, briefing, or automation implementation. The
+  Task Manager is a library exercised only through synthetic executors.
 - The active developer directory contains Command Line Tools rather than the
   full Xcode application. SwiftPM builds pass, but full Xcode integration and
   macOS 15 runtime compatibility have not been verified.
@@ -153,21 +189,22 @@ The accepted Task 004A implementation adds:
   Tests passed with explicit paths to the CLT-owned framework and interop
   library; a standard `swift test` invocation still requires a complete or
   repaired Apple developer-tool installation.
-- Git history provides the Task 004A acceptance commit and its accepted Task
-  003B predecessor as a rollback anchor.
+- Git history provides accepted Task 004A commit `2ccf57f` as the rollback
+  anchor immediately before the Task 004B acceptance commit.
 - The semantic JSONL recovery artifact is deliberately export-only; exact
   operational recovery relies on the verified SQLite online backup. A user-
   facing restore workflow is not implemented.
-- Filesystem/SQLite synchronous compensation cannot close a process-crash
-  window by itself. Durable operation journaling and startup reconciliation
-  remain Task 004B work.
+- Managed-asset process-crash windows now have a durable journal and bounded
+  startup reconciliation. A user-facing repair/restore UI and automatic Trash
+  purge remain unimplemented.
 - Final distribution/sandbox and security-scoped bookmark details remain open
   for Task 005A.
-- End-to-end product quality gates remain untested; only the Task 003A/003B
-  domain gates and Task 004A persistence, migration, recovery-foundation,
-  Trash, and boundary gates have evidence.
+- End-to-end product quality gates remain untested; current evidence covers
+  Task 003A/003B domain, Task 004A persistence, and Task 004B operational
+  runtime/recovery boundaries only.
 
 ## Next permitted transition
 
-Task 004A is accepted. Task 004B is eligible but remains unauthorized until the
-user explicitly starts it; Codex must stop at this boundary.
+Task 004B is accepted. Task 005A is next eligible but remains unauthorized;
+its distribution/sandbox and canonical media-parameter checkpoints must be
+resolved before implementation.

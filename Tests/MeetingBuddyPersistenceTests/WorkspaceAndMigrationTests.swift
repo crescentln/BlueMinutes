@@ -14,7 +14,12 @@ struct WorkspaceAndMigrationTests {
 
         let store = try workspace.makeStore()
         #expect(store.migrationOutcome.schemaVersion == SQLiteSchema.currentVersion)
-        #expect(store.migrationOutcome.appliedMigrations == [SQLiteSchema.initialMigrationIdentifier])
+        #expect(
+            store.migrationOutcome.appliedMigrations == [
+                SQLiteSchema.initialMigrationIdentifier,
+                SQLiteSchema.taskRuntimeMigrationIdentifier
+            ]
+        )
         #expect(store.migrationOutcome.rollbackAnchor == nil)
 
         let databaseFacts = try store.databasePool.read { db in
@@ -25,7 +30,10 @@ struct WorkspaceAndMigrationTests {
                 foreignKeyFailures: try Row.fetchAll(db, sql: "PRAGMA foreign_key_check").count,
                 hasRevisions: try db.tableExists("semantic_revisions"),
                 hasAssets: try db.tableExists("managed_assets"),
-                hasPointers: try db.tableExists("active_published_revisions")
+                hasPointers: try db.tableExists("active_published_revisions"),
+                hasJobs: try db.tableExists("jobs"),
+                hasJobEvents: try db.tableExists("job_state_events"),
+                hasAssetOperations: try db.tableExists("managed_asset_operations")
             )
         }
         #expect(databaseFacts.journalMode == "wal")
@@ -35,6 +43,9 @@ struct WorkspaceAndMigrationTests {
         #expect(databaseFacts.hasRevisions)
         #expect(databaseFacts.hasAssets)
         #expect(databaseFacts.hasPointers)
+        #expect(databaseFacts.hasJobs)
+        #expect(databaseFacts.hasJobEvents)
+        #expect(databaseFacts.hasAssetOperations)
 
         let rootMode = try posixMode(at: workspace.root)
         let manifestMode = try posixMode(at: workspace.descriptor.layout.workspaceManifest)
@@ -45,7 +56,12 @@ struct WorkspaceAndMigrationTests {
 
         try store.close()
         let reopened = try workspace.makeStore()
-        #expect(reopened.migrationOutcome.appliedMigrations == [SQLiteSchema.initialMigrationIdentifier])
+        #expect(
+            reopened.migrationOutcome.appliedMigrations == [
+                SQLiteSchema.initialMigrationIdentifier,
+                SQLiteSchema.taskRuntimeMigrationIdentifier
+            ]
+        )
         #expect(reopened.migrationOutcome.rollbackAnchor == nil)
         try reopened.close()
     }
@@ -63,8 +79,10 @@ struct WorkspaceAndMigrationTests {
         let migrated = try emptyWorkspace.makeStore()
         #expect(migrated.migrationOutcome.schemaVersion == SQLiteSchema.currentVersion)
         #expect(
-            migrated.migrationOutcome.appliedMigrations
-                == [SQLiteSchema.initialMigrationIdentifier]
+            migrated.migrationOutcome.appliedMigrations == [
+                SQLiteSchema.initialMigrationIdentifier,
+                SQLiteSchema.taskRuntimeMigrationIdentifier
+            ]
         )
         try migrated.close()
 
@@ -85,6 +103,81 @@ struct WorkspaceAndMigrationTests {
         let migrationBackupDirectory = futureWorkspace.descriptor.layout.backups
             .appendingPathComponent("Migrations", isDirectory: true)
         #expect(!FileManager.default.fileExists(atPath: migrationBackupDirectory.path))
+    }
+
+    @Test
+    func migratesAcceptedVersionOneDatabaseWithVerifiedRollbackAnchor() throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "accepted-v1")
+        defer { workspace.cleanup() }
+        let queue = try DatabaseQueue(path: workspace.descriptor.layout.databaseFile.path)
+        var versionOneMigrator = DatabaseMigrator()
+        versionOneMigrator.registerMigration(SQLiteSchema.initialMigrationIdentifier) { db in
+            try db.execute(sql: SQLiteSchema.initialSchemaSQL)
+            try db.execute(
+                sql: """
+                INSERT INTO schema_migrations(
+                    identifier, ordinal, checksum_sha256, applied_at_ms
+                ) VALUES (?, 1, ?, ?)
+                """,
+                arguments: [
+                    SQLiteSchema.initialMigrationIdentifier,
+                    SQLiteSchema.initialChecksum,
+                    PersistenceFixtures.createdAt.millisecondsSinceUnixEpoch
+                ]
+            )
+            try db.execute(
+                sql: """
+                INSERT INTO workspace_metadata(
+                    singleton, workspace_id, database_schema_version, updated_at_ms
+                ) VALUES (1, ?, 1, ?)
+                """,
+                arguments: [
+                    workspace.descriptor.manifest.workspaceID.canonicalString,
+                    PersistenceFixtures.createdAt.millisecondsSinceUnixEpoch
+                ]
+            )
+        }
+        try versionOneMigrator.migrate(queue)
+        try queue.close()
+
+        let migrated = try SQLitePersistenceStore(
+            workspace: workspace.descriptor,
+            migrationTimestamp: PersistenceFixtures.publishedAt
+        )
+        #expect(migrated.migrationOutcome.schemaVersion == 2)
+        #expect(
+            migrated.migrationOutcome.appliedMigrations == [
+                SQLiteSchema.initialMigrationIdentifier,
+                SQLiteSchema.taskRuntimeMigrationIdentifier
+            ]
+        )
+        let rollbackAnchor = try #require(migrated.migrationOutcome.rollbackAnchor)
+        #expect(rollbackAnchor.sourceSchemaVersion == 1)
+        #expect(
+            try migrated.databasePool.read { db in
+                try db.tableExists("jobs") && db.tableExists("managed_asset_operations")
+            }
+        )
+        try migrated.close()
+
+        let backupURL = workspace.root.appendingPathComponent(
+            rollbackAnchor.artifact.relativePath.rawValue
+        )
+        let backup = try DatabaseQueue(path: backupURL.path)
+        let backupFacts = try backup.read { db in
+            (
+                version: try UInt32.fetchOne(
+                    db,
+                    sql: "SELECT database_schema_version FROM workspace_metadata WHERE singleton = 1"
+                ),
+                hasJobs: try db.tableExists("jobs"),
+                quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check")
+            )
+        }
+        #expect(backupFacts.version == 1)
+        #expect(!backupFacts.hasJobs)
+        #expect(backupFacts.quickCheck == "ok")
+        try backup.close()
     }
 
     @Test
@@ -202,7 +295,7 @@ struct WorkspaceAndMigrationTests {
         let initial = try workspace.makeStore()
         try initial.close()
 
-        let failing = SQLiteMigrationDefinition(identifier: "002_test_failure") { db in
+        let failing = SQLiteMigrationDefinition(identifier: "003_test_failure") { db in
             try db.create(table: "must_rollback") { table in
                 table.column("id", .integer).primaryKey()
             }

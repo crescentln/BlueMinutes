@@ -1,6 +1,7 @@
 # Security and Privacy Baseline
 
-Status: Accepted policy baseline; Task 003A/003B domain enforcement implemented, runtime enforcement deferred
+Status: Task 004B local runtime controls accepted; provider-route enforcement
+remains deferred
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define classification, routing, secret, logging, and trust-boundary
@@ -107,8 +108,16 @@ and user confirmation remain explicit. Synthetic source text is preserved as
 untrusted data and is never interpreted as a control instruction by the
 domain layer.
 
-No credential, Keychain, provider-call, network, logging, permission,
-entitlement, or telemetry runtime exists yet. Cloud routing still requires the
-Task 005B application/provider gate; the meeting-level policy and recorded
-privacy route do not authorize an external call by themselves. Those runtime
-controls are therefore not marked as passing.
+Task 004B adds only local operational controls: job requests reject unknown or
+unsafe classification/privacy routes and restricted cloud routes; task files
+are confined to private job-owned directories with explicit budgets; structured
+task logs remove private values, bound public values, redact common credential
+patterns, rotate by size/count/age, and mark OSLog message text private. Job
+failure records accept only bounded caller-declared safe summaries, while raw
+diagnostics are private log values. No task test uses a provider or network.
+
+No credential, Keychain, provider-call, network, permission, entitlement, or
+telemetry runtime exists yet. Cloud routing still requires the Task 005B
+application/provider gate; the meeting-level policy, job privacy route, and
+provider-usage fields do not authorize an external call by themselves. Those
+provider runtime controls are therefore not marked as passing.

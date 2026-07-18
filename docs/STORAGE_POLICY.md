@@ -1,6 +1,6 @@
 # Storage and Recovery Policy
 
-Status: Task 004A storage foundation accepted
+Status: Task 004B storage/runtime work accepted
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define authoritative representations, storage ownership, retention,
@@ -60,18 +60,20 @@ Temporary data is owned by one job and is cleaned on success, failure,
 cancellation, or bounded recovery. Normal launch performs lightweight health
 checks and must not rescan or reprocess the entire workspace.
 
-### Task 004A location ownership
+### Implemented location ownership through Task 004B
 
 | Location | Owner / creator | Deletor | Size or budget | Rebuildable / visibility | Cleanup, migration, classification |
 | --- | --- | --- | --- | --- | --- |
 | `workspace_manifest.json` | Workspace Service | No routine deletor | Fixed v1 metadata; 64 KiB read ceiling | Non-rebuildable identity; internal | Never auto-clean; format-version migration; inherits workspace sensitivity |
 | `Meetings/<meeting-id>/assets/` | ID-based Storage Service / managed-file coordinator | Trash transition only; no permanent-delete API in 004A | Streamed user-selected bytes; bounded by available workspace volume, no silent quota eviction | Authoritative source bytes; user data | Retention from the managed record; UUID names; classification recorded per asset |
-| `Database/meetingbuddy.sqlite` | SQLite persistence repositories/migrations | No reset/delete path | 16 MiB maximum per semantic payload; overall DB bounded by workspace volume | Authoritative metadata; internal | Ordered migrations and online rollback anchor; most restrictive contained classification |
+| `Database/meetingbuddy.sqlite` | SQLite persistence and job repositories/migrations | No reset/delete path | 16 MiB maximum per semantic payload; 1 MiB maximum per canonical job snapshot; overall DB bounded by workspace volume | Authoritative semantic and operational metadata; internal | Ordered migrations and online rollback anchor; immutable events; most restrictive contained classification |
 | `Backups/Migrations/` | Migration bootstrap | No automatic deletor | One SQLite backup per attempted existing-DB migration; no automatic purge in 004A | Recovery authority; internal | Portable DELETE-journal SQLite; migrates with recovery format; same classification as DB |
 | `Backups/Recovery/` | Recovery Service | No automatic deletor | One DB backup plus bounded metadata exports per snapshot; no automatic purge in 004A | Point-in-time recovery set; internal | Snapshot-ID directories, integrity descriptors, format version; same classification as captured DB/assets |
 | `.Trash/assets/` | Storage Service / managed-file coordinator | No permanent-delete API in 004A | Same bytes as moved managed assets; bounded by workspace volume | Authoritative retained bytes; user-restorable | Collision-safe restore; future explicit retention/empty policy; retains source classification |
-| `.temp/` | Local Storage Service in 004A | Creating operation | At most one streamed intake staging copy per active call | Disposable; internal | Removed on success/failure; must remain workspace-confined; inherits incoming asset classification |
-| `Models/`, `Indexes/`, `Logs/`, `.tasks/`, `manifests/` | Workspace Service creates directories only; no active 004A writer | None in 004A | Zero-byte content budget in 004A | Reserved; not evidence of implemented features | Ownership/budget must be activated by the owning later task before any content is written |
+| `.temp/` | Local Storage Service / managed-asset coordinator | Creating operation or bounded startup reconciliation | At most one deterministic streamed-intake staging copy per active journaled import | Disposable; internal | Removed on success/failure or exact operation-ID recovery; workspace-confined; inherits incoming asset classification |
+| `.tasks/<job-id>/` | Task Manager through `LocalTaskTemporaryStorage` | Task Manager on success, failure, cancellation, restart-only retry, or bounded orphan recovery | Explicit per-job lease, 1 byte–1 TiB contract ceiling, volume-capacity precheck, 10,000-entry scan ceiling | Disposable operational data; internal | `0700` directory, `0600` files, no traversal/symlinks; checkpointed interrupted jobs retained for explicit retry |
+| `Logs/Tasks/` | `RotatingTaskLogStore` | Log store retention/rotation | 4 MiB active default, at most 14 archives, approximately 14-day default retention; hard configuration ceilings | Operational diagnostics; internal and redacted | JSONL plus privacy-annotated OSLog; private values removed, public values bounded and credential-redacted; `0700`/`0600` |
+| `Models/`, `Indexes/`, `manifests/` | Workspace Service creates directories only; no active Task 004B writer | None through Task 004B | Zero-byte content budget through Task 004B | Reserved; not evidence of implemented features | Ownership/budget must be activated by the owning later task before any content is written |
 
 ## Retention defaults
 
@@ -97,6 +99,12 @@ checks and must not rescan or reprocess the entire workspace.
   user data.
 - A failure cannot leave a partially committed logical object or ambiguous
   active-revision pointer.
+- SQLite schema version 2 adds the job runtime and managed-asset operation
+  journal. Opening an accepted version-1 database creates and verifies a
+  portable rollback anchor before applying version 2.
+- Managed-asset import, Trash, and restore persist an intent before bytes move,
+  append immutable operation events, and reconcile bounded unfinished entries
+  at startup by completing, rolling back, or reporting repair required.
 - Recovery artifacts include a workspace manifest, semantic snapshot, asset
   hashes, migration version, integrity descriptors, and an authoritative
   portable SQLite backup.
@@ -113,7 +121,7 @@ do not import GRDB or expose database handles.
 
 ## Current implementation status
 
-Task 004A implements the foundation in two concrete boundaries:
+Tasks 004A and 004B implement the current foundation in concrete boundaries:
 
 - `LocalWorkspaceService` creates or opens a manifest-owned, symlink-checked
   private workspace with separate meetings, models, database, indexes,
@@ -126,29 +134,39 @@ Task 004A implements the foundation in two concrete boundaries:
   payloads, active pointers, derived dependency edges, stale events/current
   state, managed-asset metadata, and source-file bindings;
 - `ManagedAssetCoordinator` compensates synchronous filesystem/database
-  failures without permanently deleting the only copy;
+  failures without permanently deleting the only copy and now journals intent,
+  filesystem application, completion/rollback, and repair state for bounded
+  restart reconciliation;
 - `SQLiteRecoveryService` creates a consistent online SQLite backup plus
   versioned semantic JSONL, asset-hash inventory, migration record, and a
   manifest that checks every artifact's SHA-256 and byte size for internal
-  consistency and corruption detection.
+  consistency and corruption detection;
+- `SQLiteJobRepository` stores canonical job snapshots, immutable state events,
+  exact dependency/input/output references, and optimistic versions, and
+  rechecks semantic input currency atomically before success publication;
+- `LocalTaskTemporaryStorage` confines each job to one budgeted private
+  `.tasks/<job-id>` directory and performs bounded, age-checked, symlink-safe
+  orphan cleanup;
+- `RotatingTaskLogStore` stores bounded structured diagnostics with private
+  value removal, credential-pattern redaction, private permissions, rotation,
+  count limits, and retention limits.
 
 The recovery SQLite backup is authoritative and independently read-only
 portable. The semantic JSONL is explicitly export-only; Task 004A does not
 claim that it reconstructs active pointers, stale events, Trash state, or all
 operational metadata. Automatic Trash purge is not implemented.
 
-All Task 004A migration and storage integration tests use unique disposable
-directories under the system temporary directory. No production or user
-workspace was created or migrated.
+All Task 004A/004B migration, storage, and runtime integration tests use unique
+disposable directories under the system temporary directory. No production or
+user workspace was created or migrated.
 
-Task 004B still owns durable operation journaling, startup reconciliation of a
-process interruption between filesystem and SQLite writes, job-owned temporary
-data, cancellation, retry, and crash recovery. Distribution/sandbox bookmark
-policy remains the Task 005A checkpoint.
+Task 004B completes durable operation journaling, startup reconciliation,
+job-owned temporary data, cancellation, retry, and crash-recovery contracts.
+Distribution/sandbox bookmark policy remains the Task 005A checkpoint.
 
 ## At-rest protection
 
-Task 004A stores workspace data and backups as plaintext files. It applies
+Tasks 004A/004B store workspace data and backups as plaintext files. They apply
 `0700` to managed directories and `0600` to manifests, databases, backups,
 exports, and managed source files. Confidentiality therefore relies on the
 macOS account boundary and host/volume encryption such as FileVault when the

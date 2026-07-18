@@ -1,6 +1,6 @@
 # Implementation Plan
 
-Status: Accepted task map; each task still requires explicit authorization
+Status: Task 004B accepted; later tasks still require explicit authorization
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Map repository work to controller tasks without granting autonomous
@@ -49,6 +49,9 @@ Codex must stop after every task report.
 - Before 004A: persistence dependency note and migration test strategy.
   Resolved by the exact GRDB 7.11.1 pin, `docs/dependencies/GRDB.md`, and the
   disposable on-disk migration harness.
+- Before 004B: Task 004A accepted and no open P0 decision. Resolved; Task 004B
+  adds no dependency and migrates schema version 1 to version 2 only through a
+  verified disposable rollback-anchor test.
 - Before 005A: distribution/sandbox/file-access direction and media acceptance
   parameters.
 - Before 005B: approved transcription and translation routes plus cloud policy.
@@ -81,7 +84,7 @@ The standard test command requires a complete, correctly selected Apple
 developer-tool installation. On the current machine, only Command Line Tools
 are selected. Their bundled Swift Testing framework is not added to the search
 path automatically and contains an incorrect interop-library rpath. Tasks 003A
-and 003B were therefore verified locally with the following
+through 004B were therefore verified locally with the following
 environment-scoped command; these paths are not embedded in `Package.swift`:
 
 ```sh
@@ -102,14 +105,19 @@ swift test \
   -Xlinker "$MB_CLT_INTEROP"
 ```
 
-This command passes 105 tests in 17 suites for the accepted Task 004A
-implementation. The 19
-Task 004A integration tests use unique disposable on-disk workspaces and cover
+This command passes 125 tests in 21 suites for the accepted Task 004B
+implementation. The 24 persistence/recovery integration tests and 15 Task 004B
+runtime tests use unique disposable on-disk workspaces and cover
 workspace identity, path and symlink guards; missing, empty, current, foreign,
 and unknown-future database states; injected migration rollback and portable
-backup; all eight repository contracts; immutable revisions; recursive
+backup, including accepted schema-v1 to schema-v2 migration; all eight semantic
+repository contracts; immutable revisions; recursive
 current-input publication gates; active/stale transaction atomicity across
 restart; recovery inventory and tamper detection;
 no asset bytes in SQLite; and failure-injected, compensated, collision-safe
-Trash transitions.
+Trash transitions. Task 004B cases additionally cover job state-machine and
+repository integrity, bounded concurrency, pause/resume, cancellation, retry,
+interrupted startup recovery, stale-input success refusal, disk budgets,
+over-budget cleanup, orphan bounds, log redaction/rotation, and journaled
+import/Trash/restore reconciliation across close/reopen.
 Full Xcode project integration remains unverified.

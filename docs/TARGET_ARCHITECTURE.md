@@ -2,7 +2,7 @@
 
 Status: Accepted architecture direction; implementation is task-gated
 Owner: Codex
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 Purpose: Define dependency direction and system boundaries without duplicating
 field-level contracts, security policy, or storage policy.
 
@@ -121,11 +121,18 @@ and prompt metadata, cancellation behavior, and a safe publication gate.
 - External agents use the Automation Command Layer and cannot bypass the same
   application services used by the UI.
 
+The accepted Task 004B implementation realizes the `MeetingBuddyTasks`
+boundary and its application-owned job ports without adding a composition root
+or feature dependency. `MeetingBuddyPersistence` remains the only GRDB consumer
+and now also implements operational job storage, task files/logs, and
+managed-asset recovery adapters.
+
 ## Deliberately deferred choices
 
-- exact Xcode project layout and target names beyond the first domain module;
+- exact Xcode project/application/feature target layout beyond the four current
+  SwiftPM libraries;
 - final distribution channel and sandbox configuration;
-- concrete SQLite wrapper and provider dependencies;
+- concrete media and provider dependencies;
 - canonical audio parameters and chunk tolerances;
 - production transcription, translation, and inference providers;
 - UN Web TV acquisition mechanics and live-capture entitlements.

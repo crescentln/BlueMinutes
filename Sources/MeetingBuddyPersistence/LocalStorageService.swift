@@ -24,7 +24,8 @@ public final class LocalStorageService: @unchecked Sendable {
         fileExtension: ManagedFileExtension?,
         createdAt: UTCInstant,
         dataClassification: DataClassification,
-        retentionClass: RetentionClass
+        retentionClass: RetentionClass,
+        operationID: UUID? = nil
     ) throws -> ManagedAssetRecord {
         guard dataClassification.isKnown, retentionClass.isKnown else {
             throw WorkspaceContractError.managedAssetMismatch(
@@ -56,9 +57,15 @@ public final class LocalStorageService: @unchecked Sendable {
         }
         let relativePath = try workspaceRelativePath(for: destination, allowMissingLeaf: true)
 
-        let staging = workspace.layout.temporary
-            .appendingPathComponent("storage-\(UUID().uuidString.lowercased()).partial")
+        let staging = operationID.map(stagingFileURL)
+            ?? workspace.layout.temporary
+                .appendingPathComponent("storage-\(UUID().uuidString.lowercased()).partial")
         try ensureConfined(staging, allowMissingLeaf: true)
+        guard !fileManager.fileExists(atPath: staging.path) else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "A managed-asset operation already owns its deterministic staging file."
+            )
+        }
         guard fileManager.createFile(atPath: staging.path, contents: nil) else {
             throw WorkspaceContractError.managedAssetMismatch(
                 "A private staging file could not be created."
@@ -115,8 +122,77 @@ public final class LocalStorageService: @unchecked Sendable {
         }
     }
 
-    func moveToTrash(
-        _ record: ManagedAssetRecord,
+    func containsVerifiedFile(for record: ManagedAssetRecord) throws -> Bool {
+        let file = try confinedURL(for: record.relativePath, allowMissingLeaf: true)
+        guard fileManager.fileExists(atPath: file.path) else {
+            return false
+        }
+        try verifyFile(for: record)
+        return true
+    }
+
+    func recoveredImportRecord(
+        from plan: ManagedAssetImportPlan
+    ) throws -> ManagedAssetRecord? {
+        let destination = importDestinationURL(
+            meetingID: plan.meetingID,
+            storageObjectID: plan.storageObjectID,
+            fileExtension: plan.fileExtension
+        )
+        try ensureConfined(destination, allowMissingLeaf: true)
+        guard fileManager.fileExists(atPath: destination.path) else {
+            return nil
+        }
+        try rejectSymbolicLink(destination)
+        let values = try destination.resourceValues(forKeys: [.isRegularFileKey])
+        guard values.isRegularFile == true else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "A managed-asset import destination is not a regular file."
+            )
+        }
+        let (digest, byteSize) = try hashFile(at: destination)
+        guard byteSize > 0 else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "A recovered managed asset cannot be empty."
+            )
+        }
+        return try ManagedAssetRecord(
+            storageObjectID: plan.storageObjectID,
+            meetingID: plan.meetingID,
+            relativePath: workspaceRelativePath(for: destination),
+            contentHash: digest,
+            byteSize: byteSize,
+            createdAt: plan.createdAt,
+            dataClassification: plan.dataClassification,
+            retentionClass: plan.retentionClass
+        )
+    }
+
+    func deterministicStagingFileExists(operationID: UUID) throws -> Bool {
+        let staging = stagingFileURL(operationID)
+        try ensureConfined(staging, allowMissingLeaf: true)
+        guard fileManager.fileExists(atPath: staging.path) else {
+            return false
+        }
+        try rejectSymbolicLink(staging)
+        let values = try staging.resourceValues(forKeys: [.isRegularFileKey])
+        guard values.isRegularFile == true else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "A managed-asset staging artifact is not a regular file."
+            )
+        }
+        return true
+    }
+
+    func removeDeterministicStagingFile(operationID: UUID) throws {
+        guard try deterministicStagingFileExists(operationID: operationID) else {
+            return
+        }
+        try fileManager.removeItem(at: stagingFileURL(operationID))
+    }
+
+    func plannedTrashRecord(
+        for record: ManagedAssetRecord,
         at trashedAt: UTCInstant
     ) throws -> ManagedAssetRecord {
         guard record.state == .active, record.trashedAt == nil else {
@@ -131,18 +207,17 @@ public final class LocalStorageService: @unchecked Sendable {
         }
         try verifyFile(for: record)
         let source = try confinedURL(for: record.relativePath)
-        let trashAssets = workspace.layout.trash.appendingPathComponent("assets", isDirectory: true)
-        let trashDirectory = trashAssets
+        let destination = workspace.layout.trash
+            .appendingPathComponent("assets", isDirectory: true)
             .appendingPathComponent(record.storageObjectID.canonicalString, isDirectory: true)
-        try createPrivateDirectory(trashAssets)
-        try createPrivateDirectory(trashDirectory)
-        let destination = trashDirectory.appendingPathComponent(source.lastPathComponent)
+            .appendingPathComponent(source.lastPathComponent)
+        try ensureConfined(destination, allowMissingLeaf: true)
         guard !fileManager.fileExists(atPath: destination.path) else {
             throw WorkspaceContractError.invalidStorageTransition(
                 "The managed asset already has a Trash destination."
             )
         }
-        let trashed = try ManagedAssetRecord(
+        return try ManagedAssetRecord(
             storageObjectID: record.storageObjectID,
             meetingID: record.meetingID,
             relativePath: workspaceRelativePath(for: destination, allowMissingLeaf: true),
@@ -155,26 +230,25 @@ public final class LocalStorageService: @unchecked Sendable {
             state: .trashed,
             trashedAt: trashedAt
         )
-        try fileManager.moveItem(at: source, to: destination)
-        return trashed
     }
 
-    func restoreFromTrash(_ record: ManagedAssetRecord) throws -> ManagedAssetRecord {
+    func plannedRestoredRecord(for record: ManagedAssetRecord) throws -> ManagedAssetRecord {
         guard record.state == .trashed, record.trashedAt != nil else {
             throw WorkspaceContractError.invalidStorageTransition(
                 "Only a trashed managed asset can be restored."
             )
         }
         try verifyFile(for: record)
-        let source = try confinedURL(for: record.relativePath)
-        let destination = try confinedURL(for: record.originalRelativePath, allowMissingLeaf: true)
-        try createPrivateDirectory(destination.deletingLastPathComponent())
+        let destination = try confinedURL(
+            for: record.originalRelativePath,
+            allowMissingLeaf: true
+        )
         guard !fileManager.fileExists(atPath: destination.path) else {
             throw WorkspaceContractError.invalidStorageTransition(
                 "The original managed asset location is occupied."
             )
         }
-        let restored = try ManagedAssetRecord(
+        return try ManagedAssetRecord(
             storageObjectID: record.storageObjectID,
             meetingID: record.meetingID,
             relativePath: record.originalRelativePath,
@@ -185,6 +259,29 @@ public final class LocalStorageService: @unchecked Sendable {
             dataClassification: record.dataClassification,
             retentionClass: record.retentionClass
         )
+    }
+
+    func moveToTrash(
+        _ record: ManagedAssetRecord,
+        at trashedAt: UTCInstant
+    ) throws -> ManagedAssetRecord {
+        let trashed = try plannedTrashRecord(for: record, at: trashedAt)
+        let source = try confinedURL(for: record.relativePath)
+        let trashAssets = workspace.layout.trash.appendingPathComponent("assets", isDirectory: true)
+        let trashDirectory = trashAssets
+            .appendingPathComponent(record.storageObjectID.canonicalString, isDirectory: true)
+        try createPrivateDirectory(trashAssets)
+        try createPrivateDirectory(trashDirectory)
+        let destination = trashDirectory.appendingPathComponent(source.lastPathComponent)
+        try fileManager.moveItem(at: source, to: destination)
+        return trashed
+    }
+
+    func restoreFromTrash(_ record: ManagedAssetRecord) throws -> ManagedAssetRecord {
+        let restored = try plannedRestoredRecord(for: record)
+        let source = try confinedURL(for: record.relativePath)
+        let destination = try confinedURL(for: record.originalRelativePath, allowMissingLeaf: true)
+        try createPrivateDirectory(destination.deletingLastPathComponent())
         try fileManager.moveItem(at: source, to: destination)
         return restored
     }
@@ -235,6 +332,25 @@ public final class LocalStorageService: @unchecked Sendable {
     private func digest<D: Sequence>(from bytes: D) throws -> ContentDigest where D.Element == UInt8 {
         let hex = bytes.map { String(format: "%02x", $0) }.joined()
         return try ContentDigest(algorithm: .sha256, lowercaseHex: hex)
+    }
+
+    private func stagingFileURL(_ operationID: UUID) -> URL {
+        workspace.layout.temporary.appendingPathComponent(
+            "managed-asset-\(operationID.uuidString.lowercased()).partial"
+        )
+    }
+
+    private func importDestinationURL(
+        meetingID: MeetingID,
+        storageObjectID: StorageObjectID,
+        fileExtension: ManagedFileExtension?
+    ) -> URL {
+        let filename = storageObjectID.canonicalString
+            + (fileExtension.map { ".\($0.rawValue)" } ?? "")
+        return workspace.layout.meetings
+            .appendingPathComponent(meetingID.canonicalString, isDirectory: true)
+            .appendingPathComponent("assets", isDirectory: true)
+            .appendingPathComponent(filename)
     }
 
     private func rejectSymbolicLink(_ url: URL) throws {

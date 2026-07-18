@@ -351,6 +351,198 @@ struct RecoveryAndTrashTests {
         )
     }
 
+    @Test
+    func startupReconciliationCompletesInterruptedImportAfterReopen() async throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "interrupted-import")
+        defer { workspace.cleanup() }
+        try workspace.writeSource()
+        let initial = try workspace.makeStore()
+        let interrupted = ManagedAssetCoordinator(
+            storage: workspace.storage,
+            metadata: initial,
+            injectedFaultPoint: .afterFilesystemBeforeJournal
+        )
+
+        #expect(throws: SimulatedManagedAssetProcessInterruption.self) {
+            _ = try interrupted.importFile(
+                from: workspace.sourceFile,
+                meetingID: PersistenceFixtures.meetingID,
+                storageObjectID: PersistenceFixtures.storageObjectID,
+                fileExtension: try ManagedFileExtension("bin"),
+                createdAt: PersistenceFixtures.createdAt,
+                dataClassification: .sensitive,
+                retentionClass: .permanent
+            )
+        }
+        #expect(
+            try initial.managedAsset(
+                storageObjectID: PersistenceFixtures.storageObjectID
+            ) == nil
+        )
+        let unfinishedBefore = try initial.unfinishedManagedAssetOperations(maximumOperations: 8)
+        #expect(unfinishedBefore.entries.count == 1)
+        #expect(unfinishedBefore.entries.first?.state == .intent)
+        try initial.close()
+
+        let reopened = try workspace.makeStore()
+        defer { try? reopened.close() }
+        let recovery = ManagedAssetCoordinator(storage: workspace.storage, metadata: reopened)
+        let report = try await recovery.reconcileInterruptedOperations(
+            at: PersistenceFixtures.publishedAt,
+            maximumOperations: 8
+        )
+        #expect(report.reconciledOperationCount == 1)
+        #expect(report.rolledBackOperationCount == 0)
+        #expect(report.repairRequiredOperationCount == 0)
+        #expect(!report.truncated)
+
+        let recoveredRecord = try reopened.managedAsset(
+            storageObjectID: PersistenceFixtures.storageObjectID
+        )
+        let recovered = try #require(recoveredRecord)
+        #expect(recovered.state == .active)
+        try workspace.storage.verifyFile(for: recovered)
+        #expect(try Data(contentsOf: workspace.sourceFile) == PersistenceFixtures.sourceBytes)
+        #expect(
+            try reopened.unfinishedManagedAssetOperations(maximumOperations: 8).entries.isEmpty
+        )
+        let completedState = try await reopened.databasePool.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT state FROM managed_asset_operations"
+            )
+        }
+        #expect(completedState == "completed")
+    }
+
+    @Test
+    func startupReconciliationCompletesInterruptedTrashAndRestore() async throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "interrupted-trash-restore")
+        defer { workspace.cleanup() }
+        try workspace.writeSource()
+        var store = try workspace.makeStore()
+        let normal = ManagedAssetCoordinator(storage: workspace.storage, metadata: store)
+        let active = try normal.importFile(
+            from: workspace.sourceFile,
+            meetingID: PersistenceFixtures.meetingID,
+            storageObjectID: PersistenceFixtures.storageObjectID,
+            fileExtension: try ManagedFileExtension("bin"),
+            createdAt: PersistenceFixtures.createdAt,
+            dataClassification: .internal,
+            retentionClass: .permanent
+        )
+        let interruptedTrash = ManagedAssetCoordinator(
+            storage: workspace.storage,
+            metadata: store,
+            injectedFaultPoint: .afterFilesystemBeforeJournal
+        )
+        #expect(throws: SimulatedManagedAssetProcessInterruption.self) {
+            _ = try interruptedTrash.moveToTrash(
+                storageObjectID: active.storageObjectID,
+                at: PersistenceFixtures.publishedAt
+            )
+        }
+        #expect(try store.managedAsset(storageObjectID: active.storageObjectID) == active)
+        try store.close()
+
+        store = try workspace.makeStore()
+        let trashRecovery = ManagedAssetCoordinator(storage: workspace.storage, metadata: store)
+        let trashReport = try await trashRecovery.reconcileInterruptedOperations(
+            at: PersistenceFixtures.replacementPublishedAt,
+            maximumOperations: 8
+        )
+        #expect(trashReport.reconciledOperationCount == 1)
+        let trashedRecord = try store.managedAsset(storageObjectID: active.storageObjectID)
+        let trashed = try #require(trashedRecord)
+        #expect(trashed.state == .trashed)
+        try workspace.storage.verifyFile(for: trashed)
+
+        let interruptedRestore = ManagedAssetCoordinator(
+            storage: workspace.storage,
+            metadata: store,
+            injectedFaultPoint: .afterFilesystemBeforeJournal
+        )
+        #expect(throws: SimulatedManagedAssetProcessInterruption.self) {
+            _ = try interruptedRestore.restoreFromTrash(
+                storageObjectID: trashed.storageObjectID,
+                at: PersistenceFixtures.replacementPublishedAt
+            )
+        }
+        #expect(try store.managedAsset(storageObjectID: active.storageObjectID) == trashed)
+        try store.close()
+
+        store = try workspace.makeStore()
+        defer { try? store.close() }
+        let restoreRecovery = ManagedAssetCoordinator(storage: workspace.storage, metadata: store)
+        let restoreReport = try await restoreRecovery.reconcileInterruptedOperations(
+            at: try UTCInstant(
+                millisecondsSinceUnixEpoch:
+                    PersistenceFixtures.replacementPublishedAt.millisecondsSinceUnixEpoch + 1
+            ),
+            maximumOperations: 8
+        )
+        #expect(restoreReport.reconciledOperationCount == 1)
+        #expect(restoreReport.repairRequiredOperationCount == 0)
+        let restoredRecord = try store.managedAsset(storageObjectID: active.storageObjectID)
+        let restored = try #require(restoredRecord)
+        #expect(restored == active)
+        try workspace.storage.verifyFile(for: restored)
+        #expect(try store.unfinishedManagedAssetOperations(maximumOperations: 8).entries.isEmpty)
+        let states = try await store.databasePool.read { db in
+            try String.fetchAll(
+                db,
+                sql: "SELECT state FROM managed_asset_operations ORDER BY created_at_ms, operation_id"
+            )
+        }
+        #expect(states == ["completed", "completed", "completed"])
+    }
+
+    @Test
+    func startupReconciliationRollsBackIntentAndRemovesOnlyOwnedStagingFile() async throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "interrupted-intent")
+        defer { workspace.cleanup() }
+        try workspace.writeSource()
+        let store = try workspace.makeStore()
+        defer { try? store.close() }
+        let interrupted = ManagedAssetCoordinator(
+            storage: workspace.storage,
+            metadata: store,
+            injectedFaultPoint: .afterIntent
+        )
+        #expect(throws: SimulatedManagedAssetProcessInterruption.self) {
+            _ = try interrupted.importFile(
+                from: workspace.sourceFile,
+                meetingID: PersistenceFixtures.meetingID,
+                storageObjectID: PersistenceFixtures.storageObjectID,
+                fileExtension: try ManagedFileExtension("bin"),
+                createdAt: PersistenceFixtures.createdAt,
+                dataClassification: .internal,
+                retentionClass: .permanent
+            )
+        }
+        let entry = try #require(
+            store.unfinishedManagedAssetOperations(maximumOperations: 8).entries.first
+        )
+        let staging = workspace.descriptor.layout.temporary.appendingPathComponent(
+            "managed-asset-\(entry.intent.operationID.uuidString.lowercased()).partial"
+        )
+        try Data("partial".utf8).write(to: staging, options: [.withoutOverwriting])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: staging.path)
+        let unrelated = workspace.descriptor.layout.temporary.appendingPathComponent("unrelated.keep")
+        try Data("keep".utf8).write(to: unrelated, options: [.withoutOverwriting])
+
+        let recovery = ManagedAssetCoordinator(storage: workspace.storage, metadata: store)
+        let report = try await recovery.reconcileInterruptedOperations(
+            at: PersistenceFixtures.publishedAt,
+            maximumOperations: 8
+        )
+        #expect(report.rolledBackOperationCount == 1)
+        #expect(report.reconciledOperationCount == 0)
+        #expect(!FileManager.default.fileExists(atPath: staging.path))
+        #expect(try Data(contentsOf: unrelated) == Data("keep".utf8))
+        #expect(try store.unfinishedManagedAssetOperations(maximumOperations: 8).entries.isEmpty)
+    }
+
     private func installManagedAssetUpdateFailure(
         in store: SQLitePersistenceStore
     ) throws {

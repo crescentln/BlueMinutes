@@ -5,9 +5,11 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 enum SQLiteSchema {
-    static let currentVersion: UInt32 = 1
+    static let currentVersion: UInt32 = 2
     static let initialMigrationIdentifier = "001_initial_persistence"
+    static let taskRuntimeMigrationIdentifier = "002_task_runtime"
     static let maximumSemanticPayloadBytes = 16 * 1_024 * 1_024
+    static let maximumJobPayloadBytes = 1 * 1_024 * 1_024
 
     static let initialSchemaSQL = """
     CREATE TABLE schema_migrations (
@@ -558,6 +560,271 @@ enum SQLiteSchema {
             .map { String(format: "%02x", $0) }
             .joined()
     }
+
+    static let taskRuntimeSchemaSQL = """
+    CREATE TABLE jobs (
+        job_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(job_id) = 36 AND lower(job_id) = job_id
+        ),
+        job_type TEXT NOT NULL CHECK (
+            length(job_type) BETWEEN 1 AND 96
+            AND job_type NOT LIKE '%/%'
+            AND job_type NOT LIKE '%\\%'
+        ),
+        meeting_id TEXT CHECK (
+            meeting_id IS NULL
+            OR (length(meeting_id) = 36 AND lower(meeting_id) = meeting_id)
+        ),
+        state TEXT NOT NULL CHECK (state IN (
+            'queued',
+            'running',
+            'pause_requested',
+            'paused',
+            'cancellation_requested',
+            'succeeded',
+            'failed',
+            'cancelled',
+            'interrupted'
+        )),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        started_at_ms INTEGER CHECK (started_at_ms >= created_at_ms),
+        finished_at_ms INTEGER CHECK (
+            finished_at_ms IS NULL
+            OR finished_at_ms >= COALESCE(started_at_ms, created_at_ms)
+        ),
+        retry_count INTEGER NOT NULL CHECK (retry_count BETWEEN 0 AND 100),
+        maximum_retry_count INTEGER NOT NULL CHECK (
+            maximum_retry_count BETWEEN retry_count AND 100
+        ),
+        record_version INTEGER NOT NULL CHECK (record_version > 0),
+        idempotency_key TEXT NOT NULL CHECK (
+            length(idempotency_key) = 64 AND lower(idempotency_key) = idempotency_key
+        ),
+        temporary_directory TEXT NOT NULL UNIQUE CHECK (
+            temporary_directory = '.tasks/' || job_id
+        ),
+        disk_budget_bytes_decimal TEXT NOT NULL CHECK (
+            length(disk_budget_bytes_decimal) BETWEEN 1 AND 13
+        ),
+        privacy_route TEXT NOT NULL CHECK (
+            privacy_route IN ('local_only', 'approved_cloud')
+        ),
+        data_classification TEXT NOT NULL CHECK (
+            data_classification IN ('public', 'internal', 'sensitive', 'restricted')
+        ),
+        resume_capability TEXT NOT NULL CHECK (
+            resume_capability IN ('restart_only', 'checkpointed')
+        ),
+        record_payload BLOB NOT NULL,
+        record_sha256 TEXT NOT NULL CHECK (
+            length(record_sha256) = 64 AND lower(record_sha256) = record_sha256
+        ),
+        record_byte_size INTEGER NOT NULL CHECK (
+            record_byte_size > 0 AND record_byte_size <= 1048576
+        ),
+        UNIQUE (job_type, idempotency_key),
+        CHECK (
+            data_classification != 'restricted'
+            OR privacy_route = 'local_only'
+        ),
+        CHECK (
+            (state IN ('succeeded', 'failed', 'cancelled', 'interrupted')
+                AND finished_at_ms IS NOT NULL)
+            OR
+            (state NOT IN ('succeeded', 'failed', 'cancelled', 'interrupted')
+                AND finished_at_ms IS NULL)
+        ),
+        CHECK (
+            state NOT IN (
+                'running', 'pause_requested', 'paused', 'cancellation_requested'
+            ) OR started_at_ms IS NOT NULL
+        )
+    );
+
+    CREATE INDEX jobs_by_state_created
+        ON jobs(state, created_at_ms, job_id);
+
+    CREATE TABLE job_dependencies (
+        job_id TEXT NOT NULL,
+        dependency_job_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        PRIMARY KEY (job_id, dependency_job_id),
+        UNIQUE (job_id, ordinal),
+        FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+        FOREIGN KEY (dependency_job_id) REFERENCES jobs(job_id),
+        CHECK (job_id != dependency_job_id)
+    );
+
+    CREATE TABLE job_input_revisions (
+        job_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        object_type TEXT NOT NULL,
+        logical_id TEXT NOT NULL,
+        revision_id TEXT NOT NULL,
+        PRIMARY KEY (job_id, revision_id),
+        UNIQUE (job_id, ordinal),
+        FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+        FOREIGN KEY (object_type, logical_id, revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE job_output_revisions (
+        job_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        object_type TEXT NOT NULL,
+        logical_id TEXT NOT NULL,
+        revision_id TEXT NOT NULL,
+        PRIMARY KEY (job_id, revision_id),
+        UNIQUE (job_id, ordinal),
+        FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+        FOREIGN KEY (object_type, logical_id, revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE job_state_events (
+        event_id TEXT PRIMARY KEY NOT NULL,
+        job_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL CHECK (sequence > 0),
+        previous_state TEXT,
+        replacement_state TEXT NOT NULL,
+        record_version INTEGER NOT NULL CHECK (record_version > 0),
+        occurred_at_ms INTEGER NOT NULL CHECK (occurred_at_ms >= 0),
+        record_payload BLOB NOT NULL,
+        record_sha256 TEXT NOT NULL CHECK (
+            length(record_sha256) = 64 AND lower(record_sha256) = record_sha256
+        ),
+        UNIQUE (job_id, sequence),
+        UNIQUE (job_id, record_version),
+        FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+    );
+
+    CREATE TABLE managed_asset_operations (
+        operation_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(operation_id) = 36 AND lower(operation_id) = operation_id
+        ),
+        storage_object_id TEXT NOT NULL CHECK (
+            length(storage_object_id) = 36 AND lower(storage_object_id) = storage_object_id
+        ),
+        operation_kind TEXT NOT NULL CHECK (
+            operation_kind IN ('import', 'trash', 'restore')
+        ),
+        state TEXT NOT NULL CHECK (
+            state IN (
+                'intent',
+                'filesystem_applied',
+                'completed',
+                'rolled_back',
+                'repair_required'
+            )
+        ),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= created_at_ms),
+        intent_payload BLOB NOT NULL,
+        intent_sha256 TEXT NOT NULL CHECK (
+            length(intent_sha256) = 64 AND lower(intent_sha256) = intent_sha256
+        ),
+        result_payload BLOB,
+        result_sha256 TEXT,
+        failure_code TEXT,
+        CHECK (
+            (result_payload IS NULL AND result_sha256 IS NULL)
+            OR
+            (result_payload IS NOT NULL
+                AND length(result_sha256) = 64
+                AND lower(result_sha256) = result_sha256)
+        )
+    );
+
+    CREATE INDEX managed_asset_operations_by_state
+        ON managed_asset_operations(state, created_at_ms, operation_id);
+
+    CREATE TABLE managed_asset_operation_events (
+        operation_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL CHECK (sequence > 0),
+        state TEXT NOT NULL CHECK (
+            state IN (
+                'intent',
+                'filesystem_applied',
+                'completed',
+                'rolled_back',
+                'repair_required'
+            )
+        ),
+        occurred_at_ms INTEGER NOT NULL CHECK (occurred_at_ms >= 0),
+        event_payload BLOB NOT NULL,
+        event_sha256 TEXT NOT NULL CHECK (
+            length(event_sha256) = 64 AND lower(event_sha256) = event_sha256
+        ),
+        PRIMARY KEY (operation_id, sequence),
+        FOREIGN KEY (operation_id) REFERENCES managed_asset_operations(operation_id)
+    );
+
+    CREATE TRIGGER job_dependencies_no_update
+    BEFORE UPDATE ON job_dependencies
+    BEGIN
+        SELECT RAISE(ABORT, 'job dependencies are immutable');
+    END;
+
+    CREATE TRIGGER job_dependencies_no_delete
+    BEFORE DELETE ON job_dependencies
+    BEGIN
+        SELECT RAISE(ABORT, 'job dependencies are immutable');
+    END;
+
+    CREATE TRIGGER job_input_revisions_no_update
+    BEFORE UPDATE ON job_input_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'job input revisions are immutable');
+    END;
+
+    CREATE TRIGGER job_input_revisions_no_delete
+    BEFORE DELETE ON job_input_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'job input revisions are immutable');
+    END;
+
+    CREATE TRIGGER job_output_revisions_no_update
+    BEFORE UPDATE ON job_output_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'job output revisions are immutable');
+    END;
+
+    CREATE TRIGGER job_output_revisions_no_delete
+    BEFORE DELETE ON job_output_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'job output revisions are immutable');
+    END;
+
+    CREATE TRIGGER job_state_events_no_update
+    BEFORE UPDATE ON job_state_events
+    BEGIN
+        SELECT RAISE(ABORT, 'job state events are immutable');
+    END;
+
+    CREATE TRIGGER job_state_events_no_delete
+    BEFORE DELETE ON job_state_events
+    BEGIN
+        SELECT RAISE(ABORT, 'job state events are immutable');
+    END;
+
+    CREATE TRIGGER managed_asset_operation_events_no_update
+    BEFORE UPDATE ON managed_asset_operation_events
+    BEGIN
+        SELECT RAISE(ABORT, 'managed asset operation events are immutable');
+    END;
+
+    CREATE TRIGGER managed_asset_operation_events_no_delete
+    BEFORE DELETE ON managed_asset_operation_events
+    BEGIN
+        SELECT RAISE(ABORT, 'managed asset operation events are immutable');
+    END;
+    """
+
+    static var taskRuntimeChecksum: String {
+        SHA256.hash(data: Data(taskRuntimeSchemaSQL.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
 }
 
 struct SQLiteMigrationDefinition: Sendable {
@@ -694,6 +961,33 @@ enum SQLiteDatabaseBootstrap {
                 """,
                 arguments: [
                     workspaceID.canonicalString,
+                    1,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+        }
+        migrator.registerMigration(SQLiteSchema.taskRuntimeMigrationIdentifier) { db in
+            try db.execute(sql: SQLiteSchema.taskRuntimeSchemaSQL)
+            try db.execute(
+                sql: """
+                INSERT INTO schema_migrations(
+                    identifier, ordinal, checksum_sha256, applied_at_ms
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    SQLiteSchema.taskRuntimeMigrationIdentifier,
+                    2,
+                    SQLiteSchema.taskRuntimeChecksum,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+            try db.execute(
+                sql: """
+                UPDATE workspace_metadata
+                SET database_schema_version = ?, updated_at_ms = ?
+                WHERE singleton = 1
+                """,
+                arguments: [
                     SQLiteSchema.currentVersion,
                     migrationTimestamp.millisecondsSinceUnixEpoch
                 ]
@@ -780,6 +1074,16 @@ enum SQLiteDatabaseBootstrap {
             guard storedChecksum == SQLiteSchema.initialChecksum else {
                 throw PersistenceContractError.migrationFailed(
                     "The initial migration checksum does not match the accepted schema."
+                )
+            }
+            let taskRuntimeChecksum = try String.fetchOne(
+                db,
+                sql: "SELECT checksum_sha256 FROM schema_migrations WHERE identifier = ?",
+                arguments: [SQLiteSchema.taskRuntimeMigrationIdentifier]
+            )
+            guard taskRuntimeChecksum == SQLiteSchema.taskRuntimeChecksum else {
+                throw PersistenceContractError.migrationFailed(
+                    "The task-runtime migration checksum does not match the accepted schema."
                 )
             }
         }

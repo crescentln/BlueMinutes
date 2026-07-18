@@ -337,4 +337,109 @@ struct ActiveRevisionPersistenceTests {
         }
         #expect(eventCount == 1)
     }
+
+    @Test
+    func jobSuccessAtomicallyRejectsInputSupersededAfterExecutionStarted() async throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "stale-job-publication")
+        defer { workspace.cleanup() }
+        let store = try workspace.makeStore()
+        defer { try? store.close() }
+
+        let original = try PersistenceFixtures.publishedMeeting(
+            revisionID: PersistenceFixtures.meetingRevisionID,
+            title: "Job input baseline",
+            publishedAt: PersistenceFixtures.publishedAt
+        )
+        let replacement = try PersistenceFixtures.publishedMeeting(
+            revisionID: PersistenceFixtures.replacementMeetingRevisionID,
+            title: "Job input replacement",
+            publishedAt: PersistenceFixtures.replacementPublishedAt,
+            supersedes: original.revision.revisionID
+        )
+        try store.insert(original)
+        try store.insert(replacement)
+        _ = try store.activate(
+            ActivePublishedRevisionSelection(
+                logicalID: original.meetingID,
+                revisionID: original.revision.revisionID
+            ),
+            as: MeetingProfileV1.self,
+            expectedCurrentRevisionID: nil,
+            markedAt: PersistenceFixtures.publishedAt
+        )
+        let input = try PersistenceFixtures.reference(
+            original.meetingID,
+            original.revision.revisionID
+        )
+        let request = try JobRequest(
+            jobType: JobType("stale-input-probe"),
+            meetingID: original.meetingID,
+            origin: .application,
+            requestedBy: JobRequester("meetingbuddy-test"),
+            inputRevisionIDs: [input],
+            dataClassification: .internal,
+            idempotencyKey: JobIdempotencyKey(lowercaseHex: String(repeating: "a", count: 64)),
+            totalUnitCount: 1,
+            diskBudgetBytes: 4_096
+        )
+        let temporaryStorage = LocalTaskTemporaryStorage(workspace: workspace.descriptor)
+        let lease = try await temporaryStorage.allocateDirectory(
+            for: request.jobID,
+            diskBudgetBytes: request.diskBudgetBytes
+        )
+        let repository = SQLiteJobRepository(store: store)
+        let queued = try JobRecord(
+            request: request,
+            lease: lease,
+            createdAt: PersistenceFixtures.publishedAt
+        )
+        try await repository.create(queued)
+        let running = try queued.transitioning(
+            to: .running,
+            at: PersistenceFixtures.replacementPublishedAt
+        )
+        try await repository.replace(
+            running,
+            expectedVersion: queued.recordVersion,
+            changedAt: PersistenceFixtures.replacementPublishedAt
+        )
+
+        _ = try store.activate(
+            ActivePublishedRevisionSelection(
+                logicalID: replacement.meetingID,
+                revisionID: replacement.revision.revisionID
+            ),
+            as: MeetingProfileV1.self,
+            expectedCurrentRevisionID: original.revision.revisionID,
+            markedAt: PersistenceFixtures.replacementPublishedAt
+        )
+        let finishedAt = try UTCInstant(
+            millisecondsSinceUnixEpoch:
+                PersistenceFixtures.replacementPublishedAt.millisecondsSinceUnixEpoch + 1
+        )
+        let succeeded = try running.transitioning(to: .succeeded, at: finishedAt)
+        await #expect(throws: JobContractError.self) {
+            try await repository.replace(
+                succeeded,
+                expectedVersion: running.recordVersion,
+                changedAt: finishedAt
+            )
+        }
+        await #expect(throws: JobContractError.self) {
+            try await repository.validateInputRevisionsAreCurrent([input])
+        }
+        let persisted = try #require(await repository.job(id: request.jobID))
+        #expect(persisted.state == .running)
+        let successfulEvents = try await store.databasePool.read { db in
+            try Int.fetchOne(
+                db,
+                sql: """
+                SELECT COUNT(*) FROM job_state_events
+                WHERE job_id = ? AND replacement_state = 'succeeded'
+                """,
+                arguments: [request.jobID.canonicalString]
+            )
+        }
+        #expect(successfulEvents == 0)
+    }
 }

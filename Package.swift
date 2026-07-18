@@ -19,6 +19,10 @@ let package = Package(
         .library(
             name: "MeetingBuddyPersistence",
             targets: ["MeetingBuddyPersistence"]
+        ),
+        .library(
+            name: "MeetingBuddyTasks",
+            targets: ["MeetingBuddyTasks"]
         )
     ],
     dependencies: [
@@ -43,6 +47,13 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift")
             ]
         ),
+        .target(
+            name: "MeetingBuddyTasks",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain"
+            ]
+        ),
         .testTarget(
             name: "MeetingBuddyDomainTests",
             dependencies: ["MeetingBuddyDomain"]
@@ -53,6 +64,16 @@ let package = Package(
                 "MeetingBuddyApplication",
                 "MeetingBuddyDomain",
                 "MeetingBuddyPersistence",
+                .product(name: "GRDB", package: "GRDB.swift")
+            ]
+        ),
+        .testTarget(
+            name: "MeetingBuddyTasksTests",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain",
+                "MeetingBuddyPersistence",
+                "MeetingBuddyTasks",
                 .product(name: "GRDB", package: "GRDB.swift")
             ]
         )

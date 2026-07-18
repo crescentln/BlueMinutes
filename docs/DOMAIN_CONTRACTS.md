@@ -1,6 +1,7 @@
 # Domain Contract Baseline
 
-Status: Task 004A persistence realization accepted
+Status: Task 004A semantic persistence and Task 004B operational job contracts
+accepted
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define semantic invariants and task ownership without reproducing the
@@ -354,8 +355,13 @@ general migration framework.
 
 ## Implementation status
 
-Tasks 003A, 003B, and 004A are accepted. Task 004A realizes their persistence
-contract behind separate application and concrete SQLite/filesystem modules.
-There is still no application executable,
-Task Manager, media conversion, provider call, UI, stale recomputation
-executor, or briefing analysis.
+Tasks 003A, 003B, and 004A are accepted. Task 004A realizes their semantic
+persistence contract behind separate application and concrete SQLite/filesystem
+modules. Task 004B adds a deliberately separate mutable operational `JobRecord`
+contract: jobs reference exact immutable semantic input/output revisions, and a
+success transaction fails if an input has become stale or lost its active
+selection. Job snapshots and state events never replace semantic revisions.
+
+Task 004B also adds one Task Manager implementation, but only synthetic
+executors exist. There is still no application executable, media conversion,
+provider call, UI, stale recomputation executor, or briefing analysis.
