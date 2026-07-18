@@ -4,7 +4,7 @@
 project: MeetingBuddy
 controller_version: "1.0"
 master_spec_version: "1.0"
-current_task: "005A"
+current_task: "005B"
 current_status: accepted
 accepted_tasks:
   - "001"
@@ -14,10 +14,11 @@ accepted_tasks:
   - "004A"
   - "004B"
   - "005A"
+  - "005B"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "Task 005A acceptance commit on local main; predecessor c6f91058fef868ff033eb28e71d4d3c885afa7dd is the accepted Task 004B rollback anchor"
-working_tree_status_summary: "clean after the Task 005A acceptance commit; unrelated tracked drift and user workspace artifacts were not observed"
+last_known_git_head: "e2827dd0edf876f8a2521a3463d3bcdc3602d41b (Task 005B implementation commit on local main; Task 005A commit 287f4aa14070c8de9ea48cea22c7119ef9fe93e5 is the rollback anchor)"
+working_tree_status_summary: "Task 005B implementation, tests, migration, and ADR are committed; preserved pre-existing post-005A documentation integration remains uncommitted and excluded from the Task 005B commits; no push or deployment"
 last_verification_commands:
   - "xcode-select -p; xcodebuild -version; xcodebuild -checkFirstLaunchStatus; swift --version"
   - "swift build --configuration debug -Xswiftc -warnings-as-errors"
@@ -31,6 +32,9 @@ last_verification_commands:
   - "plutil -lint for Info.plist and entitlements; bash -n for the build/run script"
   - "git diff --check plus boundary, external-process/network/capture, placeholder, secret-pattern, exact-pin, documentation-link, and workspace-artifact scans"
   - "xcode-select, Xcode bundle search, Swift version, macOS version, git status, and HEAD reconciliation"
+  - "MEETINGBUDDY_RUN_LIVE_APPLE_MODELS=1 swift test --filter AppleProviderLiveTests -Xswiftc -warnings-as-errors"
+  - "swift test --filter ProviderContractTests -Xswiftc -warnings-as-errors; swift test --filter TranscriptPipelineIntegrationTests -Xswiftc -warnings-as-errors"
+  - "swift build --configuration debug -Xswiftc -warnings-as-errors; swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors; swift build --configuration release -Xswiftc -warnings-as-errors"
 last_verification_results:
   - "Xcode 26.6 build 17F113 is installed and selected at /Applications/Xcode.app/Contents/Developer; first-launch status is complete and Swift 6.3.3 targets arm64 macOS"
   - "debug and release full-package builds passed with warnings treated as errors under the selected full Xcode toolchain"
@@ -46,19 +50,23 @@ last_verification_results:
   - "after the synthetic workspace was moved to Trash, the next app launch failed closed and removed its stale bookmark; the test app was then stopped"
   - "full-Xcode validation exposed competing SwiftUI fileImporter modifiers; Task 005A now uses one purpose-routed importer and a regression test verifies workspace versus five-format media content types"
   - "Gatekeeper rejects the ad-hoc development bundle as expected and no valid Developer ID signing identity is installed; release signing, notarization, and clean-machine validation remain Task 011 gates rather than Task 005A blockers"
+  - "Task 005B debug and release builds passed with warnings as errors; the full suite passed 157 tests in 28 suites"
+  - "the opt-in installed Apple-model production route passed on synthetic audio for transcription and English-to-Simplified-Chinese translation; no real meeting data was used"
+  - "deterministic publication requires exact 100 percent core coverage; cancellation, retry reuse, stale-input refusal, incomplete ranges, correction lineage, translation lineage, and speaker confirmation passed focused tests"
+  - "schema version 3 fresh, v1-to-v3, and v2-to-v3 migrations, rollback anchors, unknown-future rejection, and injected-failure rollback passed"
+  - "Keychain integration passed and no plaintext fallback, new dependency, new entitlement, new network implementation, or outbound provider route was introduced"
 open_P0_decisions: []
 open_P1_decisions:
-  - "production transcription and translation routes before Task 005B"
-  - "production inference route before Task 006A"
+  - "production inference route as the first in-task Task 006A decision gate before any real analysis-provider implementation or call"
 known_out_of_scope_findings:
-  - "no transcription, translation, provider call, network call, briefing runtime, live capture, UN Web TV, or automation implementation exists"
-  - "the Task 005A SwiftUI surface is deliberately minimal and has no final visual/accessibility polish claim"
+  - "no external or cloud provider, outbound meeting-data route, analysis or briefing runtime, live capture, UN Web TV, or automation implementation exists"
+  - "the Task 005B SwiftUI transcript-review surface is usable but has no final visual or accessibility polish claim"
   - "Task 004A recovery JSONL remains integrity-checked export-only; the verified SQLite online backup is authoritative and a user-facing restore/repair workflow remains later work"
   - "automatic Workspace Trash purge remains unimplemented"
-  - "provider-route enforcement remains Task 005B; Task 004B privacy-route and usage fields do not authorize a provider call"
+  - "Task 005B authorizes only Apple installed-model local processing and manual local fallback; Task 006A must separately select any analysis provider"
   - "Developer ID provisioning, Gatekeeper/notarization, and clean-machine release behavior remain Task 011 work; the current ad-hoc bundle is development evidence only"
   - "UN Web TV and live capture remain Tasks 008A/008B"
   - "automation adapters remain Tasks 009A/009B"
-next_eligible_task: "005B (eligible but not authorized until an explicit user command; resolve the production transcription and translation route P1 decision before implementation)"
-last_updated_at: "2026-07-18T18:44:40Z"
+next_eligible_task: "006A (eligible but not started; requires a separate explicit PROCEED TO TASK 006A command)"
+last_updated_at: "2026-07-18T21:06:34Z"
 ```
