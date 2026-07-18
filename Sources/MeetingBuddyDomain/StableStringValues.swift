@@ -28,6 +28,14 @@ public enum SemanticObjectType: StableStringValue {
     case actor
     case speakingCapacity
     case speakerAssignment
+    case participant
+    case organization
+    case issue
+    case position
+    case commitment
+    case decision
+    case interventionCard
+    case delegationPositionCard
     case userConfirmedNote
     case unrecognized(String)
 
@@ -41,6 +49,14 @@ public enum SemanticObjectType: StableStringValue {
         case "actor": self = .actor
         case "speaking_capacity": self = .speakingCapacity
         case "speaker_assignment": self = .speakerAssignment
+        case "participant": self = .participant
+        case "organization": self = .organization
+        case "issue": self = .issue
+        case "position": self = .position
+        case "commitment": self = .commitment
+        case "decision": self = .decision
+        case "intervention_card": self = .interventionCard
+        case "delegation_position_card": self = .delegationPositionCard
         case "user_confirmed_note": self = .userConfirmedNote
         default: self = .unrecognized(encodedValue)
         }
@@ -56,6 +72,14 @@ public enum SemanticObjectType: StableStringValue {
         case .actor: "actor"
         case .speakingCapacity: "speaking_capacity"
         case .speakerAssignment: "speaker_assignment"
+        case .participant: "participant"
+        case .organization: "organization"
+        case .issue: "issue"
+        case .position: "position"
+        case .commitment: "commitment"
+        case .decision: "decision"
+        case .interventionCard: "intervention_card"
+        case .delegationPositionCard: "delegation_position_card"
         case .userConfirmedNote: "user_confirmed_note"
         case let .unrecognized(value): value
         }

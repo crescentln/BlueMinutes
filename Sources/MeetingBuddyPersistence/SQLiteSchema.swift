@@ -5,10 +5,11 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 enum SQLiteSchema {
-    static let currentVersion: UInt32 = 3
+    static let currentVersion: UInt32 = 4
     static let initialMigrationIdentifier = "001_initial_persistence"
     static let taskRuntimeMigrationIdentifier = "002_task_runtime"
     static let transcriptCoverageMigrationIdentifier = "003_transcript_coverage"
+    static let analysisMigrationIdentifier = "004_analysis_intelligence"
     static let maximumSemanticPayloadBytes = 16 * 1_024 * 1_024
     static let maximumJobPayloadBytes = 1 * 1_024 * 1_024
 
@@ -927,6 +928,319 @@ enum SQLiteSchema {
     END;
     """
 
+    /// Schema v4 expands the closed semantic type constraint and adds an immutable,
+    /// normalized analysis-coverage history. Existing v1-v3 rows are copied byte-for-byte.
+    static let analysisSchemaSQL = """
+    DROP TRIGGER semantic_revisions_no_update;
+    DROP TRIGGER semantic_revisions_no_delete;
+
+    CREATE TABLE semantic_revisions_v4 (
+        object_type TEXT NOT NULL,
+        logical_id TEXT NOT NULL CHECK (
+            length(logical_id) = 36 AND lower(logical_id) = logical_id
+        ),
+        revision_id TEXT NOT NULL CHECK (
+            length(revision_id) = 36 AND lower(revision_id) = revision_id
+        ),
+        schema_major INTEGER NOT NULL CHECK (schema_major > 0 AND schema_major <= 65535),
+        schema_minor INTEGER NOT NULL CHECK (schema_minor >= 0 AND schema_minor <= 65535),
+        lifecycle_status TEXT NOT NULL CHECK (lifecycle_status IN ('draft', 'published')),
+        validation_state TEXT NOT NULL CHECK (
+            validation_state IN ('not_validated', 'valid', 'invalid', 'needs_review')
+        ),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        published_at_ms INTEGER CHECK (published_at_ms >= created_at_ms),
+        supersedes_revision_id TEXT,
+        data_classification TEXT NOT NULL CHECK (
+            data_classification IN ('public', 'internal', 'sensitive', 'restricted')
+        ),
+        semantic_hash_algorithm TEXT,
+        semantic_hash_hex TEXT,
+        canonical_payload BLOB NOT NULL,
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size > 0 AND payload_byte_size <= 16777216
+        ),
+        PRIMARY KEY (object_type, logical_id, revision_id),
+        UNIQUE (revision_id),
+        FOREIGN KEY (object_type, logical_id, supersedes_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id),
+        CHECK (
+            (semantic_hash_algorithm IS NULL AND semantic_hash_hex IS NULL)
+            OR
+            (semantic_hash_algorithm = 'sha256'
+                AND length(semantic_hash_hex) = 64
+                AND lower(semantic_hash_hex) = semantic_hash_hex)
+        ),
+        CHECK (
+            lifecycle_status != 'published'
+            OR (validation_state = 'valid'
+                AND published_at_ms IS NOT NULL
+                AND semantic_hash_hex IS NOT NULL)
+        ),
+        CHECK (object_type IN (
+            'source_asset',
+            'evidence_ref',
+            'meeting_profile',
+            'transcript_segment',
+            'translation_segment',
+            'actor',
+            'speaking_capacity',
+            'speaker_assignment',
+            'participant',
+            'organization',
+            'issue',
+            'position',
+            'commitment',
+            'decision',
+            'intervention_card',
+            'delegation_position_card'
+        ))
+    );
+
+    INSERT INTO semantic_revisions_v4(
+        object_type,
+        logical_id,
+        revision_id,
+        schema_major,
+        schema_minor,
+        lifecycle_status,
+        validation_state,
+        created_at_ms,
+        published_at_ms,
+        supersedes_revision_id,
+        data_classification,
+        semantic_hash_algorithm,
+        semantic_hash_hex,
+        canonical_payload,
+        payload_sha256,
+        payload_byte_size
+    )
+    SELECT
+        object_type,
+        logical_id,
+        revision_id,
+        schema_major,
+        schema_minor,
+        lifecycle_status,
+        validation_state,
+        created_at_ms,
+        published_at_ms,
+        supersedes_revision_id,
+        data_classification,
+        semantic_hash_algorithm,
+        semantic_hash_hex,
+        canonical_payload,
+        payload_sha256,
+        payload_byte_size
+    FROM semantic_revisions;
+
+    DROP TABLE semantic_revisions;
+    ALTER TABLE semantic_revisions_v4 RENAME TO semantic_revisions;
+
+    CREATE TRIGGER semantic_revisions_no_update
+    BEFORE UPDATE ON semantic_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'semantic revisions are immutable');
+    END;
+
+    CREATE TRIGGER semantic_revisions_no_delete
+    BEFORE DELETE ON semantic_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'semantic revisions are immutable');
+    END;
+
+    CREATE TABLE analysis_coverage_ledgers (
+        ledger_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(ledger_id) = 36 AND lower(ledger_id) = ledger_id
+        ),
+        supersedes_ledger_id TEXT,
+        meeting_id TEXT NOT NULL CHECK (
+            length(meeting_id) = 36 AND lower(meeting_id) = meeting_id
+        ),
+        transcript_manifest_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('incomplete', 'published')),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        content_hash_algorithm TEXT NOT NULL CHECK (content_hash_algorithm = 'sha256'),
+        content_hash_hex TEXT NOT NULL CHECK (
+            length(content_hash_hex) = 64 AND lower(content_hash_hex) = content_hash_hex
+        ),
+        canonical_payload BLOB NOT NULL,
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size > 0 AND payload_byte_size <= 16777216
+        ),
+        FOREIGN KEY (supersedes_ledger_id)
+            REFERENCES analysis_coverage_ledgers(ledger_id),
+        FOREIGN KEY (transcript_manifest_id)
+            REFERENCES transcript_coverage_manifests(manifest_id),
+        CHECK (supersedes_ledger_id IS NULL OR supersedes_ledger_id != ledger_id)
+    );
+
+    CREATE INDEX analysis_coverage_by_meeting
+        ON analysis_coverage_ledgers(meeting_id, created_at_ms, ledger_id);
+
+    CREATE TABLE analysis_coverage_entries (
+        ledger_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        segment_object_type TEXT NOT NULL CHECK (segment_object_type = 'transcript_segment'),
+        segment_logical_id TEXT NOT NULL,
+        segment_revision_id TEXT NOT NULL,
+        disposition TEXT NOT NULL CHECK (
+            disposition IN ('substantive', 'non_substantive', 'failed', 'missing')
+        ),
+        attempt_count INTEGER NOT NULL CHECK (attempt_count BETWEEN 0 AND 100),
+        safe_reason_code TEXT,
+        PRIMARY KEY (ledger_id, segment_revision_id),
+        UNIQUE (ledger_id, ordinal),
+        FOREIGN KEY (ledger_id) REFERENCES analysis_coverage_ledgers(ledger_id),
+        FOREIGN KEY (segment_object_type, segment_logical_id, segment_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE analysis_coverage_evidence (
+        ledger_id TEXT NOT NULL,
+        segment_revision_id TEXT NOT NULL,
+        evidence_object_type TEXT NOT NULL CHECK (evidence_object_type = 'evidence_ref'),
+        evidence_logical_id TEXT NOT NULL,
+        evidence_revision_id TEXT NOT NULL,
+        PRIMARY KEY (ledger_id, segment_revision_id, evidence_revision_id),
+        FOREIGN KEY (ledger_id, segment_revision_id)
+            REFERENCES analysis_coverage_entries(ledger_id, segment_revision_id),
+        FOREIGN KEY (evidence_object_type, evidence_logical_id, evidence_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE analysis_coverage_outputs (
+        ledger_id TEXT NOT NULL,
+        segment_revision_id TEXT NOT NULL,
+        output_object_type TEXT NOT NULL CHECK (output_object_type IN (
+            'participant',
+            'organization',
+            'issue',
+            'position',
+            'commitment',
+            'decision',
+            'intervention_card',
+            'delegation_position_card'
+        )),
+        output_logical_id TEXT NOT NULL,
+        output_revision_id TEXT NOT NULL,
+        PRIMARY KEY (ledger_id, segment_revision_id, output_revision_id),
+        FOREIGN KEY (ledger_id, segment_revision_id)
+            REFERENCES analysis_coverage_entries(ledger_id, segment_revision_id),
+        FOREIGN KEY (output_object_type, output_logical_id, output_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE active_analysis_ledgers (
+        meeting_id TEXT PRIMARY KEY NOT NULL,
+        ledger_id TEXT NOT NULL UNIQUE,
+        pointer_version INTEGER NOT NULL CHECK (pointer_version > 0),
+        changed_at_ms INTEGER NOT NULL CHECK (changed_at_ms >= 0),
+        FOREIGN KEY (ledger_id) REFERENCES analysis_coverage_ledgers(ledger_id)
+    );
+
+    CREATE TABLE analysis_ledger_events (
+        event_id TEXT PRIMARY KEY NOT NULL,
+        meeting_id TEXT NOT NULL,
+        previous_ledger_id TEXT,
+        replacement_ledger_id TEXT NOT NULL,
+        pointer_version INTEGER NOT NULL CHECK (pointer_version > 0),
+        changed_at_ms INTEGER NOT NULL CHECK (changed_at_ms >= 0),
+        FOREIGN KEY (previous_ledger_id) REFERENCES analysis_coverage_ledgers(ledger_id),
+        FOREIGN KEY (replacement_ledger_id) REFERENCES analysis_coverage_ledgers(ledger_id)
+    );
+
+    CREATE TRIGGER analysis_coverage_ledgers_no_update
+    BEFORE UPDATE ON analysis_coverage_ledgers
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis coverage ledgers are immutable');
+    END;
+
+    CREATE TRIGGER analysis_coverage_ledgers_no_delete
+    BEFORE DELETE ON analysis_coverage_ledgers
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis coverage ledgers are immutable');
+    END;
+
+    CREATE TRIGGER analysis_coverage_entries_no_update
+    BEFORE UPDATE ON analysis_coverage_entries
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis coverage entries are immutable');
+    END;
+
+    CREATE TRIGGER analysis_coverage_entries_no_delete
+    BEFORE DELETE ON analysis_coverage_entries
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis coverage entries are immutable');
+    END;
+
+    CREATE TRIGGER analysis_coverage_evidence_no_update
+    BEFORE UPDATE ON analysis_coverage_evidence
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis coverage evidence is immutable');
+    END;
+
+    CREATE TRIGGER analysis_coverage_evidence_no_delete
+    BEFORE DELETE ON analysis_coverage_evidence
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis coverage evidence is immutable');
+    END;
+
+    CREATE TRIGGER analysis_coverage_outputs_no_update
+    BEFORE UPDATE ON analysis_coverage_outputs
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis coverage outputs are immutable');
+    END;
+
+    CREATE TRIGGER analysis_coverage_outputs_no_delete
+    BEFORE DELETE ON analysis_coverage_outputs
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis coverage outputs are immutable');
+    END;
+
+    CREATE TRIGGER analysis_ledger_events_no_update
+    BEFORE UPDATE ON analysis_ledger_events
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis ledger events are immutable');
+    END;
+
+    CREATE TRIGGER analysis_ledger_events_no_delete
+    BEFORE DELETE ON analysis_ledger_events
+    BEGIN
+        SELECT RAISE(ABORT, 'analysis ledger events are immutable');
+    END;
+
+    CREATE TRIGGER active_analysis_ledger_validate_insert
+    BEFORE INSERT ON active_analysis_ledgers
+    WHEN NOT EXISTS (
+        SELECT 1 FROM analysis_coverage_ledgers
+        WHERE ledger_id = NEW.ledger_id
+          AND meeting_id = NEW.meeting_id
+          AND status = 'published'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'active analysis ledger target is not publishable');
+    END;
+
+    CREATE TRIGGER active_analysis_ledger_validate_update
+    BEFORE UPDATE OF ledger_id ON active_analysis_ledgers
+    WHEN NOT EXISTS (
+        SELECT 1 FROM analysis_coverage_ledgers
+        WHERE ledger_id = NEW.ledger_id
+          AND meeting_id = NEW.meeting_id
+          AND status = 'published'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'active analysis ledger target is not publishable');
+    END;
+    """
+
     static var taskRuntimeChecksum: String {
         SHA256.hash(data: Data(taskRuntimeSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
@@ -935,6 +1249,12 @@ enum SQLiteSchema {
 
     static var transcriptCoverageChecksum: String {
         SHA256.hash(data: Data(transcriptCoverageSchemaSQL.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static var analysisChecksum: String {
+        SHA256.hash(data: Data(analysisSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
     }
@@ -1128,6 +1448,33 @@ enum SQLiteDatabaseBootstrap {
                 WHERE singleton = 1
                 """,
                 arguments: [
+                    3,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+        }
+        migrator.registerMigration(SQLiteSchema.analysisMigrationIdentifier) { db in
+            try db.execute(sql: SQLiteSchema.analysisSchemaSQL)
+            try db.execute(
+                sql: """
+                INSERT INTO schema_migrations(
+                    identifier, ordinal, checksum_sha256, applied_at_ms
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    SQLiteSchema.analysisMigrationIdentifier,
+                    4,
+                    SQLiteSchema.analysisChecksum,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+            try db.execute(
+                sql: """
+                UPDATE workspace_metadata
+                SET database_schema_version = ?, updated_at_ms = ?
+                WHERE singleton = 1
+                """,
+                arguments: [
                     SQLiteSchema.currentVersion,
                     migrationTimestamp.millisecondsSinceUnixEpoch
                 ]
@@ -1234,6 +1581,16 @@ enum SQLiteDatabaseBootstrap {
             guard transcriptCoverageChecksum == SQLiteSchema.transcriptCoverageChecksum else {
                 throw PersistenceContractError.migrationFailed(
                     "The transcript-coverage migration checksum does not match the accepted schema."
+                )
+            }
+            let analysisChecksum = try String.fetchOne(
+                db,
+                sql: "SELECT checksum_sha256 FROM schema_migrations WHERE identifier = ?",
+                arguments: [SQLiteSchema.analysisMigrationIdentifier]
+            )
+            guard analysisChecksum == SQLiteSchema.analysisChecksum else {
+                throw PersistenceContractError.migrationFailed(
+                    "The analysis-intelligence migration checksum does not match the accepted schema."
                 )
             }
         }

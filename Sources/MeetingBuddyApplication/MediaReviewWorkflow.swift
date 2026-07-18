@@ -114,6 +114,26 @@ public struct TranscriptStartSubmission: Sendable {
     }
 }
 
+public struct AnalysisRouteReview: Hashable, Sendable {
+    public let analysis: ModelRouteDecision
+    public let runtimeEvidence: AnalysisRuntimeEvidence
+
+    public init(
+        analysis: ModelRouteDecision,
+        runtimeEvidence: AnalysisRuntimeEvidence
+    ) {
+        self.analysis = analysis
+        self.runtimeEvidence = runtimeEvidence
+    }
+
+    public var isOnDeviceReady: Bool {
+        analysis.route == .appleOnDevice
+            && analysis.providerIdentifier == "apple-foundation-models"
+            && runtimeEvidence.modelAvailable
+            && runtimeEvidence.noOutboundMode
+    }
+}
+
 public enum TranscriptWorkflowError: Error, Sendable {
     case unavailable
 }
@@ -182,6 +202,17 @@ public protocol MediaReviewWorkflow: AnyObject {
         transcriptRevisionID: RevisionID,
         displayName: String
     ) async throws -> TranscriptReviewBundle
+    func analysisRoute(canonicalJobID: JobID) async throws -> AnalysisRouteReview
+    func startAnalysis(canonicalJobID: JobID) async throws -> MediaJobReview
+    func analysisReview(canonicalJobID: JobID) async throws -> AnalysisReviewBundle?
+    func correctPosition(
+        canonicalJobID: JobID,
+        revisionID: RevisionID,
+        positionType: PositionType,
+        statement: String,
+        reservations: [String],
+        conditions: [String]
+    ) async throws -> AnalysisReviewBundle
 }
 
 public extension MediaReviewWorkflow {
@@ -234,6 +265,29 @@ public extension MediaReviewWorkflow {
         transcriptRevisionID: RevisionID,
         displayName: String
     ) async throws -> TranscriptReviewBundle {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func analysisRoute(canonicalJobID: JobID) async throws -> AnalysisRouteReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func startAnalysis(canonicalJobID: JobID) async throws -> MediaJobReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func analysisReview(canonicalJobID: JobID) async throws -> AnalysisReviewBundle? {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func correctPosition(
+        canonicalJobID: JobID,
+        revisionID: RevisionID,
+        positionType: PositionType,
+        statement: String,
+        reservations: [String],
+        conditions: [String]
+    ) async throws -> AnalysisReviewBundle {
         throw TranscriptWorkflowError.unavailable
     }
 }

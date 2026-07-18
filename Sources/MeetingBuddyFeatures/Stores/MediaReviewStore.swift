@@ -13,6 +13,9 @@ public final class MediaReviewStore {
     public private(set) var transcriptJob: MediaJobReview?
     public private(set) var routeReview: TranscriptRouteReview?
     public private(set) var transcriptReview: TranscriptReviewBundle?
+    public private(set) var analysisJob: MediaJobReview?
+    public private(set) var analysisRouteReview: AnalysisRouteReview?
+    public private(set) var analysisReview: AnalysisReviewBundle?
     public private(set) var isWorking = false
     public private(set) var safeErrorMessage: String?
 
@@ -261,6 +264,79 @@ public final class MediaReviewStore {
         }
     }
 
+    public func refreshAnalysisRoute() async {
+        guard let job, job.state == .succeeded else {
+            safeErrorMessage = "Finish canonical local audio processing first."
+            return
+        }
+        await perform {
+            analysisRouteReview = try await workflow.analysisRoute(
+                canonicalJobID: job.jobID
+            )
+        }
+    }
+
+    public func startAnalysis() async {
+        guard let job, job.state == .succeeded else {
+            safeErrorMessage = "Finish canonical local audio processing first."
+            return
+        }
+        await perform {
+            let route = try await workflow.analysisRoute(canonicalJobID: job.jobID)
+            analysisRouteReview = route
+            guard route.isOnDeviceReady else {
+                safeErrorMessage = "The Apple on-device analysis model is unavailable for this meeting language. Existing local review data remains available."
+                return
+            }
+            analysisJob = try await workflow.startAnalysis(canonicalJobID: job.jobID)
+            if let analysisJob { beginAnalysisPolling(jobID: analysisJob.jobID) }
+        }
+    }
+
+    public func loadAnalysisReview() async {
+        guard let job, job.state == .succeeded else { return }
+        await perform {
+            analysisReview = try await workflow.analysisReview(canonicalJobID: job.jobID)
+        }
+    }
+
+    public func correctPosition(
+        revisionID: RevisionID,
+        positionType: PositionType,
+        statement: String,
+        reservations: [String],
+        conditions: [String]
+    ) async {
+        guard let job else { return }
+        let trimmedStatement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanReservations = Self.cleanClaims(reservations)
+        let cleanConditions = Self.cleanClaims(conditions)
+        guard !trimmedStatement.isEmpty, trimmedStatement.utf8.count <= 16_384 else {
+            safeErrorMessage = "A corrected position statement must contain at most 16,384 UTF-8 bytes."
+            return
+        }
+        guard cleanReservations.count == reservations.filter({
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }).count,
+            cleanConditions.count == conditions.filter({
+                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }).count
+        else {
+            safeErrorMessage = "Reservations and conditions must be unique bounded statements."
+            return
+        }
+        await perform {
+            analysisReview = try await workflow.correctPosition(
+                canonicalJobID: job.jobID,
+                revisionID: revisionID,
+                positionType: positionType,
+                statement: trimmedStatement,
+                reservations: cleanReservations,
+                conditions: cleanConditions
+            )
+        }
+    }
+
     public func clearError() {
         safeErrorMessage = nil
     }
@@ -291,6 +367,9 @@ public final class MediaReviewStore {
         transcriptJob = nil
         routeReview = nil
         transcriptReview = nil
+        analysisJob = nil
+        analysisRouteReview = nil
+        analysisReview = nil
         manualCoverageConfirmed = false
         selectedTrack = nil
         safeErrorMessage = nil
@@ -337,6 +416,39 @@ public final class MediaReviewStore {
                 try? await Task.sleep(for: .milliseconds(400))
             }
         }
+    }
+
+    private func beginAnalysisPolling(jobID: JobID) {
+        pollingTask?.cancel()
+        pollingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                do {
+                    let current = try await workflow.jobReview(jobID: jobID)
+                    analysisJob = current
+                    if current.state.isTerminal {
+                        if current.state == .succeeded, let canonicalJob = job {
+                            analysisReview = try await workflow.analysisReview(
+                                canonicalJobID: canonicalJob.jobID
+                            )
+                        }
+                        return
+                    }
+                } catch {
+                    safeErrorMessage = "Analysis processing status is temporarily unavailable."
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(400))
+            }
+        }
+    }
+
+    private static func cleanClaims(_ values: [String]) -> [String] {
+        let cleaned = values.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty && $0.utf8.count <= 16_384 }
+        guard Set(cleaned).count == cleaned.count else { return [] }
+        return cleaned
     }
 
     private func transcriptSubmission() -> TranscriptStartSubmission? {

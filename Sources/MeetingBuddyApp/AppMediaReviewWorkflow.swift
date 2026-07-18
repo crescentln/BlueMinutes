@@ -19,6 +19,7 @@ enum AppWorkflowError: LocalizedError {
     case canonicalAudioRequired
     case onDeviceModelUnavailable
     case transcriptUnavailable
+    case analysisUnavailable
     case reviewFailed
 
     var errorDescription: String? {
@@ -47,8 +48,10 @@ enum AppWorkflowError: LocalizedError {
             "The requested on-device model is unavailable. Use the manual local fallback or install the model in system settings."
         case .transcriptUnavailable:
             "No published transcript review is available for this meeting."
+        case .analysisUnavailable:
+            "Analysis requires a complete reviewed transcript with exactly one resolved speaker and capacity for every segment."
         case .reviewFailed:
-            "The transcript review change failed without replacing accepted content."
+            "The review change failed without replacing accepted content."
         }
     }
 }
@@ -65,6 +68,7 @@ private final class WorkspaceRuntime: @unchecked Sendable {
     let manager: LocalTaskManager
     let transcriptionProvider: (any TranscriptionProvider)?
     let translationProvider: (any TranslationProvider)?
+    let analysisProvider: (any AnalysisProvider)?
 
     init(descriptor: LocalWorkspaceDescriptor) throws {
         self.descriptor = descriptor
@@ -94,8 +98,10 @@ private final class WorkspaceRuntime: @unchecked Sendable {
         if #available(macOS 26.0, *) {
             let speech = AppleOnDeviceTranscriptionProvider()
             let translation = AppleOnDeviceTranslationProvider()
+            let analysis = AppleFoundationModelsAnalysisProvider()
             transcriptionProvider = speech
             translationProvider = translation
+            analysisProvider = analysis
             executors.append(
                 TranscriptPipelineJobExecutor(
                     transcriptionProvider: speech,
@@ -106,9 +112,16 @@ private final class WorkspaceRuntime: @unchecked Sendable {
                     repository: store
                 )
             )
+            executors.append(
+                AnalysisPipelineJobExecutor(
+                    provider: analysis,
+                    repository: store
+                )
+            )
         } else {
             transcriptionProvider = nil
             translationProvider = nil
+            analysisProvider = nil
         }
         manager = try LocalTaskManager(
             repository: SQLiteJobRepository(store: store),
@@ -587,6 +600,109 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         return updated
     }
 
+    func analysisRoute(canonicalJobID: JobID) async throws -> AnalysisRouteReview {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let source = try await analysisSource(canonicalJobID: canonicalJobID)
+        let locale = source.meeting.outputLanguage.value
+        let modelAvailable = await runtime.analysisProvider?.isModelAvailable(
+            localeIdentifier: locale
+        ) ?? false
+        let request = try analysisRouteRequest(
+            source: source,
+            modelAvailable: modelAvailable,
+            visibleUserAuthorization: false
+        )
+        return AnalysisRouteReview(
+            analysis: try ModelPolicyRouter().decide(request),
+            runtimeEvidence: try analysisRuntimeEvidence(
+                localeIdentifier: locale,
+                modelAvailable: modelAvailable
+            )
+        )
+    }
+
+    func startAnalysis(canonicalJobID: JobID) async throws -> MediaJobReview {
+        guard let runtime,
+              runtime.analysisProvider != nil
+        else { throw AppWorkflowError.onDeviceModelUnavailable }
+        let source = try await analysisSource(canonicalJobID: canonicalJobID)
+        let locale = source.meeting.outputLanguage.value
+        let modelAvailable = await runtime.analysisProvider?.isModelAvailable(
+            localeIdentifier: locale
+        ) ?? false
+        let decision = try ModelPolicyRouter().decide(
+            analysisRouteRequest(
+                source: source,
+                modelAvailable: modelAvailable,
+                visibleUserAuthorization: true
+            )
+        )
+        guard decision.route == .appleOnDevice,
+              decision.providerIdentifier == "apple-foundation-models",
+              modelAvailable
+        else { throw AppWorkflowError.onDeviceModelUnavailable }
+        let plan = try AnalysisPipelineJobPlan(
+            source: source,
+            analysisRoute: decision,
+            runtimeEvidence: analysisRuntimeEvidence(
+                localeIdentifier: locale,
+                modelAvailable: true
+            ),
+            createdAt: try currentInstant()
+        )
+        return MediaJobReview(
+            record: try await runtime.manager.enqueue(
+                AnalysisPipelineJobFactory().request(
+                    plan: plan,
+                    requestedBy: JobRequester("meetingbuddy-app")
+                )
+            )
+        )
+    }
+
+    func analysisReview(canonicalJobID: JobID) async throws -> AnalysisReviewBundle? {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        return try runtime.store.activeAnalysisReview(meetingID: context.plan.meetingID)
+    }
+
+    func correctPosition(
+        canonicalJobID: JobID,
+        revisionID: RevisionID,
+        positionType: PositionType,
+        statement: String,
+        reservations: [String],
+        conditions: [String]
+    ) async throws -> AnalysisReviewBundle {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        guard let review = try runtime.store.activeAnalysisReview(
+            meetingID: context.plan.meetingID
+        ),
+            let prior = review.positions.first(where: {
+                $0.revision.revisionID == revisionID
+            })
+        else { throw AppWorkflowError.analysisUnavailable }
+        let changedAt = try currentInstant()
+        let correction = try AnalysisSemanticFactory.correctedPosition(
+            prior: prior,
+            positionType: positionType,
+            statement: statement,
+            reservations: reservations,
+            conditions: conditions,
+            changedAt: changedAt
+        )
+        try runtime.store.savePositionCorrection(
+            correction,
+            replacing: revisionID,
+            changedAt: changedAt
+        )
+        guard let updated = try runtime.store.activeAnalysisReview(
+            meetingID: context.plan.meetingID
+        ) else { throw AppWorkflowError.reviewFailed }
+        return updated
+    }
+
     private func releasePendingSource() {
         if pendingSourceDidStartScope {
             pendingSourceURL?.stopAccessingSecurityScopedResource()
@@ -616,6 +732,94 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
               let reference = record.outputRevisionIDs.first
         else { throw AppWorkflowError.canonicalAudioRequired }
         return (try CanonicalAudioJobPlan.decode(from: record.inputPayload), reference)
+    }
+
+    private func analysisSource(
+        canonicalJobID: JobID
+    ) async throws -> AnalysisSourceBundle {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        guard let review = try runtime.store.activeTranscriptReview(
+            meetingID: context.plan.meetingID
+        ),
+            review.manifest.status == .published
+        else { throw AppWorkflowError.transcriptUnavailable }
+        let activeMeeting = try runtime.store.activeRevisionState(
+            MeetingProfileV1.self,
+            logicalID: context.plan.meetingID
+        )?.revision
+        let meeting: MeetingProfileV1
+        if let activeMeeting {
+            meeting = activeMeeting
+        } else {
+            let revisions = try runtime.store.revisions(
+                MeetingProfileV1.self,
+                logicalID: context.plan.meetingID
+            )
+            guard revisions.count == 1, let only = revisions.first else {
+                throw AppWorkflowError.analysisUnavailable
+            }
+            meeting = only
+        }
+        let meetingReference = try SemanticRevisionReference(
+            logicalID: meeting.meetingID,
+            revisionID: meeting.revision.revisionID
+        )
+        do {
+            return try runtime.store.analysisSourceBundle(
+                meetingRevision: meetingReference,
+                transcriptManifestID: review.manifest.manifestID
+            )
+        } catch {
+            throw AppWorkflowError.analysisUnavailable
+        }
+    }
+
+    private func analysisRouteRequest(
+        source: AnalysisSourceBundle,
+        modelAvailable: Bool,
+        visibleUserAuthorization: Bool
+    ) throws -> ModelRouteRequest {
+        let packages = try AnalysisPipelineJobPlan.requestPackages(from: source)
+        let classification = DataClassification.mostRestrictive(
+            packages.map(\.request.dataClassification)
+                + [source.meeting.revision.dataClassification]
+        ) ?? .restricted
+        var categories: [ProviderDataCategory] = [
+            .transcriptText,
+            .speakerContext,
+            .evidenceIdentifiers
+        ]
+        if !source.transcriptReview.translations.isEmpty {
+            categories.append(.translationText)
+        }
+        return try ModelRouteRequest(
+            capability: .analysis,
+            dataClassification: classification,
+            offlineMode: true,
+            organizationAllowsExternalProcessing: false,
+            deploymentEnvironment: .production,
+            destination: .localDevice,
+            retentionPolicy: .noProviderRetention,
+            dataCategories: categories,
+            visibleUserAuthorization: visibleUserAuthorization,
+            localModelAvailable: modelAvailable
+        )
+    }
+
+    private func analysisRuntimeEvidence(
+        localeIdentifier: String,
+        modelAvailable: Bool
+    ) throws -> AnalysisRuntimeEvidence {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return try AnalysisRuntimeEvidence(
+            operatingSystemVersion: "macOS-\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)",
+            frameworkIdentifier: "com.apple.FoundationModels",
+            adapterVersion: "meetingbuddy-task006a-v1",
+            localeIdentifier: localeIdentifier,
+            modelAvailable: modelAvailable,
+            noOutboundMode: true
+        )
     }
 
     private func routeRequest(

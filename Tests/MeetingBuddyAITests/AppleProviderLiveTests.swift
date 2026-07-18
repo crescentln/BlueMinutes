@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import MeetingBuddyAI
 import MeetingBuddyApplication
@@ -73,6 +74,75 @@ struct AppleProviderLiveTests {
             )
         )
         #expect(!response.translatedText.isEmpty)
+    }
+
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["MEETINGBUDDY_RUN_LIVE_APPLE_ANALYSIS"] == "1",
+            "Live Apple Foundation Models analysis validation is opt-in."
+        )
+    )
+    func installedAppleFoundationModelAnalyzesOnlyVersionedSyntheticText() async throws {
+        guard #available(macOS 26.0, *) else { return }
+        let fixtureIdentifier = "task006a-live-synthetic-diplomatic-001"
+        let fixtureVersion = "1"
+        let fixtureText = "The delegation supports the voluntary reporting proposal on the condition that participation remains optional, while reserving its position on the proposal's annual review requirement."
+        let fixtureHash = SHA256.hash(data: Data(fixtureText.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        #expect(fixtureIdentifier == "task006a-live-synthetic-diplomatic-001")
+        #expect(fixtureVersion == "1")
+        #expect(fixtureHash == "d220ba7046fb638853b24cc0eaf31b477576f1a4b0b4be6ab297a5f19ed49898")
+
+        let provider = AppleFoundationModelsAnalysisProvider()
+        guard await provider.isModelAvailable(localeIdentifier: "en") else { return }
+        let routeRequest = try ModelRouteRequest(
+            capability: .analysis,
+            dataClassification: .internal,
+            offlineMode: true,
+            organizationAllowsExternalProcessing: false,
+            deploymentEnvironment: .production,
+            destination: .localDevice,
+            retentionPolicy: .noProviderRetention,
+            dataCategories: [.transcriptText, .speakerContext, .evidenceIdentifiers],
+            visibleUserAuthorization: true,
+            localModelAvailable: true
+        )
+        let decision = try ModelPolicyRouter().decide(routeRequest)
+        #expect(decision.route == .appleOnDevice)
+        #expect(decision.providerIdentifier == provider.metadata.providerIdentifier)
+        #expect(decision.request.destination == .localDevice)
+        #expect(decision.request.retentionPolicy == .noProviderRetention)
+
+        let result = try await provider.analyze(
+            AnalysisRequest(
+                packageIdentifier: fixtureIdentifier + "@" + fixtureVersion,
+                transcriptRevision: SemanticRevisionReference(
+                    logicalID: aiID(92, TranscriptSegmentID.self),
+                    revisionID: aiID(93, RevisionID.self)
+                ),
+                speakerAssignmentRevision: SemanticRevisionReference(
+                    logicalID: aiID(94, SpeakerAssignmentID.self),
+                    revisionID: aiID(95, RevisionID.self)
+                ),
+                transcriptText: fixtureText,
+                speakerContext: AnalysisSpeakerContext(
+                    actorLabel: "Synthetic Delegate",
+                    capacityLabel: "delegate",
+                    representedEntityLabel: "Synthetic Delegation",
+                    assignmentIsConfirmed: true
+                ),
+                evidenceKeys: ["evidence_task006a_live_001"],
+                dataClassification: .internal,
+                localeIdentifier: "en"
+            )
+        )
+        #expect(result.substantive)
+        #expect(result.positionType?.isKnown == true)
+        #expect(result.positionType != .noStatedPosition)
+        #expect(result.positionStatement?.isEmpty == false)
+        #expect(result.conditions.contains { $0.contains("participation remains optional") })
+        #expect(result.reservations.contains { $0.contains("annual review") })
     }
 }
 

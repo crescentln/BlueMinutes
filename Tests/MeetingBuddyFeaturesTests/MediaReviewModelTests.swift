@@ -26,6 +26,12 @@ struct MediaReviewModelTests {
         ])
     }
 
+    @Test
+    func analysisReviewIsAnIndependentNavigationSection() {
+        #expect(Set<MediaReviewSection>([.intake, .transcript, .analysis]).count == 3)
+        #expect(MediaReviewSection.analysis != .transcript)
+    }
+
     @Test @MainActor
     func multipleAudioTracksRequireAnExplicitSelection() async throws {
         let workflow = try MediaReviewWorkflowProbe()

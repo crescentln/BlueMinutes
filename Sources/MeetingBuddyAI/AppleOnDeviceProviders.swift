@@ -1,6 +1,7 @@
 @preconcurrency import AVFAudio
 import CoreMedia
 import Foundation
+import FoundationModels
 import MeetingBuddyApplication
 import MeetingBuddyDomain
 import Speech
@@ -148,6 +149,204 @@ public actor AppleOnDeviceTranslationProvider: TranslationProvider {
         return try TranslationResponse(
             translatedText: response.targetText.trimmingCharacters(in: .whitespacesAndNewlines),
             confidence: ConfidenceScore(millionths: 750_000)
+        )
+    }
+}
+
+@available(macOS 26.0, *)
+@Generable(description: "A bounded diplomatic extraction candidate. Never add fields outside this schema.")
+private struct AppleDiplomaticAnalysisOutput {
+    var substantive: Bool
+    @Guide(.anyOf([
+        "not_substantive",
+        "insufficient_semantic_content",
+        "procedural_only",
+        "uncertain"
+    ]))
+    var nonSubstantiveReasonCode: String
+    @Guide(.anyOf([
+        "statement",
+        "question",
+        "response",
+        "right_of_reply",
+        "procedural",
+        "other"
+    ]))
+    var interventionType: String
+    var issueTitle: String
+    @Guide(.anyOf([
+        "supports",
+        "opposes",
+        "requests",
+        "proposes",
+        "reserves_position",
+        "supports_with_conditions",
+        "opposes_with_qualification",
+        "uncertain"
+    ]))
+    var positionType: String
+    var positionStatement: String
+    @Guide(.maximumCount(16))
+    var reservations: [String]
+    @Guide(.maximumCount(16))
+    var conditions: [String]
+    var commitment: AppleDiplomaticCommitmentOutput?
+    var decision: AppleDiplomaticDecisionOutput?
+    @Guide(.range(0...1_000_000))
+    var confidenceMillionths: Int
+}
+
+@available(macOS 26.0, *)
+@Generable(description: "One explicitly stated but not completed commitment candidate.")
+private struct AppleDiplomaticCommitmentOutput {
+    var content: String
+    var recipientLabel: String?
+    @Guide(.maximumCount(16))
+    var conditions: [String]
+    var deadlineDescription: String?
+    @Guide(.anyOf([
+        "proposed",
+        "announced",
+        "accepted",
+        "in_progress",
+        "withdrawn",
+        "uncertain"
+    ]))
+    var status: String
+}
+
+@available(macOS 26.0, *)
+@Generable(description: "One possible decision that must remain uncertain until human confirmation.")
+private struct AppleDiplomaticDecisionOutput {
+    var content: String
+    @Guide(.constant("uncertain"))
+    var decisionType: String
+}
+
+/// Apple Foundation Models adapter. Each call uses a fresh, no-tool session and
+/// guided generation; every returned field is revalidated by provider-neutral contracts.
+@available(macOS 26.0, *)
+public actor AppleFoundationModelsAnalysisProvider: AnalysisProvider {
+    public static let adapterVersion = "meetingbuddy-task006a-v1"
+
+    public nonisolated let metadata = try! ProviderMetadata(
+        providerIdentifier: "apple-foundation-models",
+        modelIdentifier: "system-language-model-default",
+        modelVersion: appleSystemModelVersion,
+        clientVersion: adapterVersion
+    )
+    public nonisolated let route: ModelExecutionRoute = .appleOnDevice
+
+    private let model: SystemLanguageModel
+
+    public init(model: SystemLanguageModel = .default) {
+        self.model = model
+    }
+
+    public func isModelAvailable(localeIdentifier: String) async -> Bool {
+        model.availability == .available
+            && model.supportsLocale(Locale(identifier: localeIdentifier))
+    }
+
+    public func analyze(_ request: AnalysisRequest) async throws -> AnalysisOutputCandidate {
+        guard await isModelAvailable(localeIdentifier: request.localeIdentifier) else {
+            throw AIProviderContractError.modelUnavailable(
+                "The on-device Apple Foundation Model is unavailable for this locale."
+            )
+        }
+        let session = LanguageModelSession(
+            model: model,
+            tools: [],
+            instructions: DiplomaticAnalysisPrompt.protectedRules
+        )
+        let response: LanguageModelSession.Response<AppleDiplomaticAnalysisOutput>
+        do {
+            response = try await session.respond(
+                to: DiplomaticAnalysisPrompt.prompt(for: request),
+                generating: AppleDiplomaticAnalysisOutput.self,
+                options: GenerationOptions(
+                    sampling: .greedy,
+                    temperature: nil,
+                    maximumResponseTokens: 2_048
+                )
+            )
+        } catch let error as AIProviderContractError {
+            throw error
+        } catch {
+            throw AIProviderContractError.invalidResponse(
+                "Apple Foundation Models did not return a valid guided analysis response."
+            )
+        }
+        return try Self.validate(response.content)
+    }
+
+    private static func validate(
+        _ output: AppleDiplomaticAnalysisOutput
+    ) throws -> AnalysisOutputCandidate {
+        guard (0...1_000_000).contains(output.confidenceMillionths) else {
+            throw AIProviderContractError.invalidResponse("Analysis confidence is outside its contract range.")
+        }
+        let confidence = try ConfidenceScore(
+            millionths: UInt32(output.confidenceMillionths)
+        )
+        if !output.substantive {
+            return try AnalysisOutputCandidate(
+                substantive: false,
+                nonSubstantiveReasonCode: output.nonSubstantiveReasonCode,
+                confidence: confidence
+            )
+        }
+        let intervention = InterventionType(encodedValue: output.interventionType)
+        let position = PositionType(encodedValue: output.positionType)
+        var invalidRequiredFields: [String] = []
+        if !intervention.isKnown { invalidRequiredFields.append("intervention_type") }
+        if output.issueTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            invalidRequiredFields.append("issue_title")
+        }
+        if !position.isKnown || position == .noStatedPosition {
+            invalidRequiredFields.append("position_type")
+        }
+        if output.positionStatement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            invalidRequiredFields.append("position_statement")
+        }
+        guard invalidRequiredFields.isEmpty else {
+            throw AIProviderContractError.invalidResponse(
+                "Guided substantive analysis omitted or contradicted required fields: "
+                    + invalidRequiredFields.joined(separator: ",")
+            )
+        }
+        let commitment: AnalysisCommitmentCandidate?
+        if let value = output.commitment {
+            commitment = try AnalysisCommitmentCandidate(
+                content: value.content,
+                recipientLabel: value.recipientLabel,
+                conditions: value.conditions,
+                deadlineDescription: value.deadlineDescription,
+                status: CommitmentStatus(encodedValue: value.status)
+            )
+        } else {
+            commitment = nil
+        }
+        let decision: AnalysisDecisionCandidate?
+        if let value = output.decision {
+            decision = try AnalysisDecisionCandidate(
+                content: value.content,
+                decisionType: DecisionType(encodedValue: value.decisionType)
+            )
+        } else {
+            decision = nil
+        }
+        return try AnalysisOutputCandidate(
+            substantive: true,
+            interventionType: intervention,
+            issueTitle: output.issueTitle,
+            positionType: position,
+            positionStatement: output.positionStatement,
+            reservations: output.reservations,
+            conditions: output.conditions,
+            commitment: commitment,
+            decision: decision,
+            confidence: confidence
         )
     }
 }

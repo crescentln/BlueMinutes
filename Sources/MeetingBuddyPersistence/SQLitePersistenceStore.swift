@@ -4,7 +4,7 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAssetCatalog,
-    TranscriptReviewRepository, @unchecked Sendable
+    TranscriptReviewRepository, AnalysisRepository, @unchecked Sendable
 {
     public let workspace: LocalWorkspaceDescriptor
     public let migrationOutcome: MigrationOutcome
@@ -596,6 +596,279 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         }
     }
 
+    public func analysisSourceBundle(
+        meetingRevision: SemanticRevisionReference,
+        transcriptManifestID: TranscriptCoverageManifestID
+    ) throws -> AnalysisSourceBundle {
+        guard meetingRevision.objectType == .meetingProfile,
+              let meeting = try fetch(
+                  MeetingProfileV1.self,
+                  revisionID: meetingRevision.revisionID
+              ),
+              meeting.meetingID.canonicalString == meetingRevision.logicalID.canonicalString,
+              let review = try activeTranscriptReview(meetingID: meeting.meetingID),
+              review.manifest.manifestID == transcriptManifestID
+        else { throw AnalysisCoverageError.reviewUnavailable }
+        var actorsByRevision: [RevisionID: ActorV1] = [:]
+        var capacitiesByRevision: [RevisionID: SpeakingCapacityV1] = [:]
+        var sourceAssetsByRevision: [RevisionID: SourceAssetV1] = [:]
+        let sourceReferences = Set(
+            review.transcriptSegments.flatMap(\.revision.sourceAssetRevisions)
+                + review.translations.flatMap(\.revision.sourceAssetRevisions)
+        )
+        for reference in sourceReferences {
+            guard reference.objectType == .sourceAsset,
+                  let sourceAsset = try fetch(
+                      SourceAssetV1.self,
+                      revisionID: reference.revisionID
+                  ),
+                  sourceAsset.assetID.canonicalString == reference.logicalID.canonicalString
+            else { throw AnalysisCoverageError.reviewUnavailable }
+            sourceAssetsByRevision[sourceAsset.revision.revisionID] = sourceAsset
+        }
+        for assignment in review.speakerAssignments {
+            guard let actor = try fetch(
+                ActorV1.self,
+                revisionID: assignment.actorRevision.revisionID
+            ),
+                let capacity = try fetch(
+                    SpeakingCapacityV1.self,
+                    revisionID: assignment.speakingCapacityRevision.revisionID
+                )
+            else { throw AnalysisCoverageError.reviewUnavailable }
+            actorsByRevision[actor.revision.revisionID] = actor
+            capacitiesByRevision[capacity.revision.revisionID] = capacity
+            for relationship in capacity.representationRelationships {
+                guard let represented = try fetch(
+                    ActorV1.self,
+                    revisionID: relationship.entityRevision.revisionID
+                ) else { throw AnalysisCoverageError.reviewUnavailable }
+                actorsByRevision[represented.revision.revisionID] = represented
+            }
+        }
+        return try AnalysisSourceBundle(
+            meeting: meeting,
+            transcriptReview: review,
+            sourceAssets: sourceAssetsByRevision.values.sorted {
+                $0.revision.revisionID < $1.revision.revisionID
+            },
+            actors: actorsByRevision.values.sorted {
+                $0.revision.revisionID < $1.revision.revisionID
+            },
+            capacities: capacitiesByRevision.values.sorted {
+                $0.revision.revisionID < $1.revision.revisionID
+            }
+        )
+    }
+
+    public func recordIncompleteAnalysis(_ ledger: AnalysisCoverageLedger) throws {
+        guard ledger.status == .incomplete else {
+            throw AnalysisCoverageError.publicationConflict
+        }
+        try ledger.validate()
+        do {
+            try databasePool.write { db in
+                try insertAnalysisLedger(ledger, activate: false, in: db)
+            }
+        } catch let error as AnalysisCoverageError {
+            throw error
+        } catch {
+            throw PersistenceContractError.dependencyIntegrity(String(describing: error))
+        }
+    }
+
+    public func analysisCoverageLedgers(
+        meetingID: MeetingID
+    ) throws -> [AnalysisCoverageLedger] {
+        try databasePool.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM analysis_coverage_ledgers
+                WHERE meeting_id = ?
+                ORDER BY created_at_ms, ledger_id
+                """,
+                arguments: [meetingID.canonicalString]
+            ).map { try decodeAnalysisLedger($0, in: db) }
+        }
+    }
+
+    public func publishAnalysis(
+        _ publication: AnalysisPublication,
+        validatingInputRevisions inputRevisions: [SemanticRevisionReference]
+    ) throws {
+        try publication.ledger.validate()
+        do {
+            try databasePool.write { db in
+                try validateCurrentInputRevisions(inputRevisions, in: db)
+                guard let transcriptRow = try Row.fetchOne(
+                    db,
+                    sql: """
+                    SELECT manifest.*
+                    FROM active_transcript_manifests AS active
+                    JOIN transcript_coverage_manifests AS manifest
+                      ON manifest.manifest_id = active.manifest_id
+                    WHERE active.meeting_id = ?
+                    """,
+                    arguments: [publication.ledger.meetingID.canonicalString]
+                ) else {
+                    throw AnalysisCoverageError.publicationConflict
+                }
+                let transcriptManifest = try decodeManifest(transcriptRow)
+                guard transcriptManifest.manifestID == publication.ledger.transcriptManifestID,
+                      transcriptManifest.contentHash == publication.ledger.transcriptManifestHash,
+                      transcriptManifest.transcriptRevisionReferences.sorted()
+                        == publication.ledger.eligibleSegmentRevisions
+                else {
+                    throw AnalysisCoverageError.publicationConflict
+                }
+
+                for value in publication.evidence { try insertPublicationObject(value, in: db) }
+                for value in publication.organizations { try insertPublicationObject(value, in: db) }
+                for value in publication.participants { try insertPublicationObject(value, in: db) }
+                for value in publication.issues { try insertPublicationObject(value, in: db) }
+                for value in publication.positions { try insertPublicationObject(value, in: db) }
+                for value in publication.commitments { try insertPublicationObject(value, in: db) }
+                for value in publication.decisions { try insertPublicationObject(value, in: db) }
+                for value in publication.interventionCards { try insertPublicationObject(value, in: db) }
+                for value in publication.delegationPositionCards { try insertPublicationObject(value, in: db) }
+
+                for value in publication.evidence {
+                    try initializeActivePointer(for: value, at: publication.ledger.createdAt, in: db)
+                }
+                for value in publication.organizations {
+                    try initializeActivePointer(for: value, at: publication.ledger.createdAt, in: db)
+                }
+                for value in publication.participants {
+                    try initializeActivePointer(for: value, at: publication.ledger.createdAt, in: db)
+                }
+                for value in publication.issues {
+                    try initializeActivePointer(for: value, at: publication.ledger.createdAt, in: db)
+                }
+                for value in publication.positions {
+                    try initializeActivePointer(for: value, at: publication.ledger.createdAt, in: db)
+                }
+                for value in publication.commitments {
+                    try initializeActivePointer(for: value, at: publication.ledger.createdAt, in: db)
+                }
+                for value in publication.decisions {
+                    try initializeActivePointer(for: value, at: publication.ledger.createdAt, in: db)
+                }
+                for value in publication.interventionCards {
+                    try initializeActivePointer(for: value, at: publication.ledger.createdAt, in: db)
+                }
+                for value in publication.delegationPositionCards {
+                    try initializeActivePointer(for: value, at: publication.ledger.createdAt, in: db)
+                }
+                try insertAnalysisLedger(publication.ledger, activate: true, in: db)
+            }
+        } catch let error as AnalysisCoverageError {
+            throw error
+        } catch let error as PersistenceContractError {
+            throw error
+        } catch let error as JobContractError {
+            throw error
+        } catch {
+            throw PersistenceContractError.dependencyIntegrity(String(describing: error))
+        }
+    }
+
+    public func activeAnalysisReview(meetingID: MeetingID) throws -> AnalysisReviewBundle? {
+        try databasePool.read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT ledger.*
+                FROM active_analysis_ledgers AS active
+                JOIN analysis_coverage_ledgers AS ledger
+                  ON ledger.ledger_id = active.ledger_id
+                WHERE active.meeting_id = ?
+                """,
+                arguments: [meetingID.canonicalString]
+            ) else { return nil }
+            let ledger = try decodeAnalysisLedger(row, in: db)
+            guard ledger.meetingID == meetingID, ledger.status == .published else {
+                throw AnalysisCoverageError.publicationConflict
+            }
+
+            var evidence: [EvidenceRefV1] = []
+            var participants: [ParticipantV1] = []
+            var organizations: [OrganizationV1] = []
+            var issues: [IssueV1] = []
+            var positions: [PositionV1] = []
+            var commitments: [CommitmentV1] = []
+            var decisions: [DecisionV1] = []
+            var interventionCards: [InterventionCardV1] = []
+            var delegationCards: [DelegationPositionCardV1] = []
+
+            for reference in ledger.evidenceRevisionReferences {
+                guard let value = try fetch(
+                    EvidenceRefV1.self,
+                    revisionID: reference.revisionID,
+                    in: db
+                ) else { throw AnalysisCoverageError.publicationConflict }
+                evidence.append(value)
+            }
+            for reference in ledger.outputRevisionReferences {
+                switch reference.objectType {
+                case .participant:
+                    participants.append(try requiredFetch(ParticipantV1.self, reference: reference, in: db))
+                case .organization:
+                    organizations.append(try requiredFetch(OrganizationV1.self, reference: reference, in: db))
+                case .issue:
+                    issues.append(try requiredFetch(IssueV1.self, reference: reference, in: db))
+                case .position:
+                    positions.append(try activeOrExactPosition(reference: reference, in: db))
+                case .commitment:
+                    commitments.append(try requiredFetch(CommitmentV1.self, reference: reference, in: db))
+                case .decision:
+                    decisions.append(try requiredFetch(DecisionV1.self, reference: reference, in: db))
+                case .interventionCard:
+                    interventionCards.append(try requiredFetch(InterventionCardV1.self, reference: reference, in: db))
+                case .delegationPositionCard:
+                    delegationCards.append(try requiredFetch(DelegationPositionCardV1.self, reference: reference, in: db))
+                default:
+                    throw AnalysisCoverageError.publicationConflict
+                }
+            }
+            return AnalysisReviewBundle(
+                ledger: ledger,
+                evidence: evidence,
+                participants: participants,
+                organizations: organizations,
+                issues: issues,
+                positions: positions,
+                commitments: commitments,
+                decisions: decisions,
+                interventionCards: interventionCards,
+                delegationPositionCards: delegationCards
+            )
+        }
+    }
+
+    public func savePositionCorrection(
+        _ correction: PositionV1,
+        replacing expectedRevisionID: RevisionID,
+        changedAt: UTCInstant
+    ) throws {
+        guard correction.revision.supersedesRevisionID == expectedRevisionID,
+              correction.revision.createdBy == .user,
+              correction.reviewStatus == .confirmed,
+              correction.userConfirmed
+        else { throw AnalysisCoverageError.publicationConflict }
+        try insert(correction)
+        _ = try activate(
+            ActivePublishedRevisionSelection(
+                logicalID: correction.positionID,
+                revisionID: correction.revision.revisionID
+            ),
+            as: PositionV1.self,
+            expectedCurrentRevisionID: expectedRevisionID,
+            handlingPolicies: [],
+            markedAt: changedAt
+        )
+    }
+
     func registerManagedAsset(_ record: ManagedAssetRecord) throws {
         let payload = try SQLitePayloadCodec.canonicalData(record)
         let digest = SQLitePayloadCodec.sha256(payload)
@@ -659,6 +932,14 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             || type is ActorV1.Type
             || type is SpeakingCapacityV1.Type
             || type is SpeakerAssignmentV1.Type
+            || type is ParticipantV1.Type
+            || type is OrganizationV1.Type
+            || type is IssueV1.Type
+            || type is PositionV1.Type
+            || type is CommitmentV1.Type
+            || type is DecisionV1.Type
+            || type is InterventionCardV1.Type
+            || type is DelegationPositionCardV1.Type
         guard supported else {
             throw PersistenceContractError.unsupportedStoredObjectType(
                 Object.ObjectIDTag.semanticObjectType.encodedValue
@@ -743,6 +1024,299 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
                 revision.revisionID.canonicalString,
                 changedAt.millisecondsSinceUnixEpoch
             ]
+        )
+    }
+
+    private func insertAnalysisLedger(
+        _ ledger: AnalysisCoverageLedger,
+        activate: Bool,
+        in db: Database
+    ) throws {
+        try ledger.validate()
+        guard let transcriptRow = try Row.fetchOne(
+            db,
+            sql: "SELECT meeting_id, content_hash_hex FROM transcript_coverage_manifests WHERE manifest_id = ?",
+            arguments: [ledger.transcriptManifestID.canonicalString]
+        ),
+            transcriptRow["meeting_id"] == ledger.meetingID.canonicalString,
+            transcriptRow["content_hash_hex"] == ledger.transcriptManifestHash.lowercaseHex
+        else { throw AnalysisCoverageError.publicationConflict }
+
+        let payload = try SQLitePayloadCodec.canonicalData(ledger)
+        let digest = SQLitePayloadCodec.sha256(payload)
+        guard payload.count <= SQLiteSchema.maximumSemanticPayloadBytes else {
+            throw AnalysisCoverageError.publicationConflict
+        }
+        if let existing = try Row.fetchOne(
+            db,
+            sql: "SELECT canonical_payload, payload_sha256 FROM analysis_coverage_ledgers WHERE ledger_id = ?",
+            arguments: [ledger.ledgerID.canonicalString]
+        ) {
+            let existingPayload: Data = existing["canonical_payload"]
+            let existingDigest: String = existing["payload_sha256"]
+            guard existingPayload == payload, existingDigest == digest else {
+                throw AnalysisCoverageError.publicationConflict
+            }
+        } else {
+            try db.execute(
+                sql: """
+                INSERT INTO analysis_coverage_ledgers(
+                    ledger_id, supersedes_ledger_id, meeting_id, transcript_manifest_id,
+                    status, created_at_ms, content_hash_algorithm, content_hash_hex,
+                    canonical_payload, payload_sha256, payload_byte_size
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    ledger.ledgerID.canonicalString,
+                    ledger.supersedesLedgerID?.canonicalString,
+                    ledger.meetingID.canonicalString,
+                    ledger.transcriptManifestID.canonicalString,
+                    ledger.status.rawValue,
+                    ledger.createdAt.millisecondsSinceUnixEpoch,
+                    ledger.contentHash.algorithm.encodedValue,
+                    ledger.contentHash.lowercaseHex,
+                    payload,
+                    digest,
+                    payload.count
+                ]
+            )
+            for (ordinal, segment) in ledger.segments.enumerated() {
+                try db.execute(
+                    sql: """
+                    INSERT INTO analysis_coverage_entries(
+                        ledger_id, ordinal, segment_object_type, segment_logical_id,
+                        segment_revision_id, disposition, attempt_count, safe_reason_code
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        ledger.ledgerID.canonicalString,
+                        ordinal,
+                        segment.segmentRevision.objectType.encodedValue,
+                        segment.segmentRevision.logicalID.canonicalString,
+                        segment.segmentRevision.revisionID.canonicalString,
+                        segment.disposition.rawValue,
+                        segment.attemptCount,
+                        segment.safeReasonCode
+                    ]
+                )
+                for evidence in segment.evidenceRevisions {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO analysis_coverage_evidence(
+                            ledger_id, segment_revision_id, evidence_object_type,
+                            evidence_logical_id, evidence_revision_id
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        arguments: [
+                            ledger.ledgerID.canonicalString,
+                            segment.segmentRevision.revisionID.canonicalString,
+                            evidence.objectType.encodedValue,
+                            evidence.logicalID.canonicalString,
+                            evidence.revisionID.canonicalString
+                        ]
+                    )
+                }
+                for output in segment.outputRevisions {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO analysis_coverage_outputs(
+                            ledger_id, segment_revision_id, output_object_type,
+                            output_logical_id, output_revision_id
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        arguments: [
+                            ledger.ledgerID.canonicalString,
+                            segment.segmentRevision.revisionID.canonicalString,
+                            output.objectType.encodedValue,
+                            output.logicalID.canonicalString,
+                            output.revisionID.canonicalString
+                        ]
+                    )
+                }
+            }
+        }
+        guard activate else { return }
+
+        let pointer = try Row.fetchOne(
+            db,
+            sql: "SELECT ledger_id, pointer_version FROM active_analysis_ledgers WHERE meeting_id = ?",
+            arguments: [ledger.meetingID.canonicalString]
+        )
+        let currentID: String? = pointer?["ledger_id"]
+        if currentID == ledger.ledgerID.canonicalString { return }
+        guard currentID == ledger.supersedesLedgerID?.canonicalString else {
+            throw AnalysisCoverageError.publicationConflict
+        }
+        let nextVersion: Int64 = (pointer?["pointer_version"] as Int64? ?? 0) + 1
+        try db.execute(
+            sql: """
+            INSERT INTO analysis_ledger_events(
+                event_id, meeting_id, previous_ledger_id, replacement_ledger_id,
+                pointer_version, changed_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                UUID().uuidString.lowercased(),
+                ledger.meetingID.canonicalString,
+                currentID,
+                ledger.ledgerID.canonicalString,
+                nextVersion,
+                ledger.createdAt.millisecondsSinceUnixEpoch
+            ]
+        )
+        try db.execute(
+            sql: """
+            INSERT INTO active_analysis_ledgers(
+                meeting_id, ledger_id, pointer_version, changed_at_ms
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT(meeting_id) DO UPDATE SET
+                ledger_id = excluded.ledger_id,
+                pointer_version = excluded.pointer_version,
+                changed_at_ms = excluded.changed_at_ms
+            """,
+            arguments: [
+                ledger.meetingID.canonicalString,
+                ledger.ledgerID.canonicalString,
+                nextVersion,
+                ledger.createdAt.millisecondsSinceUnixEpoch
+            ]
+        )
+    }
+
+    private func decodeAnalysisLedger(
+        _ row: Row,
+        in db: Database
+    ) throws -> AnalysisCoverageLedger {
+        let payload: Data = row["canonical_payload"]
+        let digest: String = row["payload_sha256"]
+        guard SQLitePayloadCodec.sha256(payload) == digest else {
+            throw AnalysisCoverageError.publicationConflict
+        }
+        let ledger = try JSONDecoder().decode(AnalysisCoverageLedger.self, from: payload)
+        try ledger.validate()
+        guard try SQLitePayloadCodec.canonicalData(ledger) == payload,
+              row["ledger_id"] == ledger.ledgerID.canonicalString,
+              row["meeting_id"] == ledger.meetingID.canonicalString,
+              row["transcript_manifest_id"] == ledger.transcriptManifestID.canonicalString,
+              row["content_hash_hex"] == ledger.contentHash.lowercaseHex
+        else { throw AnalysisCoverageError.publicationConflict }
+        try validateAnalysisLedgerIndex(ledger, in: db)
+        return ledger
+    }
+
+    private func validateAnalysisLedgerIndex(
+        _ ledger: AnalysisCoverageLedger,
+        in db: Database
+    ) throws {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT ordinal, segment_object_type, segment_logical_id,
+                   segment_revision_id, disposition, attempt_count, safe_reason_code
+            FROM analysis_coverage_entries
+            WHERE ledger_id = ?
+            ORDER BY ordinal
+            """,
+            arguments: [ledger.ledgerID.canonicalString]
+        )
+        guard rows.count == ledger.segments.count else {
+            throw AnalysisCoverageError.publicationConflict
+        }
+        for (ordinal, pair) in zip(rows.indices, zip(rows, ledger.segments)) {
+            let (row, segment) = pair
+            let segmentReference = try SQLiteReferenceCodec.reference(
+                objectTypeValue: row["segment_object_type"],
+                logicalIDValue: row["segment_logical_id"],
+                revisionIDValue: row["segment_revision_id"]
+            )
+            let disposition: String = row["disposition"]
+            let attemptCount: UInt32 = row["attempt_count"]
+            let safeReasonCode: String? = row["safe_reason_code"]
+            guard (row["ordinal"] as Int) == ordinal,
+                  segmentReference == segment.segmentRevision,
+                  disposition == segment.disposition.rawValue,
+                  attemptCount == segment.attemptCount,
+                  safeReasonCode == segment.safeReasonCode
+            else { throw AnalysisCoverageError.publicationConflict }
+
+            let evidence = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT evidence_object_type, evidence_logical_id, evidence_revision_id
+                FROM analysis_coverage_evidence
+                WHERE ledger_id = ? AND segment_revision_id = ?
+                ORDER BY evidence_object_type, evidence_logical_id, evidence_revision_id
+                """,
+                arguments: [
+                    ledger.ledgerID.canonicalString,
+                    segment.segmentRevision.revisionID.canonicalString
+                ]
+            ).map {
+                try SQLiteReferenceCodec.reference(
+                    objectTypeValue: $0["evidence_object_type"],
+                    logicalIDValue: $0["evidence_logical_id"],
+                    revisionIDValue: $0["evidence_revision_id"]
+                )
+            }
+            let outputs = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT output_object_type, output_logical_id, output_revision_id
+                FROM analysis_coverage_outputs
+                WHERE ledger_id = ? AND segment_revision_id = ?
+                ORDER BY output_object_type, output_logical_id, output_revision_id
+                """,
+                arguments: [
+                    ledger.ledgerID.canonicalString,
+                    segment.segmentRevision.revisionID.canonicalString
+                ]
+            ).map {
+                try SQLiteReferenceCodec.reference(
+                    objectTypeValue: $0["output_object_type"],
+                    logicalIDValue: $0["output_logical_id"],
+                    revisionIDValue: $0["output_revision_id"]
+                )
+            }
+            guard evidence == segment.evidenceRevisions.sorted(),
+                  outputs == segment.outputRevisions.sorted()
+            else { throw AnalysisCoverageError.publicationConflict }
+        }
+    }
+
+    private func requiredFetch<Object: SemanticRevisionContract>(
+        _ type: Object.Type,
+        reference: SemanticRevisionReference,
+        in db: Database
+    ) throws -> Object {
+        guard reference.objectType == Object.ObjectIDTag.semanticObjectType,
+              let value = try fetch(type, revisionID: reference.revisionID, in: db),
+              value.revision.logicalID.canonicalString == reference.logicalID.canonicalString
+        else { throw AnalysisCoverageError.publicationConflict }
+        return value
+    }
+
+    private func activeOrExactPosition(
+        reference: SemanticRevisionReference,
+        in db: Database
+    ) throws -> PositionV1 {
+        let activeID = try String.fetchOne(
+            db,
+            sql: """
+            SELECT revision_id FROM active_published_revisions
+            WHERE object_type = 'position' AND logical_id = ?
+            """,
+            arguments: [reference.logicalID.canonicalString]
+        )
+        let revisionID = try activeID.map(RevisionID.init(validating:)) ?? reference.revisionID
+        return try requiredFetch(
+            PositionV1.self,
+            reference: try SemanticRevisionReference(
+                logicalID: PositionID(
+                    UUID(uuidString: reference.logicalID.canonicalString)!
+                ),
+                revisionID: revisionID
+            ),
+            in: db
         )
     }
 
@@ -894,6 +1468,20 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         case let value as SpeakingCapacityV1:
             meetingID = value.meetingID
         case let value as SpeakerAssignmentV1:
+            meetingID = value.meetingID
+        case let value as ParticipantV1:
+            meetingID = value.meetingID
+        case let value as IssueV1:
+            meetingID = value.meetingID
+        case let value as PositionV1:
+            meetingID = value.meetingID
+        case let value as CommitmentV1:
+            meetingID = value.meetingID
+        case let value as DecisionV1:
+            meetingID = value.meetingID
+        case let value as InterventionCardV1:
+            meetingID = value.meetingID
+        case let value as DelegationPositionCardV1:
             meetingID = value.meetingID
         default:
             meetingID = nil
@@ -1088,6 +1676,22 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             _ = try decode(SpeakingCapacityV1.self, row: row)
         case .speakerAssignment:
             _ = try decode(SpeakerAssignmentV1.self, row: row)
+        case .participant:
+            _ = try decode(ParticipantV1.self, row: row)
+        case .organization:
+            _ = try decode(OrganizationV1.self, row: row)
+        case .issue:
+            _ = try decode(IssueV1.self, row: row)
+        case .position:
+            _ = try decode(PositionV1.self, row: row)
+        case .commitment:
+            _ = try decode(CommitmentV1.self, row: row)
+        case .decision:
+            _ = try decode(DecisionV1.self, row: row)
+        case .interventionCard:
+            _ = try decode(InterventionCardV1.self, row: row)
+        case .delegationPositionCard:
+            _ = try decode(DelegationPositionCardV1.self, row: row)
         case .userConfirmedNote, .unrecognized:
             throw PersistenceContractError.unsupportedStoredObjectType(objectTypeValue)
         }

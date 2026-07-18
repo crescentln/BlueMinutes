@@ -310,9 +310,12 @@ struct TranscriptReviewView: View {
         in review: TranscriptReviewBundle
     ) -> Bool {
         review.speakerAssignments.contains { assignment in
-            assignment.transcriptSegmentRevisions.contains {
-                $0.revisionID == segment.revision.revisionID
-            }
+            assignment.certainty == .confirmed
+                && assignment.reviewStatus == .confirmed
+                && assignment.userConfirmed
+                && assignment.transcriptSegmentRevisions.contains {
+                    $0.revisionID == segment.revision.revisionID
+                }
         }
     }
 

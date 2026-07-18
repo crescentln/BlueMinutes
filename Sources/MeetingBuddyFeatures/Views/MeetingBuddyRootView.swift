@@ -31,6 +31,9 @@ public struct MeetingBuddyRootView: View {
                     Label("Transcript Review", systemImage: "text.bubble")
                         .tag(MediaReviewSection.transcript)
                         .disabled(store.job?.state != .succeeded)
+                    Label("Analysis Review", systemImage: "checklist.checked")
+                        .tag(MediaReviewSection.analysis)
+                        .disabled(store.transcriptReview == nil)
                 }
             }
             .navigationTitle("MeetingBuddy")
@@ -45,16 +48,14 @@ public struct MeetingBuddyRootView: View {
                         intakeView
                     case .transcript:
                         TranscriptReviewView(store: store)
+                    case .analysis:
+                        AnalysisReviewView(store: store)
                     }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
-            .navigationTitle(
-                store.selectedSection == .transcript
-                    ? "Transcript Review"
-                    : "Local Media Intake"
-            )
+            .navigationTitle(navigationTitle)
             .toolbar {
                 if store.isWorking {
                     ProgressView()
@@ -67,10 +68,17 @@ public struct MeetingBuddyRootView: View {
             await store.restoreWorkspace()
         }
         .onChange(of: store.selectedSection) { _, section in
-            guard section == .transcript else { return }
             Task {
-                await store.loadTranscriptReview()
-                await store.refreshTranscriptRoute()
+                switch section {
+                case .transcript:
+                    await store.loadTranscriptReview()
+                    await store.refreshTranscriptRoute()
+                case .analysis:
+                    await store.loadAnalysisReview()
+                    await store.refreshAnalysisRoute()
+                case .intake, nil:
+                    break
+                }
             }
         }
         .fileImporter(
@@ -112,6 +120,14 @@ public struct MeetingBuddyRootView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(store.isWorking)
+        }
+    }
+
+    private var navigationTitle: String {
+        switch store.selectedSection {
+        case .transcript: "Transcript Review"
+        case .analysis: "Analysis Review"
+        case .intake, nil: "Local Media Intake"
         }
     }
 

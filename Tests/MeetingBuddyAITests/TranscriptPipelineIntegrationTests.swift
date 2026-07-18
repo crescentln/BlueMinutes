@@ -399,7 +399,7 @@ struct TranscriptPipelineIntegrationTests {
     }
 }
 
-private final class AIWorkspace: @unchecked Sendable {
+final class AIWorkspace: @unchecked Sendable {
     let container: URL
     let root: URL
     let sourceURL: URL
