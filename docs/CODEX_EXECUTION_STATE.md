@@ -4,7 +4,7 @@
 project: MeetingBuddy
 controller_version: "1.0"
 master_spec_version: "1.0"
-current_task: "005B"
+current_task: "006A"
 current_status: accepted
 accepted_tasks:
   - "001"
@@ -15,10 +15,11 @@ accepted_tasks:
   - "004B"
   - "005A"
   - "005B"
+  - "006A"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "e2827dd0edf876f8a2521a3463d3bcdc3602d41b (Task 005B implementation commit on local main; Task 005A commit 287f4aa14070c8de9ea48cea22c7119ef9fe93e5 is the rollback anchor)"
-working_tree_status_summary: "Task 005B implementation, tests, migration, and ADR are committed; preserved pre-existing post-005A documentation integration remains uncommitted and excluded from the Task 005B commits; no push or deployment"
+last_known_git_head: "6367932dbe976351eb850a880bd720959dc6e853 (Task 006A implementation commit on local main; accepted Task 005B commit 2cd29f9aa4e41aed349d2b648d65082cc9bc2209 is the rollback anchor)"
+working_tree_status_summary: "Task 006A implementation and acceptance are committed; preserved pre-existing post-005A planning/instruction/architecture/ADR integration remains documentation-only and uncommitted; no uncommitted package/source/test changes, push, or deployment"
 last_verification_commands:
   - "xcode-select -p; xcodebuild -version; xcodebuild -checkFirstLaunchStatus; swift --version"
   - "swift build --configuration debug -Xswiftc -warnings-as-errors"
@@ -35,6 +36,11 @@ last_verification_commands:
   - "MEETINGBUDDY_RUN_LIVE_APPLE_MODELS=1 swift test --filter AppleProviderLiveTests -Xswiftc -warnings-as-errors"
   - "swift test --filter ProviderContractTests -Xswiftc -warnings-as-errors; swift test --filter TranscriptPipelineIntegrationTests -Xswiftc -warnings-as-errors"
   - "swift build --configuration debug -Xswiftc -warnings-as-errors; swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors; swift build --configuration release -Xswiftc -warnings-as-errors"
+  - "Xcode 26.6 FoundationModels framework and guided-generation interface inspection; SystemLanguageModel availability and locale runtime probe"
+  - "swift test --filter AnalysisPipelineIntegrationTests -Xswiftc -warnings-as-errors"
+  - "MEETINGBUDDY_RUN_LIVE_APPLE_ANALYSIS=1 swift test --enable-swift-testing --filter AppleProviderLiveTests.installedAppleFoundationModelAnalyzesOnlyVersionedSyntheticText -Xswiftc -warnings-as-errors"
+  - "fresh/v1/v2/v3-to-v4 migration, byte-preserving v3 canary, verified pre-migration rollback backup, close/reopen, recovery-snapshot, unknown-future, and failure-injection checks in disposable workspaces"
+  - "git diff --check; Package/entitlement boundary diff; source-only network/URLSession scan; secret/credential/model-artifact filename scan; plutil entitlement validation"
 last_verification_results:
   - "Xcode 26.6 build 17F113 is installed and selected at /Applications/Xcode.app/Contents/Developer; first-launch status is complete and Swift 6.3.3 targets arm64 macOS"
   - "debug and release full-package builds passed with warnings treated as errors under the selected full Xcode toolchain"
@@ -55,18 +61,27 @@ last_verification_results:
   - "deterministic publication requires exact 100 percent core coverage; cancellation, retry reuse, stale-input refusal, incomplete ranges, correction lineage, translation lineage, and speaker confirmation passed focused tests"
   - "schema version 3 fresh, v1-to-v3, and v2-to-v3 migrations, rollback anchors, unknown-future rejection, and injected-failure rollback passed"
   - "Keychain integration passed and no plaintext fallback, new dependency, new entitlement, new network implementation, or outbound provider route was introduced"
+  - "ADR-0010 selects Apple Foundation Models guided extraction only on the local device on macOS 26+ after runtime availability, locale, policy, and visible Analyze Locally authorization checks; no server, Private Cloud Compute, tool, retrieval, download, credential, or outbound adapter is authorized"
+  - "the approved Task 006A route passed one opt-in real installed-model call using only fixture task006a-live-synthetic-diplomatic-001@1 with SHA-256 d220ba7046fb638853b24cc0eaf31b477576f1a4b0b4be6ab297a5f19ed49898; no real meeting content was used"
+  - "Task 006A implements eight independent immutable intelligence types, protected prompt modules, exact claim/evidence/classification/actor-capacity validation, and deterministic validated-only card aggregation"
+  - "the analysis Task Manager path persists durable incomplete coverage on provider failure and publishes only when every eligible reviewed transcript segment is exactly substantive or explicitly non-substantive"
+  - "the Task 006A diplomatic-rule evaluation scores 5/5; immutable correction, dependent stale propagation, close/reopen, and recovery-snapshot checks pass"
+  - "schema version 4 migration passes fresh and accepted v1/v2/v3 paths, preserves existing v3 semantic payload bytes, and leaves a verified schema-v3 rollback backup without analysis tables"
+  - "Task 006A debug and release builds pass with warnings as errors; the final ordinary suite passes 166 tests in 29 suites with only two explicit opt-in live Apple tests skipped; the separate live Foundation Models route passes"
+  - "package graph remains the exact GRDB 7.11.1 pin; no Package, entitlement, credential, model-artifact, source network implementation, external process, or provider-secret change was found"
 open_P0_decisions: []
-open_P1_decisions:
-  - "production inference route as the first in-task Task 006A decision gate before any real analysis-provider implementation or call"
+open_P1_decisions: []
 known_out_of_scope_findings:
-  - "no external or cloud provider, outbound meeting-data route, analysis or briefing runtime, live capture, UN Web TV, or automation implementation exists"
-  - "the Task 005B SwiftUI transcript-review surface is usable but has no final visual or accessibility polish claim"
+  - "no external/cloud provider or outbound meeting-data route, Task 006B matrix/briefing/export runtime, live capture, UN Web TV, or automation implementation exists"
+  - "the native transcript and analysis review surfaces are usable task scope but have no final visual or accessibility polish claim"
   - "Task 004A recovery JSONL remains integrity-checked export-only; the verified SQLite online backup is authoritative and a user-facing restore/repair workflow remains later work"
   - "automatic Workspace Trash purge remains unimplemented"
-  - "Task 005B authorizes only Apple installed-model local processing and manual local fallback; Task 006A must separately select any analysis provider"
+  - "Task 006A authorizes only bounded Apple on-device analysis and existing-local-review/no-external behavior when unavailable; no job metadata alone authorizes an external call"
   - "Developer ID provisioning, Gatekeeper/notarization, and clean-machine release behavior remain Task 011 work; the current ad-hoc bundle is development evidence only"
   - "UN Web TV and live capture remain Tasks 008A/008B"
   - "automation adapters remain Tasks 009A/009B"
-next_eligible_task: "006A (eligible but not started; requires a separate explicit PROCEED TO TASK 006A command)"
-last_updated_at: "2026-07-18T21:06:34Z"
+  - "Task 006A does not implement structured templates, issue-position matrix, briefing/export, historical comparison, broad political assessment, or real-time coaching/recommendations"
+  - "automatic analysis currently consumes reviewed transcript/translation segments; no reviewed-document ingestion pipeline exists in the accepted baseline, so no document-content extraction claim is made"
+next_eligible_task: "006B (eligible but not started; requires a separate explicit PROCEED TO TASK 006B command)"
+last_updated_at: "2026-07-18T22:56:08Z"
 ```
