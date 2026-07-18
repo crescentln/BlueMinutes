@@ -24,6 +24,10 @@ public enum SemanticObjectType: StableStringValue {
     case evidenceRef
     case meetingProfile
     case transcriptSegment
+    case translationSegment
+    case actor
+    case speakingCapacity
+    case speakerAssignment
     case userConfirmedNote
     case unrecognized(String)
 
@@ -33,6 +37,10 @@ public enum SemanticObjectType: StableStringValue {
         case "evidence_ref": self = .evidenceRef
         case "meeting_profile": self = .meetingProfile
         case "transcript_segment": self = .transcriptSegment
+        case "translation_segment": self = .translationSegment
+        case "actor": self = .actor
+        case "speaking_capacity": self = .speakingCapacity
+        case "speaker_assignment": self = .speakerAssignment
         case "user_confirmed_note": self = .userConfirmedNote
         default: self = .unrecognized(encodedValue)
         }
@@ -44,6 +52,10 @@ public enum SemanticObjectType: StableStringValue {
         case .evidenceRef: "evidence_ref"
         case .meetingProfile: "meeting_profile"
         case .transcriptSegment: "transcript_segment"
+        case .translationSegment: "translation_segment"
+        case .actor: "actor"
+        case .speakingCapacity: "speaking_capacity"
+        case .speakerAssignment: "speaker_assignment"
         case .userConfirmedNote: "user_confirmed_note"
         case let .unrecognized(value): value
         }

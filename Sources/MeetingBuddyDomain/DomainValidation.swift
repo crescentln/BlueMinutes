@@ -80,3 +80,99 @@ func duplicateIssues<Value: Hashable>(
     }
     return []
 }
+
+func boundedLabelIssues(
+    _ value: String,
+    path: String,
+    maximumUTF8Bytes: Int = 512
+) -> [ValidationIssue] {
+    guard
+        value == value.meetingBuddyTrimmed,
+        !value.isEmpty,
+        value.utf8.count <= maximumUTF8Bytes,
+        !value.meetingBuddyContainsControlCharacter
+    else {
+        return [
+            ValidationIssue(
+                code: .invalidFormat,
+                path: path,
+                message: "The value must be non-empty, trimmed, bounded text without control characters."
+            )
+        ]
+    }
+    return []
+}
+
+func preservedSourceTextIssues(
+    _ value: String,
+    path: String,
+    maximumUTF8Bytes: Int = 65_536
+) -> [ValidationIssue] {
+    guard
+        !value.meetingBuddyTrimmed.isEmpty,
+        value.utf8.count <= maximumUTF8Bytes,
+        !value.contains("\u{0}")
+    else {
+        return [
+            ValidationIssue(
+                code: .invalidFormat,
+                path: path,
+                message: "Source text must be non-empty, bounded, and contain no null byte."
+            )
+        ]
+    }
+    return []
+}
+
+func reviewConfirmationIssues(
+    reviewStatus: ReviewStatus,
+    userConfirmed: Bool,
+    path: String = "review_status"
+) -> [ValidationIssue] {
+    var issues: [ValidationIssue] = []
+    if !reviewStatus.isKnown {
+        issues.append(
+            ValidationIssue(
+                code: .unsupportedValue,
+                path: path,
+                message: "The review status is not supported by this contract version."
+            )
+        )
+    }
+    if userConfirmed != (reviewStatus == .confirmed) {
+        issues.append(
+            ValidationIssue(
+                code: .inconsistentValue,
+                path: "user_confirmed",
+                message: "User confirmation and confirmed review status must agree."
+            )
+        )
+    }
+    return issues
+}
+
+func semanticHashIssues(
+    storedHash: ContentDigest?,
+    calculatedHash: () throws -> ContentDigest,
+    objectName: String
+) -> [ValidationIssue] {
+    guard let storedHash else { return [] }
+    do {
+        guard storedHash != (try calculatedHash()) else { return [] }
+        return [
+            ValidationIssue(
+                code: .inconsistentValue,
+                path: "revision.semantic_content_hash",
+                message: "The stored semantic hash does not match \(objectName) content."
+            )
+        ]
+    } catch {
+        return [
+            ValidationIssue(
+                code: .invalidFormat,
+                path: "revision.semantic_content_hash",
+                message: "\(objectName) semantic content could not be hashed canonically."
+            )
+        ]
+    }
+}

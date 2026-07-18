@@ -198,19 +198,13 @@ public struct GenerationMetadata: Codable, Hashable, Sendable, DomainValidatable
             )
         }
         issues.append(contentsOf: outputSchemaVersion.validationIssues())
-        if templateVersion != templateVersion.meetingBuddyTrimmed
-            || templateVersion.isEmpty
-            || templateVersion.utf8.count > 128
-            || templateVersion.meetingBuddyContainsControlCharacter
-        {
-            issues.append(
-                ValidationIssue(
-                    code: .invalidFormat,
-                    path: "generation_metadata.template_version",
-                    message: "A template version must be non-empty, bounded text."
-                )
+        issues.append(
+            contentsOf: boundedLabelIssues(
+                templateVersion,
+                path: "generation_metadata.template_version",
+                maximumUTF8Bytes: 128
             )
-        }
+        )
         issues.append(contentsOf: generatedAt.validationIssues())
         if !privacyRoute.isKnown {
             issues.append(

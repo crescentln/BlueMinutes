@@ -108,7 +108,7 @@ public struct MediaProvenance: Codable, Hashable, Sendable, DomainValidatable {
 }
 
 /// SourceAsset.v1 represents source material without exposing filesystem paths.
-public struct SourceAssetV1: Codable, Hashable, Sendable, DomainValidatable {
+public struct SourceAssetV1: SemanticRevisionContract {
     public let revision: RevisionEnvelope<SourceAssetIDTag>
     public let meetingID: MeetingID
     public let assetType: SourceAssetType

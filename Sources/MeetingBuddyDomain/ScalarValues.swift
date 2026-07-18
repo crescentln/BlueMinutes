@@ -495,3 +495,109 @@ public struct DocumentLocation: Codable, Hashable, Sendable, DomainValidatable {
         case textRange = "text_range"
     }
 }
+
+/// A deterministic Gregorian calendar date without time-zone semantics.
+public struct CalendarDate: Codable, Hashable, Sendable, Comparable, DomainValidatable {
+    public let year: UInt16
+    public let month: UInt8
+    public let day: UInt8
+
+    public init(year: UInt16, month: UInt8, day: UInt8) throws {
+        self.year = year
+        self.month = month
+        self.day = day
+        try validate()
+    }
+
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+        (lhs.year, lhs.month, lhs.day) < (rhs.year, rhs.month, rhs.day)
+    }
+
+    public func validationIssues() -> [ValidationIssue] {
+        guard year > 0, (1...12).contains(month) else {
+            return [
+                ValidationIssue(
+                    code: .invalidRange,
+                    path: "calendar_date",
+                    message: "A calendar date requires a positive year and a month from 1 through 12."
+                )
+            ]
+        }
+
+        let maximumDay: UInt8
+        switch month {
+        case 2:
+            let isLeapYear = year.isMultiple(of: 400)
+                || (year.isMultiple(of: 4) && !year.isMultiple(of: 100))
+            maximumDay = isLeapYear ? 29 : 28
+        case 4, 6, 9, 11:
+            maximumDay = 30
+        default:
+            maximumDay = 31
+        }
+
+        guard (1...maximumDay).contains(day) else {
+            return [
+                ValidationIssue(
+                    code: .invalidRange,
+                    path: "calendar_date.day",
+                    message: "The day is outside the valid range for the Gregorian month."
+                )
+            ]
+        }
+        return []
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        year = try container.decode(UInt16.self, forKey: .year)
+        month = try container.decode(UInt8.self, forKey: .month)
+        day = try container.decode(UInt8.self, forKey: .day)
+        try validate()
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case year
+        case month
+        case day
+    }
+}
+
+/// A normalized two-letter country code used only by country Actor identities.
+public struct CountryCode: Codable, Hashable, Sendable, Comparable, DomainValidatable {
+    public let value: String
+
+    public init(_ value: String) throws {
+        self.value = value.uppercased()
+        try validate()
+    }
+
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+        lhs.value < rhs.value
+    }
+
+    public func validationIssues() -> [ValidationIssue] {
+        let bytes = Array(value.utf8)
+        guard bytes.count == 2, bytes.allSatisfy({ (65...90).contains($0) }) else {
+            return [
+                ValidationIssue(
+                    code: .invalidFormat,
+                    path: "country_code",
+                    message: "A country code must contain exactly two ASCII letters."
+                )
+            ]
+        }
+        return []
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        value = try container.decode(String.self).uppercased()
+        try validate()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
+    }
+}

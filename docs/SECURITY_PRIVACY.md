@@ -1,8 +1,8 @@
 # Security and Privacy Baseline
 
-Status: Accepted policy baseline; enforcement is not implemented
+Status: Accepted policy baseline; Task 003A/003B domain enforcement implemented, runtime enforcement deferred
 Owner: Codex
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 Purpose: Define classification, routing, secret, logging, and trust-boundary
 requirements. Provider details belong in ADRs and later implementation tasks.
 
@@ -97,6 +97,18 @@ recording require direct confirmation appropriate to their risk.
 
 ## Current implementation status
 
-Task 002 establishes policy only. No credential, provider, network, logging,
-permission, entitlement, or telemetry implementation exists yet, so these
-controls are not marked as passing.
+Tasks 003A and 003B implement the storage-neutral classification and provenance
+contracts. Concrete objects fail closed on unsupported classification and
+provenance values; pure resolved-object checks require every exact envelope
+dependency to be supplied and reject derived objects that are less restrictive
+than any of them. Transcript track kind,
+translation source bytes, provider-neutral generation metadata, review state,
+and user confirmation remain explicit. Synthetic source text is preserved as
+untrusted data and is never interpreted as a control instruction by the
+domain layer.
+
+No credential, Keychain, provider-call, network, logging, permission,
+entitlement, or telemetry runtime exists yet. Cloud routing still requires the
+Task 005B application/provider gate; the meeting-level policy and recorded
+privacy route do not authorize an external call by themselves. Those runtime
+controls are therefore not marked as passing.

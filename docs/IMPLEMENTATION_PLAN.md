@@ -78,9 +78,9 @@ swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors
 The standard test command requires a complete, correctly selected Apple
 developer-tool installation. On the current machine, only Command Line Tools
 are selected. Their bundled Swift Testing framework is not added to the search
-path automatically and contains an incorrect interop-library rpath. Task 003A
-was therefore verified locally with the following environment-scoped command;
-these paths are not embedded in `Package.swift`:
+path automatically and contains an incorrect interop-library rpath. Tasks 003A
+and 003B were therefore verified locally with the following
+environment-scoped command; these paths are not embedded in `Package.swift`:
 
 ```sh
 MB_CLT_FRAMEWORKS=/Library/Developer/CommandLineTools/Library/Developer/Frameworks
@@ -100,5 +100,5 @@ swift test \
   -Xlinker "$MB_CLT_INTEROP"
 ```
 
-This command passed 40 tests in seven suites. Full Xcode project integration is
-not part of Task 003A and remains unverified.
+This command passed 86 tests in 13 suites for the Task 003B review set. Full
+Xcode project integration is not part of Task 003B and remains unverified.

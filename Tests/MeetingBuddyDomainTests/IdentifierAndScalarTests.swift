@@ -23,7 +23,7 @@ struct IdentifierAndScalarTests {
     }
 
     @Test
-    func fixedWidthScalarsRejectInvalidRanges() {
+    func fixedWidthScalarsRejectInvalidRanges() throws {
         #expect(throws: DomainValidationError.self) { try UTCInstant(millisecondsSinceUnixEpoch: -1) }
         #expect(throws: DomainValidationError.self) { try ConfidenceScore(millionths: 1_000_001) }
         #expect(throws: DomainValidationError.self) { try UTF8TextRange(startOffset: 0, length: 0) }
@@ -31,6 +31,10 @@ struct IdentifierAndScalarTests {
             try MediaTimeRange(startMilliseconds: 10, endMilliseconds: 10)
         }
         #expect(throws: DomainValidationError.self) { try DocumentLocation(pageNumber: 0) }
+        #expect(throws: DomainValidationError.self) { try CalendarDate(year: 2025, month: 2, day: 29) }
+        #expect(throws: DomainValidationError.self) { try CountryCode("X1") }
+        #expect(try CalendarDate(year: 2024, month: 2, day: 29).day == 29)
+        #expect(try CountryCode("xe").value == "XE")
     }
 
     @Test
@@ -52,6 +56,15 @@ struct IdentifierAndScalarTests {
                 DocumentLocation.self,
                 from: Data(#"{"section":" padded "}"#.utf8)
             )
+        }
+        #expect(throws: DomainValidationError.self) {
+            try JSONDecoder().decode(
+                CalendarDate.self,
+                from: Data(#"{"day":31,"month":4,"year":2026}"#.utf8)
+            )
+        }
+        #expect(throws: DomainValidationError.self) {
+            try JSONDecoder().decode(CountryCode.self, from: Data(#""USA""#.utf8))
         }
     }
 

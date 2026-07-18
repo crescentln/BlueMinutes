@@ -283,7 +283,7 @@ public struct EvidenceExcerpt: Codable, Hashable, Sendable, DomainValidatable {
 }
 
 /// EvidenceRef.v1 links an exact semantic revision to an exact typed location.
-public struct EvidenceRefV1: Codable, Hashable, Sendable, DomainValidatable {
+public struct EvidenceRefV1: SemanticRevisionContract {
     public let revision: RevisionEnvelope<EvidenceIDTag>
     public let location: EvidenceLocation
     public let excerpt: EvidenceExcerpt

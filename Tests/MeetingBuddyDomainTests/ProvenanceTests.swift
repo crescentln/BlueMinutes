@@ -152,5 +152,14 @@ struct ProvenanceTests {
         #expect(throws: DomainValidationError.self) {
             try JSONDecoder().decode(GenerationMetadata.self, from: unknownRoute)
         }
+
+        let missingTemplate = Data(
+            String(decoding: try CanonicalJSON.encode(valid), as: UTF8.self)
+                .replacingOccurrences(of: #","template_version":"v1""#, with: "")
+                .utf8
+        )
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(GenerationMetadata.self, from: missingTemplate)
+        }
     }
 }

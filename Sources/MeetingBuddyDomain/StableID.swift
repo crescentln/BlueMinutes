@@ -71,10 +71,25 @@ public enum EvidenceIDTag: LogicalObjectIDScope {
 public enum TranscriptSegmentIDTag: LogicalObjectIDScope {
     public static var semanticObjectType: SemanticObjectType { .transcriptSegment }
 }
+public enum TranslationSegmentIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .translationSegment }
+}
+public enum ActorIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .actor }
+}
+public enum SpeakingCapacityIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .speakingCapacity }
+}
+public enum SpeakerAssignmentIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .speakerAssignment }
+}
 public enum UserConfirmedNoteIDTag: LogicalObjectIDScope {
     public static var semanticObjectType: SemanticObjectType { .userConfirmedNote }
 }
 public enum StorageObjectIDTag: Sendable {}
+public enum AgendaItemIDTag: Sendable {}
+public enum BriefingTemplateIDTag: Sendable {}
+public enum WorkspaceIDTag: Sendable {}
 
 public typealias LogicalObjectID = StableID<LogicalObjectIDTag>
 public typealias RevisionID = StableID<RevisionIDTag>
@@ -82,8 +97,15 @@ public typealias MeetingID = StableID<MeetingIDTag>
 public typealias SourceAssetID = StableID<SourceAssetIDTag>
 public typealias EvidenceID = StableID<EvidenceIDTag>
 public typealias TranscriptSegmentID = StableID<TranscriptSegmentIDTag>
+public typealias TranslationSegmentID = StableID<TranslationSegmentIDTag>
+public typealias ActorID = StableID<ActorIDTag>
+public typealias SpeakingCapacityID = StableID<SpeakingCapacityIDTag>
+public typealias SpeakerAssignmentID = StableID<SpeakerAssignmentIDTag>
 public typealias UserConfirmedNoteID = StableID<UserConfirmedNoteIDTag>
 public typealias StorageObjectID = StableID<StorageObjectIDTag>
+public typealias AgendaItemID = StableID<AgendaItemIDTag>
+public typealias BriefingTemplateID = StableID<BriefingTemplateIDTag>
+public typealias WorkspaceID = StableID<WorkspaceIDTag>
 
 /// An exact semantic revision reference, never a bare logical identifier.
 public struct SemanticRevisionReference: Codable, Hashable, Sendable, Comparable, DomainValidatable {

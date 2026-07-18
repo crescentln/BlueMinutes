@@ -1,6 +1,6 @@
 # Domain Contract Baseline
 
-Status: Task 003A accepted
+Status: Task 003B completed pending user acceptance
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define semantic invariants and task ownership without reproducing the
@@ -31,7 +31,7 @@ Editing creates a new revision. Publication changes an active pointer rather
 than overwriting an earlier revision. Downstream data references exact
 revisions, not only logical IDs.
 
-## Implemented Task 003A contract
+## Implemented foundation
 
 `MeetingBuddyDomain` is a zero-dependency Swift 6 library. Its public values
 are immutable `Sendable` structs or enums. Object-specific logical IDs use
@@ -81,12 +81,12 @@ Two hash domains are explicit:
 - `RevisionEnvelope.semantic_content_hash` is the digest of canonical semantic
   revision content with the digest field itself omitted.
 
-`SourceAssetV1.calculatedSemanticContentHash()` and
-`EvidenceRefV1.calculatedSemanticContentHash()` calculate native SHA-256 over
-their frozen canonical semantic projections. Whenever a stored semantic hash
-is present, the concrete object validates it against the calculated value. A
+Every concrete Task 003A/003B semantic object calculates native SHA-256 over a
+frozen canonical semantic projection. Whenever a stored semantic hash is
+present, the concrete object validates it against the calculated value. A
 published revision requires a matching hash, publication timestamp, and valid
-validation state.
+validation state. Frozen-digest tests cover `SourceAssetV1`, `EvidenceRefV1`,
+and all six Task 003B input objects.
 
 The SourceAsset projection contains object type, schema, classification, exact
 dependency sets, meeting context, source/origin metadata, source-byte digest,
@@ -160,6 +160,80 @@ independently mutable input list. The recorded output schema must match the
 enclosing revision schema. Identifiers are bounded opaque values and cannot be
 filesystem paths; credentials and provider SDK types are not part of the
 domain contract.
+
+## Task 003B input-side contracts
+
+`MeetingProfileV1` provides AI-independent meeting intake: bounded meeting
+metadata, typed resolved or unresolved organization identity, deterministic
+agenda ordering, source/output languages, priority actors, a meeting-level
+cloud-processing policy, and explicit review/user-confirmation state. The
+relocatable workspace identifier is operational context and is deliberately
+outside the semantic hash.
+
+`TranscriptSegmentV1` preserves exact bounded source text, integer media time,
+detected language, confidence, review state, and a tagged provenance path to
+one exact SourceAsset revision. Original-speaker audio, simultaneous
+interpretation, translated audio, and explicitly unknown tracks are different
+cases; only the first can report `isOriginalVerbatim`.
+
+`TranslationSegmentV1` preserves translated text beside its exact source
+transcript revision and the SHA-256 of the source transcript's unmodified UTF-8
+bytes. Machine, human, interpretation-related, and user-edited translations
+remain typed. Machine output requires provider-neutral generation provenance;
+a user edit must supersede and retain the exact prior translation revision as
+an input.
+
+`ActorV1` keeps identity separate from meeting capacity. Its closed identity
+union represents people, countries, international organizations, formal
+groups, UN organs, the UN Secretariat, unidentified participants, and other
+explicit identities without coercing non-country actors into country fields.
+`SpeakingCapacityV1` then binds one exact speaker Actor revision to explicit
+representation relationships and a meeting role. `SpeakerAssignmentV1` binds
+exact transcript, Actor, capacity, and evidence revisions. Uncertain
+assignments must remain unconfirmed and in `needs_review`; confirmed
+assignments require a user-created, explicitly confirmed revision.
+
+`InputContractGraphValidation` performs pure checks that need resolved objects:
+exact-reference matching, meeting consistency, source-track kind and time
+bounds, source-text digest and language matching, actor/capacity consistency,
+and fail-closed classification inheritance. Classification checks require a
+validated `ResolvedDependencyClassification` for every exact envelope input,
+source-asset, and evidence revision; a missing dependency fails rather than
+silently lowering the result. The type-erased view is ephemeral validator
+input, not a persisted semantic object. These checks perform no I/O and are not
+a persistence or provider service.
+
+## Active revision and deterministic stale planning
+
+`ActivePublishedRevisionSelection` is a storage-neutral explicit pointer. The
+selector accepts exactly one matching concrete revision and requires that
+revision to be published, valid, and protected by its verified semantic hash.
+List order and timestamps never imply active state. A previously published
+revision may be reactivated; `supersedes_revision_id` records immutable edit
+lineage rather than every pointer move.
+
+`DependencyEdge` records exact upstream and downstream revision references and
+whether the relationship came from the input, source-asset, or evidence group.
+Tagged invalidation reasons retain the exact replaced or invalidated root.
+`DeterministicStalePlanner` is a side-effect-free planner: it validates an
+acyclic, duplicate-free graph, walks the transitive dependency closure in
+stable order, emits each affected revision once with a causal path and an
+explicit handling action, and rejects a replacement that depends on what it
+replaces. Initial publication and idempotent reselection produce an empty
+plan. Persistence, active-pointer integrity constraints, state mutation, and a
+full invalidation executor belong to Tasks 004A and later.
+
+## Task 003B Golden fixtures
+
+The test target contains exactly five minimal, project-authored synthetic
+fixtures: ordinary delegation intervention, reservation/qualification,
+uncertain speaker, interpretation versus original, and prepared China wording
+versus delivered wording. Every fixture declares synthetic ownership,
+third-party-source absence, reuse status, human-review status, and the limits of
+its simulated source descriptor. They contain no real meeting, person, media,
+license, or provider claim. Expected observations are limited to direct source
+text/provenance assertions; the China fixture explicitly forbids inferring a
+real-world attribution or policy change.
 
 ## Initial object sequence
 
@@ -238,13 +312,14 @@ fields, malformed structure, unknown closed union cases, and unsupported v1
 composite semantics fail deterministically.
 
 Compatibility promises are introduced only when backed by real supported
-versions and tests; Task 003A must not build a speculative general migration
-framework.
+versions and tests; the domain-contract tasks do not build a speculative
+general migration framework.
 
 ## Implementation status
 
-Task 003A implements only the first row of the object sequence in
-`Sources/MeetingBuddyDomain/`, with synthetic builders and tests under
-`Tests/MeetingBuddyDomainTests/`. There is no database schema, migration,
-filesystem resolver, media operation, provider, UI, or application service.
-Task 003B objects remain target contracts only.
+Task 003A is accepted. Task 003B adds the second row of the object sequence,
+storage-neutral dependency/active-selection/stale-plan values, pure
+cross-object checks, and synthetic Golden fixtures. It is complete in the
+working tree and awaits user acceptance. There is still no database schema,
+migration, filesystem resolver, media operation, provider call, UI,
+application service, stale-state executor, or briefing analysis.

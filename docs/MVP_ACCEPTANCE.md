@@ -1,6 +1,6 @@
 # MVP Acceptance Baseline
 
-Status: Task 003A contract gates verified; end-to-end MVP remains untested
+Status: Task 003B contract gates verified pending acceptance; end-to-end MVP remains untested
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define the acceptance boundary for the first local recorded-meeting
@@ -85,14 +85,22 @@ kept current in the execution ledger and implementation plan.
 
 ## Current status
 
-Task 003A verifies only the foundational semantic-object and revision
+Tasks 003A and 003B now verify the foundational and input-side semantic
 contracts: immutable values, exact revision references, fail-closed
 classification, deterministic validation, native semantic-hash verification,
-stable v1 serialization, realistic compatibility behavior, and domain
-boundary isolation. Its 40 synthetic tests
-pass.
+stable v1 serialization, provenance separation, explicit active-published
+selection, dependency edges, and deterministic transitive stale planning. The
+86 synthetic tests in 13 suites include exactly five clearly labeled Golden
+fixtures and pass with the documented environment-scoped CLT command.
 
-The end-to-end assertions above remain `NOT TESTED` or `NOT APPLICABLE` until
-their owning tasks are implemented. Task 003A does not establish persistence,
-stale propagation, provider routing, media, briefing, recovery, or user-facing
-MVP behavior.
+At the contract level, the evidence confirms that translation does not replace
+source text, interpretation cannot claim original wording, uncertain speakers
+remain unconfirmed, edits create new immutable revisions, and active upstream
+replacement yields stable causal stale marks without mutating history. It does
+not prove persistence or execute stale-state changes.
+
+The remaining end-to-end assertions stay `NOT TESTED` or `NOT APPLICABLE`
+until their owning tasks are implemented. Task 003B does not establish a
+database, repository integrity constraints, provider routing, media
+processing, briefing analysis, recovery, UI review, or user-facing MVP
+behavior.
