@@ -2,6 +2,7 @@ import MeetingBuddyDomain
 
 public enum MediaReviewSection: Hashable, Sendable {
     case intake
+    case transcript
 }
 
 public struct ClassificationChoice: Identifiable, Hashable, Sendable {

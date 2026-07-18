@@ -5,9 +5,10 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 enum SQLiteSchema {
-    static let currentVersion: UInt32 = 2
+    static let currentVersion: UInt32 = 3
     static let initialMigrationIdentifier = "001_initial_persistence"
     static let taskRuntimeMigrationIdentifier = "002_task_runtime"
+    static let transcriptCoverageMigrationIdentifier = "003_transcript_coverage"
     static let maximumSemanticPayloadBytes = 16 * 1_024 * 1_024
     static let maximumJobPayloadBytes = 1 * 1_024 * 1_024
 
@@ -820,8 +821,120 @@ enum SQLiteSchema {
     END;
     """
 
+    static let transcriptCoverageSchemaSQL = """
+    CREATE TABLE transcript_coverage_manifests (
+        manifest_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(manifest_id) = 36 AND lower(manifest_id) = manifest_id
+        ),
+        transcript_set_id TEXT NOT NULL CHECK (
+            length(transcript_set_id) = 36 AND lower(transcript_set_id) = transcript_set_id
+        ),
+        supersedes_manifest_id TEXT,
+        meeting_id TEXT NOT NULL CHECK (
+            length(meeting_id) = 36 AND lower(meeting_id) = meeting_id
+        ),
+        canonical_source_revision_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('incomplete', 'published')),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        content_hash_algorithm TEXT NOT NULL CHECK (content_hash_algorithm = 'sha256'),
+        content_hash_hex TEXT NOT NULL CHECK (
+            length(content_hash_hex) = 64 AND lower(content_hash_hex) = content_hash_hex
+        ),
+        canonical_payload BLOB NOT NULL,
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size > 0 AND payload_byte_size <= 16777216
+        ),
+        FOREIGN KEY (supersedes_manifest_id)
+            REFERENCES transcript_coverage_manifests(manifest_id),
+        FOREIGN KEY (canonical_source_revision_id)
+            REFERENCES semantic_revisions(revision_id),
+        CHECK (supersedes_manifest_id IS NULL OR supersedes_manifest_id != manifest_id)
+    );
+
+    CREATE INDEX transcript_coverage_by_meeting
+        ON transcript_coverage_manifests(meeting_id, created_at_ms, manifest_id);
+
+    CREATE TABLE active_transcript_manifests (
+        meeting_id TEXT PRIMARY KEY NOT NULL,
+        manifest_id TEXT NOT NULL UNIQUE,
+        pointer_version INTEGER NOT NULL CHECK (pointer_version > 0),
+        changed_at_ms INTEGER NOT NULL CHECK (changed_at_ms >= 0),
+        FOREIGN KEY (manifest_id) REFERENCES transcript_coverage_manifests(manifest_id)
+    );
+
+    CREATE TABLE transcript_manifest_events (
+        event_id TEXT PRIMARY KEY NOT NULL,
+        meeting_id TEXT NOT NULL,
+        previous_manifest_id TEXT,
+        replacement_manifest_id TEXT NOT NULL,
+        pointer_version INTEGER NOT NULL CHECK (pointer_version > 0),
+        changed_at_ms INTEGER NOT NULL CHECK (changed_at_ms >= 0),
+        FOREIGN KEY (previous_manifest_id)
+            REFERENCES transcript_coverage_manifests(manifest_id),
+        FOREIGN KEY (replacement_manifest_id)
+            REFERENCES transcript_coverage_manifests(manifest_id)
+    );
+
+    CREATE TRIGGER transcript_coverage_manifests_no_update
+    BEFORE UPDATE ON transcript_coverage_manifests
+    BEGIN
+        SELECT RAISE(ABORT, 'transcript coverage manifests are immutable');
+    END;
+
+    CREATE TRIGGER transcript_coverage_manifests_no_delete
+    BEFORE DELETE ON transcript_coverage_manifests
+    BEGIN
+        SELECT RAISE(ABORT, 'transcript coverage manifests are immutable');
+    END;
+
+    CREATE TRIGGER transcript_manifest_events_no_update
+    BEFORE UPDATE ON transcript_manifest_events
+    BEGIN
+        SELECT RAISE(ABORT, 'transcript manifest events are immutable');
+    END;
+
+    CREATE TRIGGER transcript_manifest_events_no_delete
+    BEFORE DELETE ON transcript_manifest_events
+    BEGIN
+        SELECT RAISE(ABORT, 'transcript manifest events are immutable');
+    END;
+
+    CREATE TRIGGER active_transcript_manifest_validate_insert
+    BEFORE INSERT ON active_transcript_manifests
+    WHEN NOT EXISTS (
+        SELECT 1 FROM transcript_coverage_manifests
+        WHERE manifest_id = NEW.manifest_id
+          AND meeting_id = NEW.meeting_id
+          AND status = 'published'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'active transcript manifest target is not publishable');
+    END;
+
+    CREATE TRIGGER active_transcript_manifest_validate_update
+    BEFORE UPDATE OF manifest_id ON active_transcript_manifests
+    WHEN NOT EXISTS (
+        SELECT 1 FROM transcript_coverage_manifests
+        WHERE manifest_id = NEW.manifest_id
+          AND meeting_id = NEW.meeting_id
+          AND status = 'published'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'active transcript manifest target is not publishable');
+    END;
+    """
+
     static var taskRuntimeChecksum: String {
         SHA256.hash(data: Data(taskRuntimeSchemaSQL.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static var transcriptCoverageChecksum: String {
+        SHA256.hash(data: Data(transcriptCoverageSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
     }
@@ -988,6 +1101,33 @@ enum SQLiteDatabaseBootstrap {
                 WHERE singleton = 1
                 """,
                 arguments: [
+                    2,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+        }
+        migrator.registerMigration(SQLiteSchema.transcriptCoverageMigrationIdentifier) { db in
+            try db.execute(sql: SQLiteSchema.transcriptCoverageSchemaSQL)
+            try db.execute(
+                sql: """
+                INSERT INTO schema_migrations(
+                    identifier, ordinal, checksum_sha256, applied_at_ms
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    SQLiteSchema.transcriptCoverageMigrationIdentifier,
+                    3,
+                    SQLiteSchema.transcriptCoverageChecksum,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+            try db.execute(
+                sql: """
+                UPDATE workspace_metadata
+                SET database_schema_version = ?, updated_at_ms = ?
+                WHERE singleton = 1
+                """,
+                arguments: [
                     SQLiteSchema.currentVersion,
                     migrationTimestamp.millisecondsSinceUnixEpoch
                 ]
@@ -1084,6 +1224,16 @@ enum SQLiteDatabaseBootstrap {
             guard taskRuntimeChecksum == SQLiteSchema.taskRuntimeChecksum else {
                 throw PersistenceContractError.migrationFailed(
                     "The task-runtime migration checksum does not match the accepted schema."
+                )
+            }
+            let transcriptCoverageChecksum = try String.fetchOne(
+                db,
+                sql: "SELECT checksum_sha256 FROM schema_migrations WHERE identifier = ?",
+                arguments: [SQLiteSchema.transcriptCoverageMigrationIdentifier]
+            )
+            guard transcriptCoverageChecksum == SQLiteSchema.transcriptCoverageChecksum else {
+                throw PersistenceContractError.migrationFailed(
+                    "The transcript-coverage migration checksum does not match the accepted schema."
                 )
             }
         }

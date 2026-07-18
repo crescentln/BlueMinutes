@@ -1,4 +1,5 @@
 import Foundation
+import MeetingBuddyAI
 import MeetingBuddyApplication
 import MeetingBuddyDomain
 import MeetingBuddyMedia
@@ -15,6 +16,10 @@ enum AppWorkflowError: LocalizedError {
     case sourceInspectionFailed
     case importFailed
     case jobUnavailable
+    case canonicalAudioRequired
+    case onDeviceModelUnavailable
+    case transcriptUnavailable
+    case reviewFailed
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +41,14 @@ enum AppWorkflowError: LocalizedError {
             "The source could not be copied, verified, and registered in the workspace."
         case .jobUnavailable:
             "The processing job is no longer available."
+        case .canonicalAudioRequired:
+            "Finish canonical local audio processing before starting transcription."
+        case .onDeviceModelUnavailable:
+            "The requested on-device model is unavailable. Use the manual local fallback or install the model in system settings."
+        case .transcriptUnavailable:
+            "No published transcript review is available for this meeting."
+        case .reviewFailed:
+            "The transcript review change failed without replacing accepted content."
         }
     }
 }
@@ -50,6 +63,8 @@ private final class WorkspaceRuntime: @unchecked Sendable {
     let intake: LocalMediaIntakeService
     let transientSources: TransientMediaSourceRegistry
     let manager: LocalTaskManager
+    let transcriptionProvider: (any TranscriptionProvider)?
+    let translationProvider: (any TranslationProvider)?
 
     init(descriptor: LocalWorkspaceDescriptor) throws {
         self.descriptor = descriptor
@@ -75,6 +90,26 @@ private final class WorkspaceRuntime: @unchecked Sendable {
             catalog: store,
             fileAccess: fileAccess
         )
+        var executors: [any TaskJobExecutor] = [intakeExecutor, canonicalExecutor]
+        if #available(macOS 26.0, *) {
+            let speech = AppleOnDeviceTranscriptionProvider()
+            let translation = AppleOnDeviceTranslationProvider()
+            transcriptionProvider = speech
+            translationProvider = translation
+            executors.append(
+                TranscriptPipelineJobExecutor(
+                    transcriptionProvider: speech,
+                    translationProvider: translation,
+                    processor: processor,
+                    catalog: store,
+                    fileAccess: fileAccess,
+                    repository: store
+                )
+            )
+        } else {
+            transcriptionProvider = nil
+            translationProvider = nil
+        }
         manager = try LocalTaskManager(
             repository: SQLiteJobRepository(store: store),
             temporaryStorage: LocalTaskTemporaryStorage(workspace: descriptor),
@@ -84,7 +119,7 @@ private final class WorkspaceRuntime: @unchecked Sendable {
             ),
             managedAssetRecovery: coordinator,
             maximumConcurrentJobs: 2,
-            executors: [intakeExecutor, canonicalExecutor]
+            executors: executors
         )
     }
 
@@ -314,6 +349,244 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         return MediaJobReview(record: try await runtime.manager.retry(jobID: jobID))
     }
 
+    func transcriptRoute(
+        canonicalJobID: JobID,
+        submission: TranscriptStartSubmission
+    ) async throws -> TranscriptRouteReview {
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        let speechInstalled = await runtime?.transcriptionProvider?.isModelInstalled(
+            for: submission.sourceLanguage
+        ) ?? false
+        let speechRequest = try routeRequest(
+            capability: .transcription,
+            classification: context.plan.dataClassification,
+            categories: [.canonicalAudio],
+            localModelAvailable: speechInstalled
+        )
+        let speechDecision = try ModelPolicyRouter().decide(speechRequest)
+        let translationDecision: ModelRouteDecision?
+        if let target = submission.targetLanguage {
+            let translationInstalled = await runtime?.translationProvider?.isModelInstalled(
+                    source: submission.sourceLanguage,
+                    target: target
+                ) ?? false
+            let installed = speechDecision.route == .appleOnDevice && translationInstalled
+            translationDecision = try ModelPolicyRouter().decide(
+                routeRequest(
+                    capability: .translation,
+                    classification: context.plan.dataClassification,
+                    categories: [.transcriptText],
+                    localModelAvailable: installed
+                )
+            )
+        } else {
+            translationDecision = nil
+        }
+        return TranscriptRouteReview(
+            transcription: speechDecision,
+            translation: translationDecision
+        )
+    }
+
+    func startTranscript(
+        canonicalJobID: JobID,
+        submission: TranscriptStartSubmission
+    ) async throws -> MediaJobReview {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        let route = try await transcriptRoute(
+            canonicalJobID: canonicalJobID,
+            submission: submission
+        )
+        guard route.isOnDeviceReady,
+              runtime.transcriptionProvider != nil,
+              submission.targetLanguage == nil || runtime.translationProvider != nil
+        else { throw AppWorkflowError.onDeviceModelUnavailable }
+        let plan = try TranscriptPipelineJobPlan(
+            meetingID: context.plan.meetingID,
+            canonicalSourceRevision: context.canonicalReference,
+            canonicalFrameCount: context.plan.expectedDurationFrames,
+            speechSourceKind: context.plan.speechSourceKind,
+            sourceLanguage: submission.sourceLanguage,
+            targetLanguage: submission.targetLanguage,
+            dataClassification: context.plan.dataClassification,
+            createdAt: try currentInstant(),
+            transcriptionRoute: route.transcription,
+            translationRoute: route.translation
+        )
+        let record = try await runtime.manager.enqueue(
+            TranscriptPipelineJobFactory().request(
+                plan: plan,
+                requestedBy: JobRequester("meetingbuddy-app")
+            )
+        )
+        return MediaJobReview(record: record)
+    }
+
+    func publishManualTranscript(
+        canonicalJobID: JobID,
+        submission: TranscriptStartSubmission,
+        transcriptText: String,
+        translatedText: String?,
+        confirmsCompleteCoverage: Bool
+    ) async throws -> TranscriptReviewBundle {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        guard confirmsCompleteCoverage else { throw AppWorkflowError.reviewFailed }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        let speechRoute = try ModelPolicyRouter().decide(
+            routeRequest(
+                capability: .transcription,
+                classification: context.plan.dataClassification,
+                categories: [.canonicalAudio],
+                localModelAvailable: false
+            )
+        )
+        let translationRoute = try submission.targetLanguage.map { _ in
+            try ModelPolicyRouter().decide(
+                routeRequest(
+                    capability: .translation,
+                    classification: context.plan.dataClassification,
+                    categories: [.transcriptText],
+                    localModelAvailable: false
+                )
+            )
+        }
+        let publication = try TranscriptSemanticFactory.manualPublication(
+            meetingID: context.plan.meetingID,
+            canonicalSource: context.canonicalReference,
+            canonicalFrameCount: context.plan.expectedDurationFrames,
+            speechSourceKind: context.plan.speechSourceKind,
+            sourceLanguage: submission.sourceLanguage,
+            transcriptText: transcriptText,
+            targetLanguage: submission.targetLanguage,
+            translatedText: translatedText,
+            confirmsCompleteCoverage: confirmsCompleteCoverage,
+            classification: context.plan.dataClassification,
+            transcriptionRoute: speechRoute,
+            translationRoute: translationRoute,
+            createdAt: try currentInstant()
+        )
+        try runtime.store.publishTranscript(
+            publication,
+            validatingInputRevisions: [context.canonicalReference]
+        )
+        guard let review = try runtime.store.activeTranscriptReview(
+            meetingID: context.plan.meetingID
+        ) else { throw AppWorkflowError.transcriptUnavailable }
+        return review
+    }
+
+    func transcriptReview(canonicalJobID: JobID) async throws -> TranscriptReviewBundle? {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        return try runtime.store.activeTranscriptReview(meetingID: context.plan.meetingID)
+    }
+
+    func correctTranscript(
+        canonicalJobID: JobID,
+        revisionID: RevisionID,
+        text: String
+    ) async throws -> TranscriptReviewBundle {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        guard let review = try runtime.store.activeTranscriptReview(meetingID: context.plan.meetingID),
+              let prior = review.transcriptSegments.first(where: {
+                  $0.revision.revisionID == revisionID
+              })
+        else { throw AppWorkflowError.transcriptUnavailable }
+        let changedAt = try currentInstant()
+        let correction = try TranscriptSemanticFactory.correctedTranscript(
+            prior: prior,
+            text: text,
+            changedAt: changedAt
+        )
+        let manifest = try TranscriptSemanticFactory.replacingTranscript(
+            in: review.manifest,
+            oldRevisionID: revisionID,
+            with: correction,
+            at: changedAt
+        )
+        try runtime.store.saveTranscriptCorrection(
+            correction,
+            replacing: revisionID,
+            updatedManifest: manifest,
+            changedAt: changedAt
+        )
+        guard let updated = try runtime.store.activeTranscriptReview(meetingID: context.plan.meetingID) else {
+            throw AppWorkflowError.reviewFailed
+        }
+        return updated
+    }
+
+    func correctTranslation(
+        canonicalJobID: JobID,
+        revisionID: RevisionID,
+        text: String
+    ) async throws -> TranscriptReviewBundle {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        guard let review = try runtime.store.activeTranscriptReview(meetingID: context.plan.meetingID),
+              let prior = review.translations.first(where: { $0.revision.revisionID == revisionID }),
+              let transcript = review.transcriptSegments.first(where: {
+                  $0.revision.revisionID == prior.sourceSegmentRevision.revisionID
+              })
+        else { throw AppWorkflowError.transcriptUnavailable }
+        let changedAt = try currentInstant()
+        let correction = try TranscriptSemanticFactory.correctedTranslation(
+            prior: prior,
+            sourceTranscript: transcript,
+            text: text,
+            changedAt: changedAt
+        )
+        let manifest = try TranscriptSemanticFactory.replacingTranslation(
+            in: review.manifest,
+            oldRevisionID: revisionID,
+            with: correction,
+            at: changedAt
+        )
+        try runtime.store.saveTranslationCorrection(
+            correction,
+            replacing: revisionID,
+            updatedManifest: manifest,
+            changedAt: changedAt
+        )
+        guard let updated = try runtime.store.activeTranscriptReview(meetingID: context.plan.meetingID) else {
+            throw AppWorkflowError.reviewFailed
+        }
+        return updated
+    }
+
+    func confirmSpeaker(
+        canonicalJobID: JobID,
+        transcriptRevisionID: RevisionID,
+        displayName: String
+    ) async throws -> TranscriptReviewBundle {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        guard let review = try runtime.store.activeTranscriptReview(meetingID: context.plan.meetingID),
+              let transcript = review.transcriptSegments.first(where: {
+                  $0.revision.revisionID == transcriptRevisionID
+              })
+        else { throw AppWorkflowError.transcriptUnavailable }
+        let changedAt = try currentInstant()
+        let confirmation = try TranscriptSemanticFactory.speakerConfirmation(
+            transcript: transcript,
+            displayName: displayName,
+            changedAt: changedAt
+        )
+        try runtime.store.publishSpeakerConfirmation(
+            actor: confirmation.0,
+            capacity: confirmation.1,
+            evidence: confirmation.2,
+            assignment: confirmation.3,
+            changedAt: changedAt
+        )
+        guard let updated = try runtime.store.activeTranscriptReview(meetingID: context.plan.meetingID) else {
+            throw AppWorkflowError.reviewFailed
+        }
+        return updated
+    }
+
     private func releasePendingSource() {
         if pendingSourceDidStartScope {
             pendingSourceURL?.stopAccessingSecurityScopedResource()
@@ -328,6 +601,40 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             millisecondsSinceUnixEpoch: Int64(
                 max(Date().timeIntervalSince1970 * 1_000, 0).rounded(.down)
             )
+        )
+    }
+
+    private func canonicalContext(jobID: JobID) async throws -> (
+        plan: CanonicalAudioJobPlan,
+        canonicalReference: SemanticRevisionReference
+    ) {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        guard let record = try await runtime.manager.job(id: jobID),
+              record.jobType == MediaJobTypes.canonicalAudio,
+              record.state == .succeeded,
+              record.outputRevisionIDs.count == 1,
+              let reference = record.outputRevisionIDs.first
+        else { throw AppWorkflowError.canonicalAudioRequired }
+        return (try CanonicalAudioJobPlan.decode(from: record.inputPayload), reference)
+    }
+
+    private func routeRequest(
+        capability: AIProcessingCapability,
+        classification: DataClassification,
+        categories: [ProviderDataCategory],
+        localModelAvailable: Bool
+    ) throws -> ModelRouteRequest {
+        try ModelRouteRequest(
+            capability: capability,
+            dataClassification: classification,
+            offlineMode: true,
+            organizationAllowsExternalProcessing: false,
+            deploymentEnvironment: .production,
+            destination: .localDevice,
+            retentionPolicy: .localWorkspaceOnly,
+            dataCategories: categories,
+            visibleUserAuthorization: false,
+            localModelAvailable: localModelAvailable
         )
     }
 

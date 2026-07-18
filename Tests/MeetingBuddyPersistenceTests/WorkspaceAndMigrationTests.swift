@@ -17,7 +17,8 @@ struct WorkspaceAndMigrationTests {
         #expect(
             store.migrationOutcome.appliedMigrations == [
                 SQLiteSchema.initialMigrationIdentifier,
-                SQLiteSchema.taskRuntimeMigrationIdentifier
+                SQLiteSchema.taskRuntimeMigrationIdentifier,
+                SQLiteSchema.transcriptCoverageMigrationIdentifier
             ]
         )
         #expect(store.migrationOutcome.rollbackAnchor == nil)
@@ -34,6 +35,9 @@ struct WorkspaceAndMigrationTests {
                 hasJobs: try db.tableExists("jobs"),
                 hasJobEvents: try db.tableExists("job_state_events"),
                 hasAssetOperations: try db.tableExists("managed_asset_operations")
+                    ,
+                hasTranscriptCoverage: try db.tableExists("transcript_coverage_manifests"),
+                hasActiveTranscript: try db.tableExists("active_transcript_manifests")
             )
         }
         #expect(databaseFacts.journalMode == "wal")
@@ -46,6 +50,8 @@ struct WorkspaceAndMigrationTests {
         #expect(databaseFacts.hasJobs)
         #expect(databaseFacts.hasJobEvents)
         #expect(databaseFacts.hasAssetOperations)
+        #expect(databaseFacts.hasTranscriptCoverage)
+        #expect(databaseFacts.hasActiveTranscript)
 
         let rootMode = try posixMode(at: workspace.root)
         let manifestMode = try posixMode(at: workspace.descriptor.layout.workspaceManifest)
@@ -59,7 +65,8 @@ struct WorkspaceAndMigrationTests {
         #expect(
             reopened.migrationOutcome.appliedMigrations == [
                 SQLiteSchema.initialMigrationIdentifier,
-                SQLiteSchema.taskRuntimeMigrationIdentifier
+                SQLiteSchema.taskRuntimeMigrationIdentifier,
+                SQLiteSchema.transcriptCoverageMigrationIdentifier
             ]
         )
         #expect(reopened.migrationOutcome.rollbackAnchor == nil)
@@ -81,7 +88,8 @@ struct WorkspaceAndMigrationTests {
         #expect(
             migrated.migrationOutcome.appliedMigrations == [
                 SQLiteSchema.initialMigrationIdentifier,
-                SQLiteSchema.taskRuntimeMigrationIdentifier
+                SQLiteSchema.taskRuntimeMigrationIdentifier,
+                SQLiteSchema.transcriptCoverageMigrationIdentifier
             ]
         )
         try migrated.close()
@@ -144,11 +152,12 @@ struct WorkspaceAndMigrationTests {
             workspace: workspace.descriptor,
             migrationTimestamp: PersistenceFixtures.publishedAt
         )
-        #expect(migrated.migrationOutcome.schemaVersion == 2)
+        #expect(migrated.migrationOutcome.schemaVersion == 3)
         #expect(
             migrated.migrationOutcome.appliedMigrations == [
                 SQLiteSchema.initialMigrationIdentifier,
-                SQLiteSchema.taskRuntimeMigrationIdentifier
+                SQLiteSchema.taskRuntimeMigrationIdentifier,
+                SQLiteSchema.transcriptCoverageMigrationIdentifier
             ]
         )
         let rollbackAnchor = try #require(migrated.migrationOutcome.rollbackAnchor)
@@ -178,6 +187,61 @@ struct WorkspaceAndMigrationTests {
         #expect(!backupFacts.hasJobs)
         #expect(backupFacts.quickCheck == "ok")
         try backup.close()
+    }
+
+    @Test
+    func migratesAcceptedVersionTwoWithoutChangingPriorRows() throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "accepted-v2")
+        defer { workspace.cleanup() }
+        let queue = try DatabaseQueue(path: workspace.descriptor.layout.databaseFile.path)
+        let migrator = SQLiteDatabaseBootstrap.makeMigrator(
+            workspaceID: workspace.descriptor.manifest.workspaceID,
+            migrationTimestamp: PersistenceFixtures.createdAt,
+            additionalMigrations: []
+        )
+        try migrator.migrate(queue, upTo: SQLiteSchema.taskRuntimeMigrationIdentifier)
+        let canary = Data("accepted-v2-canary".utf8)
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO jobs(
+                    job_id, job_type, meeting_id, state, created_at_ms,
+                    started_at_ms, finished_at_ms, retry_count,
+                    maximum_retry_count, record_version, idempotency_key,
+                    temporary_directory, disk_budget_bytes_decimal,
+                    privacy_route, data_classification, resume_capability,
+                    record_payload, record_sha256, record_byte_size
+                ) VALUES (
+                    '50000000-0000-0000-0000-000000000001', 'v2-canary', NULL,
+                    'queued', ?, NULL, NULL, 0, 0, 1, ?,
+                    '.tasks/50000000-0000-0000-0000-000000000001',
+                    '1024', 'local_only', 'internal', 'restart_only', ?, ?, ?
+                )
+                """,
+                arguments: [
+                    PersistenceFixtures.createdAt.millisecondsSinceUnixEpoch,
+                    String(repeating: "a", count: 64), canary,
+                    SQLitePayloadCodec.sha256(canary), canary.count
+                ]
+            )
+        }
+        try queue.close()
+
+        let migrated = try SQLitePersistenceStore(
+            workspace: workspace.descriptor,
+            migrationTimestamp: PersistenceFixtures.publishedAt
+        )
+        #expect(migrated.migrationOutcome.schemaVersion == 3)
+        let preserved: Data? = try migrated.databasePool.read { db in
+            try Data.fetchOne(
+                db,
+                sql: "SELECT record_payload FROM jobs WHERE job_type = 'v2-canary'"
+            )
+        }
+        #expect(preserved == canary)
+        let anchor = try #require(migrated.migrationOutcome.rollbackAnchor)
+        #expect(anchor.sourceSchemaVersion == 2)
+        try migrated.close()
     }
 
     @Test

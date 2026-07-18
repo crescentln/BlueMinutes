@@ -61,6 +61,9 @@ public struct MediaJobReview: Hashable, Sendable {
     public let safeFailureSummary: String?
     public let canCancel: Bool
     public let canRetry: Bool
+    public let outputRevisionIDs: [SemanticRevisionReference]
+    public let privacyRoute: PrivacyRoute
+    public let providerUsage: [ProviderUsageMetadata]
 
     public init(record: JobRecord) {
         jobID = record.jobID
@@ -75,12 +78,44 @@ public struct MediaJobReview: Hashable, Sendable {
             || record.state == .interrupted)
             && record.retryCount < record.maximumRetryCount
             && (record.state == .cancelled || record.errorRecord?.retryable == true)
+        outputRevisionIDs = record.outputRevisionIDs
+        privacyRoute = record.privacyRoute
+        providerUsage = record.providerUsage
     }
 
     public var progressFraction: Double {
         guard totalUnitCount > 0 else { return 0 }
         return Double(completedUnitCount) / Double(totalUnitCount)
     }
+}
+
+public struct TranscriptRouteReview: Hashable, Sendable {
+    public let transcription: ModelRouteDecision
+    public let translation: ModelRouteDecision?
+
+    public init(transcription: ModelRouteDecision, translation: ModelRouteDecision?) {
+        self.transcription = transcription
+        self.translation = translation
+    }
+
+    public var isOnDeviceReady: Bool {
+        transcription.route == .appleOnDevice
+            && (translation?.route == .appleOnDevice || translation == nil)
+    }
+}
+
+public struct TranscriptStartSubmission: Sendable {
+    public let sourceLanguage: LanguageTag
+    public let targetLanguage: LanguageTag?
+
+    public init(sourceLanguage: LanguageTag, targetLanguage: LanguageTag?) {
+        self.sourceLanguage = sourceLanguage
+        self.targetLanguage = targetLanguage
+    }
+}
+
+public enum TranscriptWorkflowError: Error, Sendable {
+    case unavailable
 }
 
 public struct MediaImportSubmission: Sendable {
@@ -116,4 +151,89 @@ public protocol MediaReviewWorkflow: AnyObject {
     func jobReview(jobID: JobID) async throws -> MediaJobReview
     func cancel(jobID: JobID) async throws -> MediaJobReview
     func retry(jobID: JobID) async throws -> MediaJobReview
+    func transcriptRoute(
+        canonicalJobID: JobID,
+        submission: TranscriptStartSubmission
+    ) async throws -> TranscriptRouteReview
+    func startTranscript(
+        canonicalJobID: JobID,
+        submission: TranscriptStartSubmission
+    ) async throws -> MediaJobReview
+    func publishManualTranscript(
+        canonicalJobID: JobID,
+        submission: TranscriptStartSubmission,
+        transcriptText: String,
+        translatedText: String?,
+        confirmsCompleteCoverage: Bool
+    ) async throws -> TranscriptReviewBundle
+    func transcriptReview(canonicalJobID: JobID) async throws -> TranscriptReviewBundle?
+    func correctTranscript(
+        canonicalJobID: JobID,
+        revisionID: RevisionID,
+        text: String
+    ) async throws -> TranscriptReviewBundle
+    func correctTranslation(
+        canonicalJobID: JobID,
+        revisionID: RevisionID,
+        text: String
+    ) async throws -> TranscriptReviewBundle
+    func confirmSpeaker(
+        canonicalJobID: JobID,
+        transcriptRevisionID: RevisionID,
+        displayName: String
+    ) async throws -> TranscriptReviewBundle
+}
+
+public extension MediaReviewWorkflow {
+    func transcriptRoute(
+        canonicalJobID: JobID,
+        submission: TranscriptStartSubmission
+    ) async throws -> TranscriptRouteReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func startTranscript(
+        canonicalJobID: JobID,
+        submission: TranscriptStartSubmission
+    ) async throws -> MediaJobReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func publishManualTranscript(
+        canonicalJobID: JobID,
+        submission: TranscriptStartSubmission,
+        transcriptText: String,
+        translatedText: String?,
+        confirmsCompleteCoverage: Bool
+    ) async throws -> TranscriptReviewBundle {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func transcriptReview(canonicalJobID: JobID) async throws -> TranscriptReviewBundle? {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func correctTranscript(
+        canonicalJobID: JobID,
+        revisionID: RevisionID,
+        text: String
+    ) async throws -> TranscriptReviewBundle {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func correctTranslation(
+        canonicalJobID: JobID,
+        revisionID: RevisionID,
+        text: String
+    ) async throws -> TranscriptReviewBundle {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func confirmSpeaker(
+        canonicalJobID: JobID,
+        transcriptRevisionID: RevisionID,
+        displayName: String
+    ) async throws -> TranscriptReviewBundle {
+        throw TranscriptWorkflowError.unavailable
+    }
 }

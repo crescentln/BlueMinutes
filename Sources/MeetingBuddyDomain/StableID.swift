@@ -90,6 +90,8 @@ public enum StorageObjectIDTag: Sendable {}
 public enum AgendaItemIDTag: Sendable {}
 public enum BriefingTemplateIDTag: Sendable {}
 public enum WorkspaceIDTag: Sendable {}
+public enum TranscriptSetIDTag: Sendable {}
+public enum TranscriptCoverageManifestIDTag: Sendable {}
 
 public typealias LogicalObjectID = StableID<LogicalObjectIDTag>
 public typealias RevisionID = StableID<RevisionIDTag>
@@ -106,6 +108,8 @@ public typealias StorageObjectID = StableID<StorageObjectIDTag>
 public typealias AgendaItemID = StableID<AgendaItemIDTag>
 public typealias BriefingTemplateID = StableID<BriefingTemplateIDTag>
 public typealias WorkspaceID = StableID<WorkspaceIDTag>
+public typealias TranscriptSetID = StableID<TranscriptSetIDTag>
+public typealias TranscriptCoverageManifestID = StableID<TranscriptCoverageManifestIDTag>
 
 /// An exact semantic revision reference, never a bare logical identifier.
 public struct SemanticRevisionReference: Codable, Hashable, Sendable, Comparable, DomainValidatable {

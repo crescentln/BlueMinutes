@@ -28,6 +28,9 @@ public struct MeetingBuddyRootView: View {
                 Section("Workflow") {
                     Label("Local Media", systemImage: "waveform")
                         .tag(MediaReviewSection.intake)
+                    Label("Transcript Review", systemImage: "text.bubble")
+                        .tag(MediaReviewSection.transcript)
+                        .disabled(store.job?.state != .succeeded)
                 }
             }
             .navigationTitle("MeetingBuddy")
@@ -37,12 +40,21 @@ public struct MeetingBuddyRootView: View {
                 if store.workspace == nil {
                     workspaceOnboarding
                 } else {
-                    intakeView
+                    switch store.selectedSection ?? .intake {
+                    case .intake:
+                        intakeView
+                    case .transcript:
+                        TranscriptReviewView(store: store)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
-            .navigationTitle("Local Media Intake")
+            .navigationTitle(
+                store.selectedSection == .transcript
+                    ? "Transcript Review"
+                    : "Local Media Intake"
+            )
             .toolbar {
                 if store.isWorking {
                     ProgressView()
@@ -53,6 +65,13 @@ public struct MeetingBuddyRootView: View {
         .frame(minWidth: 860, minHeight: 600)
         .task {
             await store.restoreWorkspace()
+        }
+        .onChange(of: store.selectedSection) { _, section in
+            guard section == .transcript else { return }
+            Task {
+                await store.loadTranscriptReview()
+                await store.refreshTranscriptRoute()
+            }
         }
         .fileImporter(
             isPresented: $showFileImporter,

@@ -155,7 +155,7 @@ struct ActiveRevisionAndStalePlanTests {
     }
 
     @Test
-    func stalePlannerRejectsCyclesDuplicatesAndReplacementDependingOnOld() throws {
+    func stalePlannerRejectsCyclesDuplicatesAndIndirectReplacementDependencies() throws {
         let change = try meetingChange()
         let old = try #require(change.previous)
         let transcript = try Task003BFixtures.reference(
@@ -182,8 +182,22 @@ struct ActiveRevisionAndStalePlanTests {
             downstreamRevision: change.replacement,
             role: .input
         )
+        let lineagePlan = try DeterministicStalePlanner.plan(
+            for: change,
+            dependencyEdges: [replacementEdge]
+        )
+        #expect(lineagePlan.marks.isEmpty)
+
+        let indirectReplacementEdge = try DependencyEdge(
+            upstreamRevision: transcript,
+            downstreamRevision: change.replacement,
+            role: .input
+        )
         #expect(throws: DomainValidationError.self) {
-            try DeterministicStalePlanner.plan(for: change, dependencyEdges: [replacementEdge])
+            try DeterministicStalePlanner.plan(
+                for: change,
+                dependencyEdges: [first, indirectReplacementEdge]
+            )
         }
     }
 

@@ -543,6 +543,18 @@ public enum DeterministicStalePlanner {
 
         var adjacency: [SemanticRevisionReference: [DependencyEdge]] = [:]
         for edge in dependencyEdges.sorted() {
+            // A correction revision may retain its exact prior revision as a
+            // lineage input. That direct same-object edge proves provenance;
+            // it is not a downstream product to invalidate during activation.
+            if let replacement = invalidation.replacementRevision,
+               edge.role == .input,
+               edge.upstreamRevision == invalidation.rootRevision,
+               edge.downstreamRevision == replacement,
+               edge.upstreamRevision.objectType == edge.downstreamRevision.objectType,
+               edge.upstreamRevision.logicalID == edge.downstreamRevision.logicalID
+            {
+                continue
+            }
             adjacency[edge.upstreamRevision, default: []].append(edge)
         }
         let actions = Dictionary(uniqueKeysWithValues: handlingPolicies.map { ($0.revision, $0.action) })

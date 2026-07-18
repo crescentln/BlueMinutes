@@ -29,6 +29,10 @@ let package = Package(
             targets: ["MeetingBuddyMedia"]
         ),
         .library(
+            name: "MeetingBuddyAI",
+            targets: ["MeetingBuddyAI"]
+        ),
+        .library(
             name: "MeetingBuddyFeatures",
             targets: ["MeetingBuddyFeatures"]
         ),
@@ -74,6 +78,14 @@ let package = Package(
             ]
         ),
         .target(
+            name: "MeetingBuddyAI",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain",
+                "MeetingBuddyMedia"
+            ]
+        ),
+        .target(
             name: "MeetingBuddyFeatures",
             dependencies: [
                 "MeetingBuddyApplication",
@@ -86,6 +98,7 @@ let package = Package(
                 "MeetingBuddyApplication",
                 "MeetingBuddyDomain",
                 "MeetingBuddyFeatures",
+                "MeetingBuddyAI",
                 "MeetingBuddyMedia",
                 "MeetingBuddyPersistence",
                 "MeetingBuddyTasks"
@@ -117,6 +130,18 @@ let package = Package(
         .testTarget(
             name: "MeetingBuddyMediaTests",
             dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain",
+                "MeetingBuddyMedia",
+                "MeetingBuddyPersistence",
+                "MeetingBuddyTasks",
+                .product(name: "GRDB", package: "GRDB.swift")
+            ]
+        ),
+        .testTarget(
+            name: "MeetingBuddyAITests",
+            dependencies: [
+                "MeetingBuddyAI",
                 "MeetingBuddyApplication",
                 "MeetingBuddyDomain",
                 "MeetingBuddyMedia",
