@@ -1,6 +1,6 @@
 # Domain Contract Baseline
 
-Status: Task 003B completed pending user acceptance
+Status: Task 004A persistence realization accepted
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define semantic invariants and task ownership without reproducing the
@@ -68,9 +68,9 @@ representation does not depend on caller or JSON order. All three dependency
 groups reject a reference to the enclosing revision itself.
 
 The v1 lifecycle vocabulary is deliberately limited to `draft` and
-`published`. Supersession is represented by a new immutable revision and, in a
-later persistence task, an active-revision pointer; this contract provides no
-in-place publish, supersede, or update API.
+`published`. Supersession is represented by a new immutable revision and an
+explicit active-revision pointer; this contract provides no in-place publish,
+supersede, or update API.
 
 ## Hash domains
 
@@ -105,8 +105,8 @@ origin kinds, optional structurally safe HTTPS source reference, opaque
 managed-storage reference, source-byte digest, MIME type, byte size, language,
 acquisition metadata, retention class, and optional media provenance.
 
-The storage reference contains only a typed UUID that a future Storage Service
-may resolve. It cannot represent an absolute path, relative path, home
+The storage reference contains only a typed UUID that the Storage Service
+resolves. It cannot represent an absolute path, relative path, home
 expansion, file URL, or traversal string. HTTPS validation is structural only;
 domain allowlists, redirects, content limits, and SSRF defenses remain the
 responsibility of the later network-source adapter.
@@ -219,9 +219,46 @@ Tagged invalidation reasons retain the exact replaced or invalidated root.
 acyclic, duplicate-free graph, walks the transitive dependency closure in
 stable order, emits each affected revision once with a causal path and an
 explicit handling action, and rejects a replacement that depends on what it
-replaces. Initial publication and idempotent reselection produce an empty
-plan. Persistence, active-pointer integrity constraints, state mutation, and a
-full invalidation executor belong to Tasks 004A and later.
+replaces. Initial publication and idempotent reselection produce an empty plan.
+Task 004A now persists pointer changes, exact dependency edges, stale events,
+and current stale state atomically. The planner remains pure; recomputation and
+the full invalidation executor belong to later tasks.
+
+## Task 004A persistence realization
+
+`MeetingBuddyApplication` defines storage-neutral repository, workspace,
+storage, managed-file, active-state, and recovery ports. It depends only on the
+domain module and exposes neither SQL/GRDB records nor an unrestricted
+workspace layout to providers.
+
+`MeetingBuddyPersistence` stores each supported concrete object as the exact
+validated canonical JSON bytes plus a separate SHA-256 of those bytes and
+indexed envelope metadata. The persistence digest is intentionally distinct
+from `semantic_content_hash`: the latter verifies semantic meaning under
+each object's frozen projection, while the former detects any stored-payload
+byte change. Fetch revalidates the digest, canonical bytes, concrete object,
+and normalized metadata.
+
+Insertion is byte-idempotent and append-only. Reusing a revision ID for
+different bytes fails. SQL triggers reject revision and dependency update or
+deletion. Dependencies are derived from the envelope rather than accepted as a
+caller-supplied graph. Exact unresolved dependencies are permitted only for a
+non-valid draft, which safely accommodates the accepted
+`user_confirmed_note` evidence location before a concrete note contract exists;
+valid, published, and active revisions require every upstream revision to be
+resolved.
+
+The active-pointer repository enforces one row per object type/logical ID,
+requires a current published/valid/hash-verified exact revision, and uses an
+expected-current compare-and-set. Pointer event, pointer move, deterministic
+stale marks, and currency-state writes share one SQLite transaction. Historical
+revision payloads remain unchanged, and stale active state is returned
+explicitly rather than silently presented as current.
+
+Managed source files remain outside SQLite. A `SourceAssetV1` with an opaque
+storage reference can be persisted only when active managed metadata matches
+its meeting, byte hash, byte size, classification, and retention. SQLite stores
+only that metadata and canonical semantic payloads, never source-file bytes.
 
 ## Task 003B Golden fixtures
 
@@ -317,9 +354,8 @@ general migration framework.
 
 ## Implementation status
 
-Task 003A is accepted. Task 003B adds the second row of the object sequence,
-storage-neutral dependency/active-selection/stale-plan values, pure
-cross-object checks, and synthetic Golden fixtures. It is complete in the
-working tree and awaits user acceptance. There is still no database schema,
-migration, filesystem resolver, media operation, provider call, UI,
-application service, stale-state executor, or briefing analysis.
+Tasks 003A, 003B, and 004A are accepted. Task 004A realizes their persistence
+contract behind separate application and concrete SQLite/filesystem modules.
+There is still no application executable,
+Task Manager, media conversion, provider call, UI, stale recomputation
+executor, or briefing analysis.

@@ -1,6 +1,6 @@
 # MVP Acceptance Baseline
 
-Status: Task 003B contract gates verified pending acceptance; end-to-end MVP remains untested
+Status: Task 004A persistence gates accepted; end-to-end MVP remains untested
 Owner: Codex
 Last updated: 2026-07-18
 Purpose: Define the acceptance boundary for the first local recorded-meeting
@@ -85,22 +85,34 @@ kept current in the execution ledger and implementation plan.
 
 ## Current status
 
-Tasks 003A and 003B now verify the foundational and input-side semantic
-contracts: immutable values, exact revision references, fail-closed
+Tasks 003A and 003B verify the foundational and input-side semantic contracts:
+immutable values, exact revision references, fail-closed
 classification, deterministic validation, native semantic-hash verification,
 stable v1 serialization, provenance separation, explicit active-published
-selection, dependency edges, and deterministic transitive stale planning. The
-86 synthetic tests in 13 suites include exactly five clearly labeled Golden
-fixtures and pass with the documented environment-scoped CLT command.
+selection, dependency edges, and deterministic transitive stale planning.
 
-At the contract level, the evidence confirms that translation does not replace
+Task 004A adds repository-backed exact canonical revisions, one active pointer
+per logical object, optimistic pointer changes, persisted exact dependency
+edges/stale events/current state, managed source-file hash and size bindings,
+private Workspace/Trash services, ordered SQLite migration with online rollback
+anchors, and integrity-checked recovery artifacts. The recovery SQLite backup is
+authoritative; semantic JSONL is explicitly export-only.
+
+The 105 synthetic tests in 17 suites include exactly five clearly labeled
+Golden fixtures and 19 disposable persistence integration tests, and pass with
+the documented environment-scoped CLT command. No test opened or migrated a
+real user workspace.
+
+At the contract and persistence levels, the evidence confirms that translation does not replace
 source text, interpretation cannot claim original wording, uncertain speakers
 remain unconfirmed, edits create new immutable revisions, and active upstream
-replacement yields stable causal stale marks without mutating history. It does
-not prove persistence or execute stale-state changes.
+replacement yields stable causal stale marks without mutating history. Injected
+failures prove that a pointer change and its stale-state writes roll back
+together, while close/reopen tests prove retained state.
 
 The remaining end-to-end assertions stay `NOT TESTED` or `NOT APPLICABLE`
-until their owning tasks are implemented. Task 003B does not establish a
-database, repository integrity constraints, provider routing, media
-processing, briefing analysis, recovery, UI review, or user-facing MVP
-behavior.
+until their owning tasks are implemented. Task 004A does not establish a Task
+Manager, filesystem/database crash reconciliation after process termination,
+provider routing, media processing, briefing analysis, UI review, or a
+user-facing MVP behavior. Recovery restore UX and JSONL-only reconstruction are
+also not claimed.

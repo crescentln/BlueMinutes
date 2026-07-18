@@ -2,7 +2,7 @@
 
 Status: Active index
 Owner: Codex
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 Purpose: Index binding decisions and visible open questions. ADRs do not grant
 task authorization.
 
@@ -33,7 +33,6 @@ task authorization.
 | Decision | Must be resolved before |
 | --- | --- |
 | Final distribution channel, sandbox, bookmarks, and app-update path | Task 005A implementation plan |
-| Concrete SQLite Swift adapter and dependency review | Task 004A |
 | Canonical audio representation, timeline tolerance, and chunk parameters | Task 005A |
 | Production transcription and translation routes | Task 005B |
 | Production inference and optional independent review routes | Task 006A/006B |

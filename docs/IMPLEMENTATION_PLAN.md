@@ -2,7 +2,7 @@
 
 Status: Accepted task map; each task still requires explicit authorization
 Owner: Codex
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 Purpose: Map repository work to controller tasks without granting autonomous
 phase progression or duplicating detailed task specifications.
 
@@ -47,6 +47,8 @@ Codex must stop after every task report.
 - Before 003B: each of the five Golden fixtures is synthetic or has recorded
   license and source provenance.
 - Before 004A: persistence dependency note and migration test strategy.
+  Resolved by the exact GRDB 7.11.1 pin, `docs/dependencies/GRDB.md`, and the
+  disposable on-disk migration harness.
 - Before 005A: distribution/sandbox/file-access direction and media acceptance
   parameters.
 - Before 005B: approved transcription and translation routes plus cloud policy.
@@ -65,7 +67,7 @@ authorized.
 
 ## Build-command status
 
-Task 003A introduces the first deterministic package commands:
+Task 003A introduced the first deterministic package commands:
 
 ```sh
 swift package dump-package
@@ -100,5 +102,14 @@ swift test \
   -Xlinker "$MB_CLT_INTEROP"
 ```
 
-This command passed 86 tests in 13 suites for the Task 003B review set. Full
-Xcode project integration is not part of Task 003B and remains unverified.
+This command passes 105 tests in 17 suites for the accepted Task 004A
+implementation. The 19
+Task 004A integration tests use unique disposable on-disk workspaces and cover
+workspace identity, path and symlink guards; missing, empty, current, foreign,
+and unknown-future database states; injected migration rollback and portable
+backup; all eight repository contracts; immutable revisions; recursive
+current-input publication gates; active/stale transaction atomicity across
+restart; recovery inventory and tamper detection;
+no asset bytes in SQLite; and failure-injected, compensated, collision-safe
+Trash transitions.
+Full Xcode project integration remains unverified.

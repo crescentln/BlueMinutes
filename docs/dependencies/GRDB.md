@@ -1,0 +1,106 @@
+# GRDB Dependency Note
+
+Status: Approved for Task 004A
+Owner: Codex
+Decision date: 2026-07-18
+Pinned version: 7.11.1
+
+## Purpose
+
+GRDB supplies the narrow Swift adapter over the system SQLite library for
+ordered migrations, transactions, foreign-key enforcement, safe statement
+binding, database backup, and serialized/concurrent database access. It is
+used only by `MeetingBuddyPersistence`; domain and application contracts do
+not import GRDB types.
+
+## Native and existing alternatives
+
+The active macOS SDK exposes SQLite 3.51.0 through `SQLite3`, so a native C API
+adapter is technically possible and would add no source dependency. It would,
+however, require MeetingBuddy to own statement lifetime, value binding,
+transaction nesting, migration bookkeeping, backup integration, error
+translation, and Swift 6 concurrency isolation. Those are correctness-critical
+storage mechanisms rather than product-specific behavior.
+
+GRDB is preferred because it supplies those mechanisms while retaining SQLite
+as the database engine and keeping the adapter replaceable. No ORM record type
+is exposed outside the concrete persistence module.
+
+## Size and distribution impact
+
+- Swift Package Manager fetches the tagged GRDB source, increasing dependency
+  checkout and build-cache storage. Transfer and cache size vary by SwiftPM/Git
+  state and are not treated as shipped-size evidence.
+- The package links GRDB into the eventual application and uses the operating
+  system SQLite library. No app bundle exists yet, so shipped binary and bundle
+  size impact cannot be measured truthfully and remains unverified until an
+  application target exists.
+- GRDB 7.11.1 declares Swift tools 6.1 and macOS 10.15 or later. Task 004A
+  raises MeetingBuddy's package manifest from tools 6.0 to 6.1 so its declared
+  minimum matches the dependency; the current Swift 6.3.3 toolchain and
+  macOS 15 package baseline satisfy those requirements.
+- GRDB includes an Apple privacy manifest. It adds no network service, model,
+  executable, or credential handling.
+
+## Sandbox, signing, and build-network impact
+
+- GRDB is compiled source linked into the future app; it adds no helper
+  executable, runtime-loaded unsigned code, entitlement, daemon, or separate
+  signing identity.
+- It uses Apple's system SQLite library and does not itself broaden sandbox
+  filesystem authority. MeetingBuddy's eventual container/bookmark policy
+  remains the separate Task 005A decision.
+- SwiftPM requires network access to resolve/fetch the exact source pin during
+  dependency acquisition. The built library performs no runtime network call.
+- Final code-signing, hardened-runtime, notarization, privacy-manifest merge,
+  license-notice packaging, and shipped-size results remain unverified until
+  an application bundle exists.
+
+## Maintenance and security history
+
+The project has been maintained since 2015. Version 7.11.1 is the current
+official release as of this decision and was released on 2026-06-18. The
+official repository showed active releases and no published repository
+security advisory at review time. Absence of a published advisory is not a
+guarantee that no vulnerability exists; dependency review remains part of
+Task 007 and release review.
+
+## License
+
+GRDB is MIT licensed. Distribution must preserve the license notice in the
+eventual application notices. There is no copyleft requirement.
+
+## Update strategy
+
+- Pin the exact reviewed release in `Package.swift` and commit
+  `Package.resolved` when the task is later accepted and committed.
+- Upgrade only in an authorized task with migration, repository, build, and
+  dependency review.
+- Do not enable SQLCipher, custom SQLite builds, or GRDB optional features
+  without a separate dependency and distribution decision.
+
+## Removal strategy
+
+`MeetingBuddyApplication` owns repository and storage ports. GRDB remains an
+implementation detail of `MeetingBuddyPersistence`, so another SQLite adapter
+can replace it without changing domain objects, provider boundaries, or UI
+contracts. SQL and migration behavior still require an explicit data migration
+and cannot be swapped by merely changing imports.
+
+## Validation plan
+
+- debug and release builds with Swift warnings treated as errors;
+- package dependency graph and exact resolved revision inspection;
+- clean database creation and idempotent reopen;
+- disposable prior-state and failed-migration rollback tests;
+- immutable revision, active-pointer, dependency, and stale-state integrity
+  tests;
+- backup open/restore verification;
+- scan that GRDB imports remain confined to the persistence module and its
+  tests.
+
+## Sources reviewed
+
+- <https://github.com/groue/GRDB.swift/releases/tag/v7.11.1>
+- <https://github.com/groue/GRDB.swift/blob/v7.11.1/Package.swift>
+- <https://github.com/groue/GRDB.swift/blob/v7.11.1/LICENSE>
