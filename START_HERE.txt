@@ -1,0 +1,41 @@
+MeetingBuddy — Codex Handoff Quick Start
+
+1. Put these two Markdown files in the MeetingBuddy repository root:
+   - MeetingBuddy_Codex_Master_Spec_v1.0.md
+   - MeetingBuddy_Codex_Stepwise_Controller_Prompt_v1.0.md
+
+2. Open the repository in Codex.
+
+3. For the first run, select GPT-5.6 Sol with max effort.
+
+4. Send this message to Codex:
+
+Read MeetingBuddy_Codex_Master_Spec_v1.0.md and
+MeetingBuddy_Codex_Stepwise_Controller_Prompt_v1.0.md in full.
+Follow the controller prompt as the execution protocol.
+Task 001 is the only currently authorized task.
+Begin Task 001 now, return the complete read-only audit report, and stop.
+
+5. After Task 001, review the report. To move forward, use:
+
+PROCEED TO TASK 002
+
+6. Thereafter, use the exact next eligible command printed by Codex, or natural Chinese equivalents. Useful commands include:
+
+STATUS
+SHOW DIFF
+SHOW RISKS
+EXPLAIN <topic>
+PROCEED TO TASK <id>
+REVISE TASK <id>: <instructions>
+ACCEPT TASK <id>
+ACCEPT AND COMMIT TASK <id>
+ACCEPT AND PROCEED TO TASK <next-id>
+PAUSE
+ABORT CURRENT TASK
+PREPARE ROLLBACK PLAN
+
+Important:
+- Do not tell Codex to “build the whole app.”
+- Do not authorize the next task until the current task report and tests are acceptable.
+- A normal question does not authorize file changes; the controller keeps Codex in discussion mode unless execution is clear.
