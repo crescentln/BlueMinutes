@@ -1,9 +1,9 @@
 # ADR-0013: Task 008A Capture and UN Web TV Boundary
 
-Status: Proposed; Task 008B remains blocked pending explicit user acceptance
+Status: Accepted for Task 008B implementation; Task 008B remains separately user-gated
 Date: 2026-07-19
 Decision owners: User, with Codex recommendations under Task 008A authorization
-Applies from: Task 008B only after acceptance
+Applies from: Task 008B once separately authorized
 Evidence: [Task 008A spike](../TASK_008A_CAPTURE_SPIKE.md)
 
 ## Context
@@ -25,9 +25,11 @@ dedicated copyright page says the footage is not public domain and requires UN
 authorization/licensing. Current public pages expose useful HTML metadata and a
 Kaltura client player, but no reviewed stable media/track API.
 
-## Proposed decision
+## Decision
 
-If the user accepts Task 008A, Task 008B is limited to the following decisions.
+On 2026-07-19, the user accepted D1-D5, including D3 as
+`METADATA_ONLY_NETWORK`. Task 008B is limited to the following boundaries and
+still requires a separate implementation command.
 
 ### 1. Separate adapters and authority
 
@@ -173,13 +175,13 @@ If the user accepts Task 008A, Task 008B is limited to the following decisions.
   storage, Task Manager ownership, immutable published revisions, and visible
   incomplete/failure state.
 
-### Recommended but user-decision-gated
+### Accepted for the Task 008B implementation boundary
 
 - the three bounded audio-only capture modes;
 - the least microphone/system-audio configuration changes;
 - schema 007 and the segment/checkpoint/manifest contract;
-- the exact-host metadata-only adapter and network-client entitlement, or the
-  stricter manual-metadata-only option.
+- the exact-host metadata-only adapter and network-client entitlement, with
+  mandatory no-outbound/manual fallback.
 
 ### Legal/rights-gated
 
@@ -199,7 +201,7 @@ If the user accepts Task 008A, Task 008B is limited to the following decisions.
 
 ## Consequences
 
-- The recommended capture path is native, audio-only, local, visible, and
+- The accepted capture path is native, audio-only, local, visible, and
   recoverable, but it adds sensitive TCC onboarding and an additive migration.
 - Separate tracks and an immutable manifest preserve evidentiary meaning at the
   cost of more files, state, and finalization work.
@@ -229,16 +231,17 @@ If the user accepts Task 008A, Task 008B is limited to the following decisions.
 - **Treat personal/internal use as automatically permitted:** resolves a legal
   uncertainty that the cited UN sources do not resolve for this product/use.
 
-## User decisions required
+## Accepted user decisions
 
-- **D1:** accept the bounded audio-only capture modes and explicit exclusions.
-- **D2:** accept the corresponding least entitlement/purpose-string surface.
-- **D3:** choose exact-host metadata-only network mode or manual-only mode.
-- **D4:** accept the default no-go for UN footage acquisition/recording absent
+- **D1:** accepted the bounded audio-only capture modes and explicit exclusions.
+- **D2:** accepted the corresponding least entitlement/purpose-string surface.
+- **D3:** accepted exact-host `METADATA_ONLY_NETWORK` mode with network-client
+  entitlement and mandatory no-outbound/manual fallback.
+- **D4:** accepted the default no-go for UN footage acquisition/recording absent
   documented permission and separate review.
-- **D5:** accept schema 007, five/six-second durability bounds, separate-track
+- **D5:** accepted schema 007, five/six-second durability bounds, separate-track
   provenance, manifest binding, and non-auto-active incomplete state.
 
-Until D1-D5 are explicitly resolved, this ADR remains Proposed and Task 008B is
-blocked. Acceptance of the ADR does not itself authorize Task 008B; the user
-must still issue the controller command separately.
+D1-D5 are resolved and this ADR is binding for Task 008B. Acceptance of the ADR
+does not itself authorize Task 008B; the user must still issue the controller
+command separately.

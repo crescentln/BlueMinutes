@@ -1,6 +1,6 @@
 # Task 008A UN Web TV and Live-Capture Spike
 
-Status: Completed pending explicit user acceptance
+Status: Accepted with decisions D1-D5 on 2026-07-19; Task 008B remains separately user-gated
 Date: 2026-07-19
 Scope: Research, architecture, policy boundaries, and executable test design only
 Rollback anchor: Git HEAD `75b11e202c9f10611aada76445f1e5eb2346c914`
@@ -10,7 +10,8 @@ Related decision: [ADR-0013](adr/ADR-0013-task-008a-capture-and-un-web-tv-bounda
 
 Task 008B has a technically viable, local-first audio-capture path, but it does
 not have a lawful or resilient basis for automatic UN Web TV media acquisition.
-The recommended MVP therefore keeps two adapters and two authority boundaries:
+The accepted Task 008B boundary therefore keeps two adapters and two authority
+boundaries:
 
 1. an audio-only native capture adapter for a microphone, one application
    explicitly selected in Apple's system picker, or both as separate tracks;
@@ -20,7 +21,7 @@ The recommended MVP therefore keeps two adapters and two authority boundaries:
 
 The existing local-file import remains the universal fallback. Capturing UN Web
 TV footage, extracting Kaltura media or language-track URLs, downloading media,
-and redistributing recordings are outside the recommended Task 008B boundary.
+and redistributing recordings are outside the accepted Task 008B boundary.
 UN's current dedicated copyright page says UN footage is not public domain and
 requires UN authorization and a licence agreement. Whether a particular local
 recording or internal machine-analysis use is permitted is a legal uncertainty,
@@ -33,8 +34,8 @@ recording, user workspace, or media asset was changed by this spike.
 
 - **Accepted baseline** means a binding earlier MeetingBuddy decision that this
   spike preserves; it does not require a new Task 008A choice.
-- **Recommended, user-decision-gated** means technically implementable but not
-  authorized for Task 008B until the user explicitly accepts it.
+- **Accepted Task 008B boundary** means the user accepted the capability and
+  constraints for a later separately authorized Task 008B implementation.
 - **Legal/rights-gated** means implementation or use remains disabled until the
   relevant rights are documented; a user acknowledgement alone is not proof of
   permission.
@@ -276,9 +277,9 @@ Task 008B should support only these mutually visible choices:
 
 | Mode | Source selection | Stored tracks | MVP disposition |
 | --- | --- | --- | --- |
-| Microphone only | User chooses an available microphone | One microphone track | Recommended, user-decision-gated |
-| One application only | User chooses exactly one application in Apple's system picker | One application-system-audio track | Recommended, user-decision-gated |
-| Application plus microphone | Same explicit application selection plus explicit microphone choice | Two independent synchronized tracks | Recommended, user-decision-gated |
+| Microphone only | User chooses an available microphone | One microphone track | Accepted Task 008B boundary |
+| One application only | User chooses exactly one application in Apple's system picker | One application-system-audio track | Accepted Task 008B boundary |
+| Application plus microphone | Same explicit application selection plus explicit microphone choice | Two independent synchronized tracks | Accepted Task 008B boundary |
 
 The app must not silently use the default microphone, capture all system audio,
 capture multiple applications, capture display/window pixels, persist a picker
@@ -292,10 +293,11 @@ legal permission. Organization policy may still deny capture.
 
 ### Permission and entitlement proposal
 
-The current app does not possess these capabilities. If the corresponding mode
-is accepted, Task 008B would need explicit approval for:
+The current app does not possess these capabilities. D2 and D3 accept the
+following least configuration surface for Task 008B once that task is
+separately authorized:
 
-| Capability | Proposed configuration | Purpose |
+| Capability | Accepted configuration boundary | Purpose |
 | --- | --- | --- |
 | Microphone | `com.apple.security.device.audio-input` and `NSMicrophoneUsageDescription` | Sandbox authority plus a truthful TCC purpose string |
 | Application/system audio | `NSAudioCaptureUsageDescription` | Explain system-audio capture to the platform/user |
@@ -557,7 +559,7 @@ must tolerate both retained and already-cleaned segments idempotently.
 | Cancel races with finalization | State-version compare-and-swap | A committed terminal result wins; cancel cannot demote completed data |
 | Repeated restart/recovery | Same terminal result and hashes | No duplicate segment, asset, event, or state transition |
 
-## Proposed adapter contracts
+## Accepted adapter contracts for Task 008B
 
 The application-facing ports are SDK-neutral. ScreenCaptureKit types stay
 inside the macOS adapter.
@@ -665,12 +667,12 @@ targeted user-authorized change that preserves unrelated dirty documents.
 | --- | --- | --- |
 | Existing user-selected local-file import | Accepted baseline | Must remain fully usable and unchanged |
 | Local-first/no-outbound operation | Accepted baseline | Capture and manual metadata work without network; telemetry remains disabled by default |
-| Visible audio-only microphone capture | Recommended, user-decision-gated | Direct action, mic permission/entitlement, explicit device, authority acknowledgement |
-| Visible audio-only one-application capture | Recommended, user-decision-gated | Apple system picker, audio output only, no persistent selection |
-| Simultaneous application plus mic | Recommended, user-decision-gated | Separate tracks/epochs; no authoritative mix |
-| Bounded checkpoint/recovery and schema 007 | Recommended, user-decision-gated | Five-second segments, six-second hard open bound, incomplete not auto-active |
-| One pasted UN Web TV page metadata read | Recommended, user-decision-gated | Exact host, explicit request, bounded HTML, reviewed candidates, manual fallback |
-| Network client entitlement | Recommended only if metadata read is accepted | No-outbound policy can disable use; no generic network surface |
+| Visible audio-only microphone capture | Accepted Task 008B boundary | Direct action, mic permission/entitlement, explicit device, authority acknowledgement |
+| Visible audio-only one-application capture | Accepted Task 008B boundary | Apple system picker, audio output only, no persistent selection |
+| Simultaneous application plus mic | Accepted Task 008B boundary | Separate tracks/epochs; no authoritative mix |
+| Bounded checkpoint/recovery and schema 007 | Accepted Task 008B boundary | Five-second segments, six-second hard open bound, incomplete not auto-active |
+| One pasted UN Web TV page metadata read | Accepted Task 008B boundary | Exact host, explicit request, bounded HTML, reviewed candidates, manual fallback |
+| Network client entitlement | Accepted for metadata-only mode | No-outbound policy can disable use; no generic network surface |
 | Recording/acquiring UN Web TV footage | Legal/rights-gated; default no-go | Requires documented UN/rightsholder authority for intended use and separate review |
 | Automatic Kaltura/player/media/playlist/track discovery | Rejected for Task 008B | No supported/licensed stable contract was established |
 | Media download, stream capture, credential/token/cookie use | Rejected for Task 008B | No bypass, authentication, downloader, or hidden acquisition |
@@ -813,36 +815,35 @@ Apple sources and current SDK references, accessed/inspected 2026-07-19:
 Official documentation and headers establish API surface, not MeetingBuddy's
 production correctness. The latter remains Task 008B test evidence.
 
-## Explicit decisions required before Task 008B
+## Accepted decisions for Task 008B
 
-The recommended decisions are:
+On 2026-07-19, the user explicitly accepted:
 
-- **D1 — Accept bounded general capture:** audio-only microphone, one
+- **D1 — Accepted bounded general capture:** audio-only microphone, one
   system-picker-selected application, or both as separate tracks; reject
   screen/video, all-system, multi-app, hidden/background, and silent source
   substitution.
-- **D2 — Accept least entitlements:** approve the microphone entitlement and
+- **D2 — Accepted least entitlements:** approve the microphone entitlement and
   microphone purpose string when microphone capture is selected, plus the
   system-audio purpose string for application audio; reject persistent content
   capture. Exact final wording remains part of Task 008B review.
-- **D3 — Choose UN metadata mode:** recommended option is an explicit,
-  metadata-only HTTPS request to the exact official host with the network
-  client entitlement and no-outbound/manual fallback. The stricter option is
-  manual metadata only with no new network entitlement.
-- **D4 — Accept the UN media no-go:** no UN footage download, stream/player
+- **D3 — Accepted `METADATA_ONLY_NETWORK`:** an explicit, metadata-only HTTPS
+  request to the exact official host with the network client entitlement and
+  no-outbound/manual fallback. No generic fetch or media route is authorized.
+- **D4 — Accepted the UN media no-go:** no UN footage download, stream/player
   discovery, browser-audio recording, or analysis acquisition without
   documented permission/licence and a separate evidence review; no
   redistribution in Task 008B.
-- **D5 — Accept durability/schema contract:** schema 007 operational tables,
+- **D5 — Accepted durability/schema contract:** schema 007 operational tables,
   five-second CAF segments, six-second maximum open span, bounded checkpoint,
   separate-track provenance, immutable manifest binding, and incomplete data
   retained but not automatically activated.
 
-Task 008B may implement only the subset explicitly accepted by the user in a
-separate authorization command.
+All five boundaries are accepted. Task 008B may implement only these accepted
+boundaries and remains not started until a separate authorization command.
 
 ## Stop condition
 
 Task 008A stops here. No Task 008B implementation has begun.
 
-**BLOCKED: USER DECISION REQUIRED BEFORE TASK 008B**
+**NEXT ELIGIBLE COMMAND: PROCEED TO TASK 008B**
