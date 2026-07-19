@@ -352,6 +352,218 @@ struct RecoveryAndTrashTests {
     }
 
     @Test
+    func storageReportEnforcesRetentionAndRecordsRealisticPermanentDeletion() throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "storage-dashboard-purge")
+        defer { workspace.cleanup() }
+        let store = try workspace.makeStore()
+        defer { try? store.close() }
+        try workspace.writeSource()
+        let coordinator = ManagedAssetCoordinator(storage: workspace.storage, metadata: store)
+        let active = try coordinator.importFile(
+            from: workspace.sourceFile,
+            meetingID: PersistenceFixtures.meetingID,
+            storageObjectID: PersistenceFixtures.storageObjectID,
+            fileExtension: try ManagedFileExtension("bin"),
+            createdAt: PersistenceFixtures.createdAt,
+            dataClassification: .sensitive,
+            retentionClass: .permanent
+        )
+        let trashed = try coordinator.moveToTrash(
+            storageObjectID: active.storageObjectID,
+            at: PersistenceFixtures.publishedAt
+        )
+        let reporter = LocalWorkspaceStorageReporter(
+            workspace: workspace.descriptor,
+            store: store
+        )
+        let before = try reporter.storageReport(
+            calculatedAt: PersistenceFixtures.replacementPublishedAt,
+            maximumEntries: 1_000
+        )
+        #expect(!before.scanTruncated)
+        #expect(before.permissionIssueCount == 0)
+        #expect(before.trashItems.map(\.storageObjectID) == [active.storageObjectID])
+        #expect(before.totalByteCount >= active.byteSize)
+
+        let tooEarly = try ManagedAssetPurgeAuthorization(
+            purgeID: UUID(),
+            storageObjectID: active.storageObjectID,
+            confirmedAt: PersistenceFixtures.replacementPublishedAt,
+            visibleUserConfirmation: true,
+            acknowledgedDeletionMethod: .filesystemUnlinkNoErasureGuarantee
+        )
+        #expect(throws: WorkspaceContractError.self) {
+            _ = try coordinator.permanentlyDeleteFromTrash(
+                storageObjectID: active.storageObjectID,
+                authorization: tooEarly
+            )
+        }
+        try workspace.storage.verifyFile(for: trashed)
+
+        let eligibleAt = try ManagedAssetPurgeAuthorization.purgeEligibleAt(
+            trashedAt: PersistenceFixtures.publishedAt
+        )
+        let authorization = try ManagedAssetPurgeAuthorization(
+            purgeID: UUID(),
+            storageObjectID: active.storageObjectID,
+            confirmedAt: eligibleAt,
+            visibleUserConfirmation: true,
+            acknowledgedDeletionMethod: .filesystemUnlinkNoErasureGuarantee
+        )
+        let receipt = try coordinator.permanentlyDeleteFromTrash(
+            storageObjectID: active.storageObjectID,
+            authorization: authorization
+        )
+        #expect(receipt.deletionMethod == .filesystemUnlinkNoErasureGuarantee)
+        #expect(receipt.priorContentHash == active.contentHash)
+        #expect(receipt.priorByteSize == active.byteSize)
+        #expect(
+            try store.managedAssetPurgeReceipt(
+                storageObjectID: active.storageObjectID
+            ) == receipt
+        )
+        let trashURL = workspace.root.appendingPathComponent(trashed.relativePath.rawValue)
+        #expect(!FileManager.default.fileExists(atPath: trashURL.path))
+        #expect(throws: WorkspaceContractError.self) {
+            _ = try coordinator.restoreFromTrash(
+                storageObjectID: active.storageObjectID,
+                at: eligibleAt
+            )
+        }
+        let after = try reporter.storageReport(
+            calculatedAt: eligibleAt,
+            maximumEntries: 1_000
+        )
+        #expect(after.trashItems.isEmpty)
+        #expect(
+            try store.databasePool.read { db in
+                try String.fetchOne(db, sql: "PRAGMA quick_check") == "ok"
+                    && Row.fetchAll(db, sql: "PRAGMA foreign_key_check").isEmpty
+            }
+        )
+    }
+
+    @Test
+    func storageGrowthScanIsBoundedVisibleAndDetectsBroadPermissions() throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "storage-growth-bound")
+        defer { workspace.cleanup() }
+        let store = try workspace.makeStore()
+        defer { try? store.close() }
+        let cache = workspace.root.appendingPathComponent("Cache", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: cache,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        for index in 0..<96 {
+            let file = cache.appendingPathComponent(String(format: "entry-%03d.bin", index))
+            #expect(FileManager.default.createFile(
+                atPath: file.path,
+                contents: Data(repeating: UInt8(truncatingIfNeeded: index), count: 128),
+                attributes: [.posixPermissions: 0o600]
+            ))
+        }
+        let reporter = LocalWorkspaceStorageReporter(
+            workspace: workspace.descriptor,
+            store: store
+        )
+        let bounded = try reporter.storageReport(
+            calculatedAt: PersistenceFixtures.publishedAt,
+            maximumEntries: 32
+        )
+        #expect(bounded.scanTruncated)
+        #expect(bounded.categories.reduce(0) { $0 + $1.fileCount } <= 32)
+        #expect(bounded.totalByteCount <= 32 * 128 + 1_000_000)
+
+        let exposed = cache.appendingPathComponent("entry-000.bin")
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o644],
+            ofItemAtPath: exposed.path
+        )
+        let full = try reporter.storageReport(
+            calculatedAt: PersistenceFixtures.replacementPublishedAt,
+            maximumEntries: 1_000
+        )
+        #expect(!full.scanTruncated)
+        #expect(full.permissionIssueCount == 1)
+        #expect(full.categories.first { $0.category == .logsAndCache }?.fileCount == 96)
+    }
+
+    @Test
+    func startupRecoveryFinalizesInterruptedPermanentDeletionWithoutDataResurrection() async throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "interrupted-purge")
+        defer { workspace.cleanup() }
+        try workspace.writeSource()
+        var store = try workspace.makeStore()
+        let normal = ManagedAssetCoordinator(storage: workspace.storage, metadata: store)
+        let active = try normal.importFile(
+            from: workspace.sourceFile,
+            meetingID: PersistenceFixtures.meetingID,
+            storageObjectID: PersistenceFixtures.storageObjectID,
+            fileExtension: try ManagedFileExtension("bin"),
+            createdAt: PersistenceFixtures.createdAt,
+            dataClassification: .restricted,
+            retentionClass: .permanent
+        )
+        let trashed = try normal.moveToTrash(
+            storageObjectID: active.storageObjectID,
+            at: PersistenceFixtures.publishedAt
+        )
+        let eligibleAt = try ManagedAssetPurgeAuthorization.purgeEligibleAt(
+            trashedAt: PersistenceFixtures.publishedAt
+        )
+        let authorization = try ManagedAssetPurgeAuthorization(
+            purgeID: UUID(),
+            storageObjectID: active.storageObjectID,
+            confirmedAt: eligibleAt,
+            visibleUserConfirmation: true,
+            acknowledgedDeletionMethod: .filesystemUnlinkNoErasureGuarantee
+        )
+        let interrupted = ManagedAssetCoordinator(
+            storage: workspace.storage,
+            metadata: store,
+            injectedFaultPoint: .afterFilesystemBeforeJournal
+        )
+        #expect(throws: SimulatedManagedAssetProcessInterruption.self) {
+            _ = try interrupted.permanentlyDeleteFromTrash(
+                storageObjectID: active.storageObjectID,
+                authorization: authorization
+            )
+        }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: workspace.root.appendingPathComponent(trashed.relativePath.rawValue).path
+            )
+        )
+        #expect(
+            try store.unfinishedManagedAssetPurges(maximumOperations: 8).entries.count == 1
+        )
+        #expect(
+            try store.managedAssetPurgeReceipt(
+                storageObjectID: active.storageObjectID
+            ) == nil
+        )
+        try store.close()
+
+        store = try workspace.makeStore()
+        defer { try? store.close() }
+        let recovery = ManagedAssetCoordinator(storage: workspace.storage, metadata: store)
+        let report = try await recovery.reconcileInterruptedOperations(
+            at: eligibleAt,
+            maximumOperations: 8
+        )
+        #expect(report.reconciledOperationCount == 1)
+        #expect(report.rolledBackOperationCount == 0)
+        #expect(report.repairRequiredOperationCount == 0)
+        #expect(!report.truncated)
+        let receipt = try store.managedAssetPurgeReceipt(
+            storageObjectID: active.storageObjectID
+        )
+        #expect(receipt?.purgeID == authorization.purgeID)
+        #expect(try store.unfinishedManagedAssetPurges(maximumOperations: 8).entries.isEmpty)
+    }
+
+    @Test
     func startupReconciliationCompletesInterruptedImportAfterReopen() async throws {
         let workspace = try DisposableMeetingBuddyWorkspace(suffix: "interrupted-import")
         defer { workspace.cleanup() }

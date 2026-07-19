@@ -711,7 +711,7 @@ public actor LocalTaskManager: TaskRuntimeManaging {
             level: .error,
             category: "job-state",
             jobID: jobID,
-            message: .publicValue(failure.safeSummary),
+            message: .publicValue("Job failed"),
             metadata: [
                 "error_code": .publicValue(failure.code),
                 "diagnostic": .privateValue(failure.privateDiagnostic ?? "none")
@@ -756,7 +756,7 @@ public actor LocalTaskManager: TaskRuntimeManaging {
             level: .error,
             category: "job-state",
             jobID: record.jobID,
-            message: .publicValue(failure.safeSummary),
+            message: .publicValue("Job failed"),
             metadata: [
                 "dependency_job_id": dependencyID.map {
                     .publicValue($0.canonicalString)

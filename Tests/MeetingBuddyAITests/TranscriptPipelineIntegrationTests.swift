@@ -128,6 +128,128 @@ struct TranscriptPipelineIntegrationTests {
     }
 
     @Test
+    func threeHourRetryAcrossManagerRestartPreservesExactCoverageAndTraceability() async throws {
+        let workspace = try AIWorkspace()
+        defer { workspace.cleanup() }
+        let threeHourFrames: UInt64 = 3 * 60 * 60 * 16_000
+        let source = try workspace.installCanonicalSource(totalFrames: threeHourFrames)
+        let failedIndex: UInt32 = 180
+        let speech = DeterministicSpeechProvider(failOnceIndex: failedIndex)
+        let processor = SyntheticTranscriptMediaProcessor()
+        let plan = try transcriptPlan(
+            workspace: workspace,
+            source: source,
+            totalFrames: threeHourFrames,
+            targetLanguage: nil
+        )
+        #expect(plan.chunkIdentities.count == 360)
+        let executor = TranscriptPipelineJobExecutor(
+            transcriptionProvider: speech,
+            translationProvider: nil,
+            processor: processor,
+            catalog: workspace.store,
+            fileAccess: workspace.fileAccess,
+            repository: workspace.store
+        )
+        let manager = try workspace.manager(executor: executor)
+        let request = try TranscriptPipelineJobFactory().request(
+            plan: plan,
+            jobID: aiID(35, JobID.self),
+            requestedBy: JobRequester("task007-long-meeting")
+        )
+        let clock = ContinuousClock()
+        let started = clock.now
+        _ = try await manager.enqueue(request)
+        let failed = try await waitForAIJob(manager, request.jobID, state: .failed)
+        #expect(failed.progress.completedUnitCount == UInt64(failedIndex))
+        #expect(failed.checkpoint != nil)
+        let incomplete = try #require(
+            try workspace.store.transcriptCoverageManifests(
+                meetingID: workspace.meetingID
+            ).first
+        )
+        #expect(incomplete.chunks.count == 360)
+        #expect(incomplete.chunks[Int(failedIndex)].disposition == .failed)
+        #expect(incomplete.chunks.suffix(from: Int(failedIndex) + 1).allSatisfy {
+            $0.disposition == .missing
+        })
+
+        let restartedManager = try workspace.manager(executor: executor)
+        let startup = try await restartedManager.recoverAtStartup(
+            policy: StartupRecoveryPolicy(
+                maximumOrphansToInspect: 8,
+                maximumOrphansToRemove: 0,
+                orphanGracePeriodMilliseconds: 0,
+                minimumAvailableCapacityBytes: 0,
+                maximumManagedAssetOperations: 8
+            )
+        )
+        #expect(startup.databaseHealth.isHealthy)
+        _ = try await restartedManager.retry(jobID: request.jobID)
+        _ = try await waitForAIJob(restartedManager, request.jobID, state: .succeeded)
+        #expect(clock.now - started < .seconds(30))
+
+        let review = try #require(
+            try workspace.store.activeTranscriptReview(meetingID: workspace.meetingID)
+        )
+        #expect(review.manifest.canonicalFrameCount == threeHourFrames)
+        #expect(review.manifest.chunks.count == 360)
+        #expect(review.manifest.chunks.allSatisfy { $0.disposition == .transcribed })
+        #expect(review.manifest.chunks.prefix(Int(failedIndex)).allSatisfy {
+            $0.attemptCount == 1
+        })
+        #expect(review.manifest.chunks.suffix(from: Int(failedIndex)).allSatisfy {
+            $0.attemptCount == 2
+        })
+        #expect(Set(review.manifest.transcriptRevisionReferences).count == 360)
+        #expect(Set(review.transcriptSegments.map(\.revision.revisionID)).count == 360)
+        #expect(await speech.callCount(index: 0) == 1)
+        #expect(await speech.callCount(index: failedIndex) == 2)
+        #expect(await processor.callCount == 361)
+
+        #expect(throws: TranscriptCoverageError.self) {
+            _ = try TranscriptCoverageManifest(
+                transcriptSetID: review.manifest.transcriptSetID,
+                meetingID: review.manifest.meetingID,
+                canonicalSourceRevision: review.manifest.canonicalSourceRevision,
+                canonicalFrameCount: review.manifest.canonicalFrameCount,
+                transcriptionRoute: review.manifest.transcriptionRoute,
+                status: .published,
+                chunks: Array(review.manifest.chunks.dropLast()) + [review.manifest.chunks[0]],
+                createdAt: aiInstant(1_900_000_000_200)
+            )
+        }
+        let first = review.manifest.chunks[0]
+        let second = review.manifest.chunks[1]
+        let overlappedSecond = try TranscriptChunkCoverage(
+            index: second.index,
+            coreRange: first.coreRange,
+            physicalRange: first.physicalRange,
+            disposition: second.disposition,
+            attemptCount: second.attemptCount,
+            provider: second.provider,
+            machineSegmentRevision: second.machineSegmentRevision,
+            reviewedSegmentRevision: second.reviewedSegmentRevision,
+            translationRevision: second.translationRevision,
+            safeFailureCode: second.safeFailureCode
+        )
+        var overlap = review.manifest.chunks
+        overlap[1] = overlappedSecond
+        #expect(throws: TranscriptCoverageError.self) {
+            _ = try TranscriptCoverageManifest(
+                transcriptSetID: review.manifest.transcriptSetID,
+                meetingID: review.manifest.meetingID,
+                canonicalSourceRevision: review.manifest.canonicalSourceRevision,
+                canonicalFrameCount: review.manifest.canonicalFrameCount,
+                transcriptionRoute: review.manifest.transcriptionRoute,
+                status: .published,
+                chunks: overlap,
+                createdAt: aiInstant(1_900_000_000_201)
+            )
+        }
+    }
+
+    @Test
     func overlapOwnershipIsDeterministicAndAnUnusedTranslationAdapterIsNotCalled() async throws {
         let workspace = try AIWorkspace()
         defer { workspace.cleanup() }
@@ -764,7 +886,7 @@ private actor DeterministicTranslationProvider: TranslationProvider {
 }
 
 private func waitForProviderStart(_ provider: DelayedSpeechProvider) async throws {
-    for _ in 0..<500 {
+    for _ in 0..<3_000 {
         if await provider.hasStarted() { return }
         try await Task.sleep(for: .milliseconds(5))
     }

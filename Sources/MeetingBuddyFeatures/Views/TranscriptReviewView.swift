@@ -111,6 +111,18 @@ struct TranscriptReviewView: View {
                 "Visible user authorization",
                 value: decision.request.visibleUserAuthorization ? "granted" : "not granted"
             )
+            LabeledContent(
+                "No-outbound mode",
+                value: decision.request.securityPolicy?.noOutboundMode == false
+                    ? "disabled" : "enforced"
+            )
+            if let policy = decision.request.securityPolicy {
+                LabeledContent(
+                    "Exact access-policy revision",
+                    value: String(policy.accessPolicyRevision.revisionID.canonicalString.prefix(12))
+                        + "…"
+                )
+            }
             LabeledContent("Decision", value: decision.reasonCode)
         }
     }

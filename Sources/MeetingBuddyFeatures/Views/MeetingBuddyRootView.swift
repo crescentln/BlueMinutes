@@ -7,6 +7,7 @@ public struct MeetingBuddyRootView: View {
     @State private var store: MediaReviewStore
     @State private var fileImporterPurpose = LocalFileImporterPurpose.workspace
     @State private var showFileImporter = false
+    @State private var pendingPermanentDeletion: WorkspaceTrashItem?
 
     public init(store: MediaReviewStore) {
         _store = State(initialValue: store)
@@ -23,7 +24,9 @@ public struct MeetingBuddyRootView: View {
                     Button("Choose Workspace…") {
                         presentFileImporter(.workspace)
                     }
+                    .keyboardShortcut("o", modifiers: .command)
                     .disabled(store.isWorking)
+                    .accessibilityHint("Open an existing local workspace or create one in an empty folder.")
                 }
                 Section("Workflow") {
                     Label("Local Media", systemImage: "waveform")
@@ -37,6 +40,8 @@ public struct MeetingBuddyRootView: View {
                     Label("Briefing", systemImage: "doc.text.magnifyingglass")
                         .tag(MediaReviewSection.briefing)
                         .disabled(store.analysisReview == nil)
+                    Label("Storage", systemImage: "externaldrive")
+                        .tag(MediaReviewSection.storage)
                 }
             }
             .navigationTitle("MeetingBuddy")
@@ -55,11 +60,14 @@ public struct MeetingBuddyRootView: View {
                         AnalysisReviewView(store: store)
                     case .briefing:
                         BriefingReviewView(store: store)
+                    case .storage:
+                        StorageDashboardView(store: store) { item in
+                            pendingPermanentDeletion = item
+                        }
                     }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .windowBackgroundColor))
             .navigationTitle(navigationTitle)
             .toolbar {
                 if store.isWorking {
@@ -84,6 +92,8 @@ public struct MeetingBuddyRootView: View {
                 case .briefing:
                     await store.loadBriefingReview()
                     await store.refreshBriefingRoute()
+                case .storage:
+                    await store.loadStorageReport()
                 case .intake, nil:
                     break
                 }
@@ -113,6 +123,31 @@ public struct MeetingBuddyRootView: View {
         } message: {
             Text(store.safeErrorMessage ?? "")
         }
+        .confirmationDialog(
+            "Permanently delete this managed file?",
+            isPresented: Binding(
+                get: { pendingPermanentDeletion != nil },
+                set: { if !$0 { pendingPermanentDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let item = pendingPermanentDeletion {
+                Button("Delete Permanently", role: .destructive) {
+                    pendingPermanentDeletion = nil
+                    Task {
+                        await store.permanentlyDeleteTrashItem(
+                            item.storageObjectID,
+                            confirmedByVisibleDialog: true
+                        )
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                pendingPermanentDeletion = nil
+            }
+        } message: {
+            Text("This removes the verified Workspace Trash file after its retention interval. It preserves immutable audit history and does not guarantee forensic erasure on APFS, SSDs, snapshots, or backups.")
+        }
     }
 
     private var workspaceOnboarding: some View {
@@ -136,6 +171,7 @@ public struct MeetingBuddyRootView: View {
         case .transcript: "Transcript Review"
         case .analysis: "Analysis Review"
         case .briefing: "Briefing"
+        case .storage: "Storage"
         case .intake, nil: "Local Media Intake"
         }
     }
@@ -176,8 +212,10 @@ public struct MeetingBuddyRootView: View {
                 Button("Choose Audio or Video…") {
                     presentFileImporter(.media)
                 }
+                .keyboardShortcut("i", modifiers: .command)
                 .buttonStyle(.borderedProminent)
                 .disabled(store.isWorking)
+                .accessibilityHint("Choose one local audio or video file for bounded inspection.")
                 Text("MOV, MP4, M4A, MP3, or WAV")
                     .foregroundStyle(.secondary)
             }
@@ -216,8 +254,10 @@ public struct MeetingBuddyRootView: View {
                     Button("Import and Process") {
                         Task { await store.importAndProcess() }
                     }
+                    .keyboardShortcut(.return, modifiers: .command)
                     .buttonStyle(.borderedProminent)
                     .disabled(store.isWorking)
+                    .accessibilityHint("Copy, hash, register, and process the selected source locally.")
                     Button("Clear", role: .cancel) {
                         store.discardPendingMedia()
                     }
@@ -252,6 +292,8 @@ public struct MeetingBuddyRootView: View {
                         .foregroundStyle(.secondary)
                 }
                 ProgressView(value: job.progressFraction)
+                    .accessibilityLabel("Canonical audio progress")
+                    .accessibilityValue("\(job.completedUnitCount) of \(job.totalUnitCount) verified stages")
                 Text("\(job.completedUnitCount) of \(job.totalUnitCount) verified stages")
                     .font(.caption)
                     .foregroundStyle(.secondary)

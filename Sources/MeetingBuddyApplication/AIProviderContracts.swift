@@ -57,6 +57,102 @@ public enum ProviderDataCategory: String, Codable, Hashable, Sendable, Comparabl
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
+/// An immutable, exact-reference policy snapshot copied into every new model job.
+///
+/// Older persisted jobs decode without a snapshot and remain local-only. They can
+/// never acquire external authority through compatibility defaults.
+public struct ModelSecurityPolicySnapshot: Codable, Hashable, Sendable {
+    public let sensitivityLabelRevision: SemanticRevisionReference
+    public let accessPolicyRevision: SemanticRevisionReference
+    public let effectiveClassification: DataClassification
+    public let noOutboundMode: Bool
+    public let localProcessingAllowed: Bool
+    public let manualLocalReviewAllowed: Bool
+    public let externalProcessingAllowed: Bool
+    public let approvedExternalProviderIdentifiers: [String]
+    public let approvedDeploymentEnvironments: [ModelDeploymentEnvironment]
+    public let approvedRetentionPolicies: [ProviderRetentionPolicy]
+
+    public init(
+        sensitivityLabelRevision: SemanticRevisionReference,
+        accessPolicyRevision: SemanticRevisionReference,
+        effectiveClassification: DataClassification,
+        noOutboundMode: Bool,
+        localProcessingAllowed: Bool,
+        manualLocalReviewAllowed: Bool,
+        externalProcessingAllowed: Bool,
+        approvedExternalProviderIdentifiers: [String],
+        approvedDeploymentEnvironments: [ModelDeploymentEnvironment] = [],
+        approvedRetentionPolicies: [ProviderRetentionPolicy] = []
+    ) throws {
+        let providers = approvedExternalProviderIdentifiers.sorted()
+        let environments = approvedDeploymentEnvironments.sorted { $0.rawValue < $1.rawValue }
+        let retentionPolicies = approvedRetentionPolicies.sorted { $0.rawValue < $1.rawValue }
+        guard sensitivityLabelRevision.objectType == .sensitivityLabel,
+              accessPolicyRevision.objectType == .accessPolicy,
+              effectiveClassification.isKnown,
+              localProcessingAllowed || manualLocalReviewAllowed,
+              Set(providers).count == providers.count,
+              Set(environments).count == environments.count,
+              Set(retentionPolicies).count == retentionPolicies.count,
+              providers.allSatisfy({ identifier in
+                  let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+                  return trimmed == identifier
+                      && !identifier.isEmpty
+                      && identifier.utf8.count <= 128
+                      && !identifier.unicodeScalars.contains(
+                          where: CharacterSet.controlCharacters.contains
+                      )
+              }),
+              !noOutboundMode || (
+                  !externalProcessingAllowed
+                      && providers.isEmpty
+                      && environments.isEmpty
+                      && retentionPolicies.isEmpty
+              ),
+              !externalProcessingAllowed || (
+                  !providers.isEmpty
+                      && !environments.isEmpty
+                      && !retentionPolicies.isEmpty
+              ),
+              effectiveClassification != .restricted || !externalProcessingAllowed
+        else {
+            throw AIProviderContractError.invalidRequest(
+                "The exact model security-policy snapshot is inconsistent."
+            )
+        }
+        self.sensitivityLabelRevision = sensitivityLabelRevision
+        self.accessPolicyRevision = accessPolicyRevision
+        self.effectiveClassification = effectiveClassification
+        self.noOutboundMode = noOutboundMode
+        self.localProcessingAllowed = localProcessingAllowed
+        self.manualLocalReviewAllowed = manualLocalReviewAllowed
+        self.externalProcessingAllowed = externalProcessingAllowed
+        self.approvedExternalProviderIdentifiers = providers
+        self.approvedDeploymentEnvironments = environments
+        self.approvedRetentionPolicies = retentionPolicies
+    }
+
+    public func allowsExternalProvider(_ identifier: String) -> Bool {
+        externalProcessingAllowed
+            && !noOutboundMode
+            && approvedExternalProviderIdentifiers.contains(identifier)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case sensitivityLabelRevision = "sensitivity_label_revision"
+        case accessPolicyRevision = "access_policy_revision"
+        case effectiveClassification = "effective_classification"
+        case noOutboundMode = "no_outbound_mode"
+        case localProcessingAllowed = "local_processing_allowed"
+        case manualLocalReviewAllowed = "manual_local_review_allowed"
+        case externalProcessingAllowed = "external_processing_allowed"
+        case approvedExternalProviderIdentifiers = "approved_external_provider_identifiers"
+        case approvedDeploymentEnvironments = "approved_deployment_environments"
+        case approvedRetentionPolicies = "approved_retention_policies"
+    }
+}
+
 /// Every policy input is explicit. A UI provider choice is never sufficient authorization.
 public struct ModelRouteRequest: Codable, Hashable, Sendable {
     public let capability: AIProcessingCapability
@@ -69,6 +165,7 @@ public struct ModelRouteRequest: Codable, Hashable, Sendable {
     public let dataCategories: [ProviderDataCategory]
     public let visibleUserAuthorization: Bool
     public let localModelAvailable: Bool
+    public let securityPolicy: ModelSecurityPolicySnapshot?
 
     public init(
         capability: AIProcessingCapability,
@@ -80,13 +177,16 @@ public struct ModelRouteRequest: Codable, Hashable, Sendable {
         retentionPolicy: ProviderRetentionPolicy,
         dataCategories: [ProviderDataCategory],
         visibleUserAuthorization: Bool,
-        localModelAvailable: Bool
+        localModelAvailable: Bool,
+        securityPolicy: ModelSecurityPolicySnapshot? = nil
     ) throws {
         let categories = dataCategories.sorted()
         guard dataClassification.isKnown,
               !categories.isEmpty,
               Set(categories).count == categories.count,
-              Self.categoriesAreValid(categories, for: capability)
+              Self.categoriesAreValid(categories, for: capability),
+              securityPolicy?.effectiveClassification == nil
+                  || securityPolicy?.effectiveClassification == dataClassification
         else {
             throw AIProviderContractError.invalidRequest("The model route has unknown or duplicate policy inputs.")
         }
@@ -100,6 +200,7 @@ public struct ModelRouteRequest: Codable, Hashable, Sendable {
         self.dataCategories = categories
         self.visibleUserAuthorization = visibleUserAuthorization
         self.localModelAvailable = localModelAvailable
+        self.securityPolicy = securityPolicy
     }
 
     public init(from decoder: Decoder) throws {
@@ -132,7 +233,11 @@ public struct ModelRouteRequest: Codable, Hashable, Sendable {
                 Bool.self,
                 forKey: .visibleUserAuthorization
             ),
-            localModelAvailable: container.decode(Bool.self, forKey: .localModelAvailable)
+            localModelAvailable: container.decode(Bool.self, forKey: .localModelAvailable),
+            securityPolicy: container.decodeIfPresent(
+                ModelSecurityPolicySnapshot.self,
+                forKey: .securityPolicy
+            )
         )
     }
 
@@ -179,6 +284,7 @@ public struct ModelRouteRequest: Codable, Hashable, Sendable {
         case dataCategories
         case visibleUserAuthorization
         case localModelAvailable
+        case securityPolicy = "security_policy"
     }
 
 }
@@ -236,7 +342,11 @@ public struct ModelPolicyRouter: Sendable {
     public init() {}
 
     public func decide(_ request: ModelRouteRequest) throws -> ModelRouteDecision {
+        let localProcessingAllowed = request.securityPolicy?.localProcessingAllowed ?? true
         if request.localModelAvailable {
+            guard localProcessingAllowed else {
+                return try manualDecision(request, reason: "local_processing_denied")
+            }
             let providerIdentifier: String
             if request.deploymentEnvironment == .test {
                 providerIdentifier = switch request.capability {
@@ -259,6 +369,9 @@ public struct ModelPolicyRouter: Sendable {
             )
         }
         if request.deploymentEnvironment == .test {
+            guard localProcessingAllowed else {
+                return try manualDecision(request, reason: "local_processing_denied")
+            }
             let testProviderIdentifier: String
             switch request.capability {
             case .transcription:
@@ -278,16 +391,27 @@ public struct ModelPolicyRouter: Sendable {
         if request.offlineMode {
             return try manualDecision(request, reason: "offline_model_unavailable")
         }
+        guard let securityPolicy = request.securityPolicy else {
+            return try manualDecision(request, reason: "legacy_policy_is_local_only")
+        }
+        if securityPolicy.noOutboundMode {
+            return try manualDecision(request, reason: "no_outbound_mode")
+        }
         guard request.organizationAllowsExternalProcessing,
               request.visibleUserAuthorization,
               request.dataClassification != .restricted,
               request.retentionPolicy != .localWorkspaceOnly,
               case let .approvedProvider(identifier) = request.destination,
-              !identifier.isEmpty
+              !identifier.isEmpty,
+              securityPolicy.allowsExternalProvider(identifier),
+              securityPolicy.approvedDeploymentEnvironments.contains(
+                  request.deploymentEnvironment
+              ),
+              securityPolicy.approvedRetentionPolicies.contains(request.retentionPolicy)
         else {
             return try manualDecision(request, reason: "external_route_denied")
         }
-        // Task 005B defines the policy gate but authorizes no outbound adapter.
+        // Task 007 hardens the policy gate but authorizes no outbound adapter.
         throw AIProviderContractError.routeDenied(
             "An external route passed policy, but Task 005B has no approved outbound provider adapter."
         )

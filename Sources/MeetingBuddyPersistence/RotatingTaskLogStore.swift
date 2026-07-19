@@ -134,8 +134,39 @@ public actor RotatingTaskLogStore: TaskLogStore {
             return "<redacted>"
         case let .publicValue(raw):
             let bounded = boundedUTF8(raw, maximumBytes: configuration.maximumPublicValueBytes)
-            return redactCredentialPatterns(in: bounded)
+            let credentialRedacted = redactCredentialPatterns(in: bounded)
+            guard isApprovedPublicDiagnosticValue(credentialRedacted) else {
+                return "<redacted-unapproved-public-value>"
+            }
+            return credentialRedacted
         }
+    }
+
+    private func isApprovedPublicDiagnosticValue(_ value: String) -> Bool {
+        let approvedMessages: Set<String> = [
+            "Job queued",
+            "Pause requested",
+            "Job resumed",
+            "Job cancelled",
+            "Cancellation requested",
+            "Job queued for retry",
+            "Job started",
+            "Job paused at a durable checkpoint",
+            "Job succeeded",
+            "Job cancelled cooperatively",
+            "Job failed"
+        ]
+        if approvedMessages.contains(value) { return true }
+        if value == "none" { return true }
+        if UUID(uuidString: value) != nil { return true }
+        return !value.isEmpty
+            && value.utf8.count <= 96
+            && value.utf8.allSatisfy { byte in
+                (byte >= 97 && byte <= 122)
+                    || (byte >= 48 && byte <= 57)
+                    || byte == 45
+                    || byte == 95
+            }
     }
 
     private func redactCredentialPatterns(in value: String) -> String {

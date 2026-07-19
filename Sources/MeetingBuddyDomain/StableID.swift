@@ -125,6 +125,12 @@ public enum FinalBriefingIDTag: LogicalObjectIDScope {
 public enum UserConfirmedNoteIDTag: LogicalObjectIDScope {
     public static var semanticObjectType: SemanticObjectType { .userConfirmedNote }
 }
+public enum SensitivityLabelIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .sensitivityLabel }
+}
+public enum AccessPolicyIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .accessPolicy }
+}
 public enum StorageObjectIDTag: Sendable {}
 public enum AgendaItemIDTag: Sendable {}
 public enum WorkspaceIDTag: Sendable {}
@@ -159,6 +165,8 @@ public typealias BriefingSectionID = StableID<BriefingSectionIDTag>
 public typealias ValidationReportID = StableID<ValidationReportIDTag>
 public typealias FinalBriefingID = StableID<FinalBriefingIDTag>
 public typealias UserConfirmedNoteID = StableID<UserConfirmedNoteIDTag>
+public typealias SensitivityLabelID = StableID<SensitivityLabelIDTag>
+public typealias AccessPolicyID = StableID<AccessPolicyIDTag>
 public typealias StorageObjectID = StableID<StorageObjectIDTag>
 public typealias AgendaItemID = StableID<AgendaItemIDTag>
 public typealias BriefingTemplateID = StableID<BriefingTemplateIDTag>

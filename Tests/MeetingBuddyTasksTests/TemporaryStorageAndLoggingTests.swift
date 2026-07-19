@@ -6,6 +6,30 @@ import Testing
 @Suite(.serialized)
 struct TemporaryStorageAndLoggingTests {
     @Test
+    func diskCapacityPreflightFailsBeforeAllocatingSensitiveTaskStorage() async throws {
+        let workspace = try TaskTestWorkspace()
+        defer { workspace.cleanup() }
+        let constrained = LocalTaskTemporaryStorage(
+            workspace: workspace.descriptor,
+            capacityProvider: { 1_024 }
+        )
+        let jobID = testJobID(29)
+
+        await #expect(throws: TaskRuntimeError.insufficientDiskCapacity) {
+            _ = try await constrained.allocateDirectory(
+                for: jobID,
+                diskBudgetBytes: 1_025
+            )
+        }
+        let taskRoot = workspace.root.appendingPathComponent(
+            ".tasks/\(jobID.canonicalString)",
+            isDirectory: true
+        )
+        #expect(!FileManager.default.fileExists(atPath: taskRoot.path))
+        #expect(try await constrained.availableCapacityBytes() == 1_024)
+    }
+
+    @Test
     func streamingFileLeasesAreReverifiedAndCannotBeForgedOutsideTheTask() async throws {
         let workspace = try TaskTestWorkspace()
         defer { workspace.cleanup() }
@@ -124,6 +148,10 @@ struct TemporaryStorageAndLoggingTests {
         let workspace = try TaskTestWorkspace(logConfiguration: configuration)
         defer { workspace.cleanup() }
         let secret = "super-secret-meeting-token"
+        let meetingTitle = "Confidential Council Session 7734"
+        let filename = "restricted-recording-7734.wav"
+        let sensitivePath = "/Users/example/Secret Meetings/7734"
+        let transcript = "The delegation accepts only if the annex remains confidential."
         for index in 0..<30 {
             let event = try TaskLogEvent(
                 timestamp: testInstant(1_800_000_400_000 + Int64(index)),
@@ -131,8 +159,8 @@ struct TemporaryStorageAndLoggingTests {
                 category: "redaction-test",
                 jobID: testJobID(32),
                 message: .publicValue(
-                    "authorization: Bearer abcdef1234567890 "
-                        + String(repeating: "bounded-public-status ", count: 10)
+                    "authorization: Bearer abcdef1234567890 \(meetingTitle) "
+                        + "\(filename) \(sensitivePath) \(transcript)"
                 ),
                 metadata: [
                     "private_source": .privateValue(secret),
@@ -159,7 +187,12 @@ struct TemporaryStorageAndLoggingTests {
         #expect(!text.contains(secret))
         #expect(!text.contains("abcdef1234567890"))
         #expect(!text.contains("sk-test-value"))
+        #expect(!text.contains(meetingTitle))
+        #expect(!text.contains(filename))
+        #expect(!text.contains(sensitivePath))
+        #expect(!text.contains(transcript))
         #expect(text.contains("<redacted>"))
+        #expect(text.contains("<redacted-unapproved-public-value>"))
     }
 
     @Test

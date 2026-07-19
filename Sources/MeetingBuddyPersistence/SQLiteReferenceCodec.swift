@@ -163,6 +163,16 @@ enum SQLiteReferenceCodec {
                 logicalID: UserConfirmedNoteID(validating: logicalIDValue),
                 revisionID: revisionID
             )
+        case .sensitivityLabel:
+            return try SemanticRevisionReference(
+                logicalID: SensitivityLabelID(validating: logicalIDValue),
+                revisionID: revisionID
+            )
+        case .accessPolicy:
+            return try SemanticRevisionReference(
+                logicalID: AccessPolicyID(validating: logicalIDValue),
+                revisionID: revisionID
+            )
         case .unrecognized:
             throw PersistenceContractError.unsupportedStoredObjectType(objectTypeValue)
         }

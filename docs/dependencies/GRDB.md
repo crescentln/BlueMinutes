@@ -99,6 +99,28 @@ and cannot be swapped by merely changing imports.
 - scan that GRDB imports remain confined to the persistence module and its
   tests.
 
+## Task 007 re-review
+
+Reviewed: 2026-07-18
+
+- `Package.swift` and `Package.resolved` still resolve exactly GRDB 7.11.1 at
+  revision `b83108d10f42680d78f23fe4d4d80fc88dab3212`; the package graph has no
+  transitive source dependency.
+- The official v7.11.1 GitHub release identifies the same abbreviated commit
+  `b83108d` and a 2026-06-18 release date.
+- The checked-out license is MIT, SHA-256
+  `9853f9dce81365fcc1d9b46004633354450164b8d17904e92e80c444545f7e87`.
+  Its notice must ship in eventual application notices.
+- The checkout contains `GRDB/PrivacyInfo.xcprivacy`. GRDB imports remain
+  confined to `MeetingBuddyPersistence` and persistence/task tests.
+- GitHub's repository advisory page showed no published GRDB security advisory,
+  and a GitHub Advisory Database search for `GRDB.swift` returned zero results
+  at review time. This is a point-in-time negative result, not proof that no
+  vulnerability exists.
+- No SQLCipher, custom SQLite build, encryption library, executable, network
+  service, entitlement, or optional GRDB product was added. ADR-0012 separately
+  rejects application-level encryption for the current product boundary.
+
 ## Sources reviewed
 
 - <https://github.com/groue/GRDB.swift/releases/tag/v7.11.1>

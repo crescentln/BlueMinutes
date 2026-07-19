@@ -302,6 +302,17 @@ public final class LocalStorageService: @unchecked Sendable {
         return restored
     }
 
+    func permanentlyUnlinkFromTrash(_ record: ManagedAssetRecord) throws {
+        guard record.state == .trashed, record.trashedAt != nil else {
+            throw WorkspaceContractError.invalidStorageTransition(
+                "Only a verified Trash item can be permanently unlinked."
+            )
+        }
+        try verifyFile(for: record)
+        let source = try confinedURL(for: record.relativePath)
+        try fileManager.removeItem(at: source)
+    }
+
     private func copyAndHash(
         from source: URL,
         to destination: URL,

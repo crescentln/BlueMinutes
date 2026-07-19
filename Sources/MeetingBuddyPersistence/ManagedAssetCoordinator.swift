@@ -6,6 +6,7 @@ public enum ManagedAssetCoordinationError: Error, Sendable {
     case registrationFailed(recoverableTrashRecord: ManagedAssetRecord, cause: String)
     case metadataTransitionFailedAndCompensated(cause: String)
     case compensationFailed(cause: String, recoveryPath: WorkspaceRelativePath)
+    case permanentDeletionPendingRecovery(storageObjectID: StorageObjectID)
 }
 
 /// Coordinates the filesystem and metadata halves of managed-asset changes.
@@ -245,6 +246,13 @@ public final class ManagedAssetCoordinator: MediaIntakeStorage, ManagedAssetReco
         at restoredAt: UTCInstant
     ) throws -> ManagedAssetRecord {
         try withOperationLock {
+            guard try metadata.managedAssetPurgeReceipt(
+                storageObjectID: storageObjectID
+            ) == nil else {
+                throw WorkspaceContractError.invalidStorageTransition(
+                    "Permanently unlinked bytes cannot be restored from Workspace Trash."
+                )
+            }
             guard let current = try metadata.managedAsset(storageObjectID: storageObjectID) else {
                 throw PersistenceContractError.managedAssetNotFound(storageObjectID)
             }
@@ -324,6 +332,64 @@ public final class ManagedAssetCoordinator: MediaIntakeStorage, ManagedAssetReco
         }
     }
 
+    public func permanentlyDeleteFromTrash(
+        storageObjectID: StorageObjectID,
+        authorization: ManagedAssetPurgeAuthorization
+    ) throws -> ManagedAssetPurgeReceipt {
+        try withOperationLock {
+            if let existing = try metadata.managedAssetPurgeReceipt(
+                storageObjectID: storageObjectID
+            ) {
+                guard existing.purgeID == authorization.purgeID else {
+                    throw WorkspaceContractError.invalidStorageTransition(
+                        "The Trash item was already permanently unlinked under another confirmation."
+                    )
+                }
+                return existing
+            }
+            guard let current = try metadata.managedAsset(
+                storageObjectID: storageObjectID
+            ) else {
+                throw PersistenceContractError.managedAssetNotFound(storageObjectID)
+            }
+            try authorization.validate(for: current)
+            let intent = try ManagedAssetPurgeIntent(
+                authorization: authorization,
+                record: current
+            )
+            try metadata.beginManagedAssetPurge(intent)
+            try interruptIfInjected(.afterIntent)
+            do {
+                try storage.permanentlyUnlinkFromTrash(current)
+            } catch {
+                try? metadata.rollBackManagedAssetPurge(
+                    purgeID: authorization.purgeID,
+                    at: authorization.confirmedAt
+                )
+                throw error
+            }
+            try interruptIfInjected(.afterFilesystemBeforeJournal)
+            let receipt = try purgeReceipt(for: intent)
+            do {
+                try metadata.completeManagedAssetPurge(
+                    purgeID: authorization.purgeID,
+                    receipt: receipt
+                )
+            } catch {
+                try? metadata.markManagedAssetPurgeRepairRequired(
+                    purgeID: authorization.purgeID,
+                    failureCode: "receipt_commit_failed",
+                    at: authorization.confirmedAt
+                )
+                throw ManagedAssetCoordinationError.permanentDeletionPendingRecovery(
+                    storageObjectID: storageObjectID
+                )
+            }
+            try interruptIfInjected(.afterMetadata)
+            return receipt
+        }
+    }
+
     public func reconcileInterruptedOperations(
         at timestamp: UTCInstant,
         maximumOperations: UInt32
@@ -378,11 +444,101 @@ public final class ManagedAssetCoordinator: MediaIntakeStorage, ManagedAssetReco
             }
         }
 
+        var scanTruncated = scan.truncated
+        if !scan.truncated {
+            let consumed = UInt32(scan.entries.count)
+            let remaining = maximumOperations > consumed
+                ? maximumOperations - consumed
+                : 0
+            if remaining > 0 {
+                let purgeScan = try metadata.unfinishedManagedAssetPurges(
+                    maximumOperations: remaining
+                )
+                for entry in purgeScan.entries {
+                    do {
+                        switch try reconcilePurge(entry) {
+                        case .reconciled:
+                            reconciled += 1
+                        case .rolledBack:
+                            rolledBack += 1
+                        case .repairRequired:
+                            repairRequired += 1
+                        }
+                    } catch {
+                        try metadata.markManagedAssetPurgeRepairRequired(
+                            purgeID: entry.intent.authorization.purgeID,
+                            failureCode: "reconciliation_failed",
+                            at: timestamp
+                        )
+                        repairRequired += 1
+                    }
+                }
+                scanTruncated = purgeScan.truncated
+            } else {
+                let purgeProbe = try metadata.unfinishedManagedAssetPurges(
+                    maximumOperations: 1
+                )
+                scanTruncated = !purgeProbe.entries.isEmpty
+            }
+        }
+
         return ManagedAssetRecoveryReport(
             reconciledOperationCount: reconciled,
             rolledBackOperationCount: rolledBack,
             repairRequiredOperationCount: repairRequired,
-            truncated: scan.truncated
+            truncated: scanTruncated
+        )
+    }
+
+    private func reconcilePurge(
+        _ entry: ManagedAssetPurgeOperationEntry
+    ) throws -> ReconciliationOutcome {
+        let record = entry.intent.record
+        guard try metadata.managedAsset(storageObjectID: record.storageObjectID) == record else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "Permanent-deletion recovery found mismatched managed-asset metadata."
+            )
+        }
+        let expectedReceipt = try purgeReceipt(for: entry.intent)
+        if let persistedReceipt = try metadata.managedAssetPurgeReceipt(
+            storageObjectID: record.storageObjectID
+        ) {
+            guard persistedReceipt == expectedReceipt else {
+                throw WorkspaceContractError.recoveryArtifactInvalid(
+                    "Permanent-deletion recovery found a conflicting receipt."
+                )
+            }
+            try metadata.completeManagedAssetPurge(
+                purgeID: entry.intent.authorization.purgeID,
+                receipt: persistedReceipt
+            )
+            return .reconciled
+        }
+        if try storage.containsVerifiedFile(for: record) {
+            try metadata.rollBackManagedAssetPurge(
+                purgeID: entry.intent.authorization.purgeID,
+                at: entry.intent.authorization.confirmedAt
+            )
+            return .rolledBack
+        }
+        try metadata.completeManagedAssetPurge(
+            purgeID: entry.intent.authorization.purgeID,
+            receipt: expectedReceipt
+        )
+        return .reconciled
+    }
+
+    private func purgeReceipt(
+        for intent: ManagedAssetPurgeIntent
+    ) throws -> ManagedAssetPurgeReceipt {
+        try ManagedAssetPurgeReceipt(
+            purgeID: intent.authorization.purgeID,
+            storageObjectID: intent.record.storageObjectID,
+            purgedAt: intent.authorization.confirmedAt,
+            deletionMethod: intent.authorization.acknowledgedDeletionMethod,
+            priorContentHash: intent.record.contentHash,
+            priorByteSize: intent.record.byteSize,
+            dataClassification: intent.record.dataClassification
         )
     }
 

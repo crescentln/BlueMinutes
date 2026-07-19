@@ -5,12 +5,13 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 enum SQLiteSchema {
-    static let currentVersion: UInt32 = 5
+    static let currentVersion: UInt32 = 6
     static let initialMigrationIdentifier = "001_initial_persistence"
     static let taskRuntimeMigrationIdentifier = "002_task_runtime"
     static let transcriptCoverageMigrationIdentifier = "003_transcript_coverage"
     static let analysisMigrationIdentifier = "004_analysis_intelligence"
     static let briefingMigrationIdentifier = "005_briefing_foundation"
+    static let hardeningMigrationIdentifier = "006_security_storage_hardening"
     static let maximumSemanticPayloadBytes = 16 * 1_024 * 1_024
     static let maximumJobPayloadBytes = 1 * 1_024 * 1_024
 
@@ -1593,6 +1594,224 @@ enum SQLiteSchema {
     BEGIN SELECT RAISE(ABORT, 'active briefing ledger target is not publishable'); END;
     """
 
+    /// Schema v6 adds the two independent Task 007 policy contracts and an
+    /// auditable, crash-recoverable filesystem-unlink ledger. Existing semantic
+    /// payload bytes remain unchanged and no migration fabricates policy authority.
+    static let hardeningSchemaSQL = """
+    DROP TRIGGER semantic_revisions_no_update;
+    DROP TRIGGER semantic_revisions_no_delete;
+
+    CREATE TABLE semantic_revisions_v6 (
+        object_type TEXT NOT NULL,
+        logical_id TEXT NOT NULL CHECK (
+            length(logical_id) = 36 AND lower(logical_id) = logical_id
+        ),
+        revision_id TEXT NOT NULL CHECK (
+            length(revision_id) = 36 AND lower(revision_id) = revision_id
+        ),
+        schema_major INTEGER NOT NULL CHECK (schema_major > 0 AND schema_major <= 65535),
+        schema_minor INTEGER NOT NULL CHECK (schema_minor >= 0 AND schema_minor <= 65535),
+        lifecycle_status TEXT NOT NULL CHECK (lifecycle_status IN ('draft', 'published')),
+        validation_state TEXT NOT NULL CHECK (
+            validation_state IN ('not_validated', 'valid', 'invalid', 'needs_review')
+        ),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        published_at_ms INTEGER CHECK (published_at_ms >= created_at_ms),
+        supersedes_revision_id TEXT,
+        data_classification TEXT NOT NULL CHECK (
+            data_classification IN ('public', 'internal', 'sensitive', 'restricted')
+        ),
+        semantic_hash_algorithm TEXT,
+        semantic_hash_hex TEXT,
+        canonical_payload BLOB NOT NULL,
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size > 0 AND payload_byte_size <= 16777216
+        ),
+        PRIMARY KEY (object_type, logical_id, revision_id),
+        UNIQUE (revision_id),
+        FOREIGN KEY (object_type, logical_id, supersedes_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id),
+        CHECK (
+            (semantic_hash_algorithm IS NULL AND semantic_hash_hex IS NULL)
+            OR
+            (semantic_hash_algorithm = 'sha256'
+                AND length(semantic_hash_hex) = 64
+                AND lower(semantic_hash_hex) = semantic_hash_hex)
+        ),
+        CHECK (
+            lifecycle_status != 'published'
+            OR (validation_state = 'valid'
+                AND published_at_ms IS NOT NULL
+                AND semantic_hash_hex IS NOT NULL)
+        ),
+        CHECK (object_type IN (
+            'source_asset',
+            'evidence_ref',
+            'meeting_profile',
+            'transcript_segment',
+            'translation_segment',
+            'actor',
+            'speaking_capacity',
+            'speaker_assignment',
+            'participant',
+            'organization',
+            'issue',
+            'position',
+            'commitment',
+            'decision',
+            'intervention_card',
+            'delegation_position_card',
+            'meeting_template',
+            'issue_position_graph',
+            'briefing_section',
+            'validation_report',
+            'final_briefing',
+            'sensitivity_label',
+            'access_policy'
+        ))
+    );
+
+    INSERT INTO semantic_revisions_v6(
+        object_type,
+        logical_id,
+        revision_id,
+        schema_major,
+        schema_minor,
+        lifecycle_status,
+        validation_state,
+        created_at_ms,
+        published_at_ms,
+        supersedes_revision_id,
+        data_classification,
+        semantic_hash_algorithm,
+        semantic_hash_hex,
+        canonical_payload,
+        payload_sha256,
+        payload_byte_size
+    )
+    SELECT
+        object_type,
+        logical_id,
+        revision_id,
+        schema_major,
+        schema_minor,
+        lifecycle_status,
+        validation_state,
+        created_at_ms,
+        published_at_ms,
+        supersedes_revision_id,
+        data_classification,
+        semantic_hash_algorithm,
+        semantic_hash_hex,
+        canonical_payload,
+        payload_sha256,
+        payload_byte_size
+    FROM semantic_revisions;
+
+    DROP TABLE semantic_revisions;
+    ALTER TABLE semantic_revisions_v6 RENAME TO semantic_revisions;
+
+    CREATE TRIGGER semantic_revisions_no_update
+    BEFORE UPDATE ON semantic_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'semantic revisions are immutable');
+    END;
+
+    CREATE TRIGGER semantic_revisions_no_delete
+    BEFORE DELETE ON semantic_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'semantic revisions are immutable');
+    END;
+
+    CREATE TABLE managed_asset_purge_operations (
+        operation_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(operation_id) = 36 AND lower(operation_id) = operation_id
+        ),
+        storage_object_id TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (
+            state IN ('intent', 'completed', 'rolled_back', 'repair_required')
+        ),
+        requested_at_ms INTEGER NOT NULL CHECK (requested_at_ms >= 0),
+        finished_at_ms INTEGER CHECK (finished_at_ms >= requested_at_ms),
+        failure_code TEXT CHECK (failure_code IS NULL OR length(failure_code) BETWEEN 1 AND 96),
+        intent_payload BLOB NOT NULL,
+        intent_sha256 TEXT NOT NULL CHECK (
+            length(intent_sha256) = 64 AND lower(intent_sha256) = intent_sha256
+        ),
+        intent_byte_size INTEGER NOT NULL CHECK (
+            intent_byte_size > 0 AND intent_byte_size <= 1048576
+        ),
+        receipt_payload BLOB,
+        receipt_sha256 TEXT,
+        receipt_byte_size INTEGER,
+        FOREIGN KEY (storage_object_id) REFERENCES managed_assets(storage_object_id),
+        CHECK (
+            (state = 'intent' AND finished_at_ms IS NULL AND failure_code IS NULL
+                AND receipt_payload IS NULL AND receipt_sha256 IS NULL
+                AND receipt_byte_size IS NULL)
+            OR
+            (state = 'completed' AND finished_at_ms IS NOT NULL AND failure_code IS NULL
+                AND receipt_payload IS NOT NULL
+                AND length(receipt_sha256) = 64 AND lower(receipt_sha256) = receipt_sha256
+                AND receipt_byte_size > 0 AND receipt_byte_size <= 1048576)
+            OR
+            (state = 'rolled_back' AND finished_at_ms IS NOT NULL
+                AND receipt_payload IS NULL AND receipt_sha256 IS NULL
+                AND receipt_byte_size IS NULL)
+            OR
+            (state = 'repair_required' AND finished_at_ms IS NOT NULL
+                AND failure_code IS NOT NULL)
+        )
+    );
+
+    CREATE INDEX managed_asset_purge_operations_by_state
+        ON managed_asset_purge_operations(state, requested_at_ms, operation_id);
+
+    CREATE UNIQUE INDEX managed_asset_purge_operations_one_live_per_asset
+        ON managed_asset_purge_operations(storage_object_id)
+        WHERE state IN ('intent', 'repair_required', 'completed');
+
+    CREATE TABLE managed_asset_purge_receipts (
+        purge_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(purge_id) = 36 AND lower(purge_id) = purge_id
+        ),
+        storage_object_id TEXT NOT NULL UNIQUE,
+        purged_at_ms INTEGER NOT NULL CHECK (purged_at_ms >= 0),
+        deletion_method TEXT NOT NULL CHECK (
+            deletion_method = 'filesystem_unlink_no_erasure_guarantee'
+        ),
+        prior_hash_algorithm TEXT NOT NULL CHECK (prior_hash_algorithm = 'sha256'),
+        prior_hash_hex TEXT NOT NULL CHECK (
+            length(prior_hash_hex) = 64 AND lower(prior_hash_hex) = prior_hash_hex
+        ),
+        prior_byte_size_decimal TEXT NOT NULL CHECK (
+            length(prior_byte_size_decimal) BETWEEN 1 AND 20
+        ),
+        data_classification TEXT NOT NULL CHECK (
+            data_classification IN ('public', 'internal', 'sensitive', 'restricted')
+        ),
+        receipt_payload BLOB NOT NULL,
+        receipt_sha256 TEXT NOT NULL CHECK (
+            length(receipt_sha256) = 64 AND lower(receipt_sha256) = receipt_sha256
+        ),
+        receipt_byte_size INTEGER NOT NULL CHECK (
+            receipt_byte_size > 0 AND receipt_byte_size <= 1048576
+        ),
+        FOREIGN KEY (storage_object_id) REFERENCES managed_assets(storage_object_id)
+    );
+
+    CREATE TRIGGER managed_asset_purge_receipts_no_update
+    BEFORE UPDATE ON managed_asset_purge_receipts
+    BEGIN SELECT RAISE(ABORT, 'managed asset purge receipts are immutable'); END;
+
+    CREATE TRIGGER managed_asset_purge_receipts_no_delete
+    BEFORE DELETE ON managed_asset_purge_receipts
+    BEGIN SELECT RAISE(ABORT, 'managed asset purge receipts are immutable'); END;
+    """
+
     static var taskRuntimeChecksum: String {
         SHA256.hash(data: Data(taskRuntimeSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
@@ -1613,6 +1832,12 @@ enum SQLiteSchema {
 
     static var briefingChecksum: String {
         SHA256.hash(data: Data(briefingSchemaSQL.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static var hardeningChecksum: String {
+        SHA256.hash(data: Data(hardeningSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
     }
@@ -1693,7 +1918,7 @@ enum SQLiteDatabaseBootstrap {
                 in: databasePool,
                 expectedWorkspaceID: workspace.manifest.workspaceID
             )
-            try enforceDatabasePermissions(databaseURL)
+            try enforceDatabaseFamilyPermissions(databaseURL)
             let schemaVersion = try currentSchemaVersion(in: databasePool)
             guard schemaVersion == SQLiteSchema.currentVersion else {
                 throw PersistenceContractError.migrationFailed(
@@ -1865,6 +2090,33 @@ enum SQLiteDatabaseBootstrap {
                 ]
             )
         }
+        migrator.registerMigration(SQLiteSchema.hardeningMigrationIdentifier) { db in
+            try db.execute(sql: SQLiteSchema.hardeningSchemaSQL)
+            try db.execute(
+                sql: """
+                INSERT INTO schema_migrations(
+                    identifier, ordinal, checksum_sha256, applied_at_ms
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    SQLiteSchema.hardeningMigrationIdentifier,
+                    6,
+                    SQLiteSchema.hardeningChecksum,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+            try db.execute(
+                sql: """
+                UPDATE workspace_metadata
+                SET database_schema_version = ?, updated_at_ms = ?
+                WHERE singleton = 1
+                """,
+                arguments: [
+                    6,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+        }
         for migration in additionalMigrations {
             migrator.registerMigration(migration.identifier, migrate: migration.apply)
         }
@@ -1988,6 +2240,16 @@ enum SQLiteDatabaseBootstrap {
                     "The briefing-foundation migration checksum does not match the accepted schema."
                 )
             }
+            let hardeningChecksum = try String.fetchOne(
+                db,
+                sql: "SELECT checksum_sha256 FROM schema_migrations WHERE identifier = ?",
+                arguments: [SQLiteSchema.hardeningMigrationIdentifier]
+            )
+            guard hardeningChecksum == SQLiteSchema.hardeningChecksum else {
+                throw PersistenceContractError.migrationFailed(
+                    "The security/storage hardening migration checksum does not match the accepted schema."
+                )
+            }
         }
     }
 
@@ -2028,7 +2290,7 @@ enum SQLiteDatabaseBootstrap {
         try makeBackupReadOnlyPortable(destination)
         try destination.close()
         try removeObsoleteBackupSidecars(at: backupURL)
-        try enforceDatabasePermissions(backupURL)
+        try enforceDatabaseFamilyPermissions(backupURL)
         let artifact = try recoveryArtifact(
             at: backupURL,
             workspaceRoot: workspace.layout.root
@@ -2109,10 +2371,18 @@ enum SQLiteDatabaseBootstrap {
         }
     }
 
-    private static func enforceDatabasePermissions(_ url: URL) throws {
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o600],
-            ofItemAtPath: url.path
-        )
+    private static func enforceDatabaseFamilyPermissions(_ url: URL) throws {
+        let fileManager = FileManager.default
+        for candidate in [
+            url,
+            URL(fileURLWithPath: url.path + "-wal"),
+            URL(fileURLWithPath: url.path + "-shm"),
+            URL(fileURLWithPath: url.path + "-journal")
+        ] where fileManager.fileExists(atPath: candidate.path) {
+            try fileManager.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: candidate.path
+            )
+        }
     }
 }

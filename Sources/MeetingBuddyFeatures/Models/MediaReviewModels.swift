@@ -5,6 +5,7 @@ public enum MediaReviewSection: Hashable, Sendable {
     case transcript
     case analysis
     case briefing
+    case storage
 }
 
 public struct ClassificationChoice: Identifiable, Hashable, Sendable {

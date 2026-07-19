@@ -8,13 +8,16 @@ public actor LocalTaskTemporaryStorage: TaskTemporaryStorage {
 
     private let workspace: LocalWorkspaceDescriptor
     private let fileManager: FileManager
+    private let capacityProvider: (@Sendable () throws -> UInt64?)?
 
     public init(
         workspace: LocalWorkspaceDescriptor,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        capacityProvider: (@Sendable () throws -> UInt64?)? = nil
     ) {
         self.workspace = workspace
         self.fileManager = fileManager
+        self.capacityProvider = capacityProvider
     }
 
     public func allocateDirectory(
@@ -238,6 +241,9 @@ public actor LocalTaskTemporaryStorage: TaskTemporaryStorage {
     }
 
     public func availableCapacityBytes() async throws -> UInt64? {
+        if let capacityProvider {
+            return try capacityProvider()
+        }
         let values = try workspace.layout.tasks.resourceValues(
             forKeys: [.volumeAvailableCapacityForImportantUsageKey]
         )

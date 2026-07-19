@@ -199,6 +199,11 @@ struct BriefingPipelineIntegrationTests {
         let exportURL = workspace.root.appendingPathComponent(
             export.relativePath.rawValue
         )
+        let exportMode = try #require(
+            FileManager.default.attributesOfItem(atPath: exportURL.path)[.posixPermissions]
+                as? NSNumber
+        )
+        #expect(exportMode.intValue == 0o600)
         let exportedMarkdown = try String(contentsOf: exportURL, encoding: .utf8)
         #expect(exportedMarkdown == manuallyLocked.publication.finalBriefing.markdown)
         #expect(try ContentDigest.sha256(ofUTF8Text: exportedMarkdown)

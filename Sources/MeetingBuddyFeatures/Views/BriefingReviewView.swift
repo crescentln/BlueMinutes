@@ -11,8 +11,8 @@ struct BriefingReviewView: View {
 
     var body: some View {
         Group {
-            if let review = store.briefingReview {
-                reviewWorkspace(review)
+                if let review = store.briefingReview {
+                    reviewWorkspace(review)
             } else {
                 setupView
             }
@@ -111,6 +111,14 @@ struct BriefingReviewView: View {
     private func reviewWorkspace(_ review: BriefingReviewBundle) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if !review.isCurrent {
+                    Label(
+                        "This briefing is stale after an upstream correction. Review or regenerate it before export.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(.orange)
+                    .accessibilityLabel("Stale briefing warning")
+                }
                 publicationProof(review)
                 sectionEditor(review)
                 markdownPreview(review)

@@ -20,6 +20,7 @@ public final class MediaReviewStore {
     public private(set) var briefingRouteReview: BriefingRouteReview?
     public private(set) var briefingReview: BriefingReviewBundle?
     public private(set) var lastBriefingExport: BriefingExportRecord?
+    public private(set) var storageReport: WorkspaceStorageReport?
     public private(set) var isWorking = false
     public private(set) var safeErrorMessage: String?
 
@@ -428,6 +429,38 @@ public final class MediaReviewStore {
         }
     }
 
+    public func loadStorageReport() async {
+        guard workspace != nil else { return }
+        await perform {
+            storageReport = try await workflow.storageReport()
+        }
+    }
+
+    public func restoreTrashItem(_ storageObjectID: StorageObjectID) async {
+        await perform {
+            storageReport = try await workflow.restoreTrashItem(
+                storageObjectID: storageObjectID
+            )
+        }
+    }
+
+    public func permanentlyDeleteTrashItem(
+        _ storageObjectID: StorageObjectID,
+        confirmedByVisibleDialog: Bool
+    ) async {
+        guard confirmedByVisibleDialog else {
+            safeErrorMessage = "Permanent deletion requires visible confirmation."
+            return
+        }
+        await perform {
+            storageReport = try await workflow.permanentlyDeleteTrashItem(
+                storageObjectID: storageObjectID,
+                confirmsPermanentDeletion: true,
+                acknowledgesUnlinkIsNotSecureErasure: true
+            )
+        }
+    }
+
     public func clearError() {
         safeErrorMessage = nil
     }
@@ -465,6 +498,7 @@ public final class MediaReviewStore {
         briefingRouteReview = nil
         briefingReview = nil
         lastBriefingExport = nil
+        storageReport = nil
         manualCoverageConfirmed = false
         selectedTrack = nil
         safeErrorMessage = nil

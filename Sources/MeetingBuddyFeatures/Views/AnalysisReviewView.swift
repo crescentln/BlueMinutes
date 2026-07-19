@@ -90,6 +90,11 @@ struct AnalysisReviewView: View {
                     )
                     LabeledContent("Policy decision", value: decision.reasonCode)
                     LabeledContent(
+                        "No-outbound mode",
+                        value: decision.request.securityPolicy?.noOutboundMode == false
+                            ? "disabled" : "enforced"
+                    )
+                    LabeledContent(
                         "Runtime",
                         value: "\(review.runtimeEvidence.operatingSystemVersion) · \(review.runtimeEvidence.adapterVersion)"
                     )

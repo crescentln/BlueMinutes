@@ -278,6 +278,160 @@ public struct ManagedAssetRecord: Codable, Hashable, Sendable {
     }
 }
 
+public enum ManagedAssetDeletionMethod: String, Codable, Hashable, Sendable {
+    /// Removes the directory entry only. APFS, snapshots, backups, and SSD
+    /// behavior mean this is not a forensic-erasure guarantee.
+    case filesystemUnlinkNoErasureGuarantee = "filesystem_unlink_no_erasure_guarantee"
+}
+
+public struct ManagedAssetPurgeAuthorization: Codable, Hashable, Sendable {
+    public static let defaultMinimumRetentionDays: UInt16 = 30
+
+    public let purgeID: UUID
+    public let storageObjectID: StorageObjectID
+    public let confirmedAt: UTCInstant
+    public let minimumRetentionDays: UInt16
+    public let visibleUserConfirmation: Bool
+    public let acknowledgedDeletionMethod: ManagedAssetDeletionMethod
+
+    public init(
+        purgeID: UUID,
+        storageObjectID: StorageObjectID,
+        confirmedAt: UTCInstant,
+        minimumRetentionDays: UInt16 = Self.defaultMinimumRetentionDays,
+        visibleUserConfirmation: Bool,
+        acknowledgedDeletionMethod: ManagedAssetDeletionMethod
+    ) throws {
+        guard minimumRetentionDays > 0,
+              minimumRetentionDays <= 3_650,
+              visibleUserConfirmation,
+              acknowledgedDeletionMethod == .filesystemUnlinkNoErasureGuarantee
+        else {
+            throw WorkspaceContractError.invalidStorageTransition(
+                "Permanent deletion requires visible confirmation, bounded retention, and an unlink-semantics acknowledgment."
+            )
+        }
+        self.purgeID = purgeID
+        self.storageObjectID = storageObjectID
+        self.confirmedAt = confirmedAt
+        self.minimumRetentionDays = minimumRetentionDays
+        self.visibleUserConfirmation = visibleUserConfirmation
+        self.acknowledgedDeletionMethod = acknowledgedDeletionMethod
+    }
+
+    public func validate(for record: ManagedAssetRecord) throws {
+        guard record.storageObjectID == storageObjectID,
+              record.state == .trashed,
+              let trashedAt = record.trashedAt,
+              confirmedAt >= (try Self.purgeEligibleAt(
+                  trashedAt: trashedAt,
+                  minimumRetentionDays: minimumRetentionDays
+              ))
+        else {
+            throw WorkspaceContractError.invalidStorageTransition(
+                "Only the confirmed Trash item may be unlinked after its retention interval."
+            )
+        }
+    }
+
+    public static func purgeEligibleAt(
+        trashedAt: UTCInstant,
+        minimumRetentionDays: UInt16 = defaultMinimumRetentionDays
+    ) throws -> UTCInstant {
+        let (duration, durationOverflow) = Int64(minimumRetentionDays)
+            .multipliedReportingOverflow(by: 86_400_000)
+        let (milliseconds, additionOverflow) = trashedAt.millisecondsSinceUnixEpoch
+            .addingReportingOverflow(duration)
+        guard !durationOverflow, !additionOverflow else {
+            throw WorkspaceContractError.invalidStorageTransition(
+                "The Trash retention deadline exceeded the supported timestamp range."
+            )
+        }
+        return try UTCInstant(millisecondsSinceUnixEpoch: milliseconds)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            purgeID: container.decode(UUID.self, forKey: .purgeID),
+            storageObjectID: container.decode(StorageObjectID.self, forKey: .storageObjectID),
+            confirmedAt: container.decode(UTCInstant.self, forKey: .confirmedAt),
+            minimumRetentionDays: container.decode(UInt16.self, forKey: .minimumRetentionDays),
+            visibleUserConfirmation: container.decode(Bool.self, forKey: .visibleUserConfirmation),
+            acknowledgedDeletionMethod: container.decode(ManagedAssetDeletionMethod.self, forKey: .acknowledgedDeletionMethod)
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case purgeID = "purge_id"
+        case storageObjectID = "storage_object_id"
+        case confirmedAt = "confirmed_at"
+        case minimumRetentionDays = "minimum_retention_days"
+        case visibleUserConfirmation = "visible_user_confirmation"
+        case acknowledgedDeletionMethod = "acknowledged_deletion_method"
+    }
+}
+
+public struct ManagedAssetPurgeReceipt: Codable, Hashable, Sendable {
+    public let purgeID: UUID
+    public let storageObjectID: StorageObjectID
+    public let purgedAt: UTCInstant
+    public let deletionMethod: ManagedAssetDeletionMethod
+    public let priorContentHash: ContentDigest
+    public let priorByteSize: UInt64
+    public let dataClassification: DataClassification
+
+    public init(
+        purgeID: UUID,
+        storageObjectID: StorageObjectID,
+        purgedAt: UTCInstant,
+        deletionMethod: ManagedAssetDeletionMethod,
+        priorContentHash: ContentDigest,
+        priorByteSize: UInt64,
+        dataClassification: DataClassification
+    ) throws {
+        guard deletionMethod == .filesystemUnlinkNoErasureGuarantee,
+              priorContentHash.algorithm == .sha256,
+              priorByteSize > 0,
+              dataClassification.isKnown
+        else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "The permanent-deletion receipt is incomplete."
+            )
+        }
+        self.purgeID = purgeID
+        self.storageObjectID = storageObjectID
+        self.purgedAt = purgedAt
+        self.deletionMethod = deletionMethod
+        self.priorContentHash = priorContentHash
+        self.priorByteSize = priorByteSize
+        self.dataClassification = dataClassification
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            purgeID: container.decode(UUID.self, forKey: .purgeID),
+            storageObjectID: container.decode(StorageObjectID.self, forKey: .storageObjectID),
+            purgedAt: container.decode(UTCInstant.self, forKey: .purgedAt),
+            deletionMethod: container.decode(ManagedAssetDeletionMethod.self, forKey: .deletionMethod),
+            priorContentHash: container.decode(ContentDigest.self, forKey: .priorContentHash),
+            priorByteSize: container.decode(UInt64.self, forKey: .priorByteSize),
+            dataClassification: container.decode(DataClassification.self, forKey: .dataClassification)
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case purgeID = "purge_id"
+        case storageObjectID = "storage_object_id"
+        case purgedAt = "purged_at"
+        case deletionMethod = "deletion_method"
+        case priorContentHash = "prior_content_hash"
+        case priorByteSize = "prior_byte_size"
+        case dataClassification = "data_classification"
+    }
+}
+
 /// ID-based managed-file use case for features and composition roots.
 ///
 /// Concrete record-based filesystem/repository coordination remains hidden
@@ -302,4 +456,9 @@ public protocol StorageService: Sendable {
         storageObjectID: StorageObjectID,
         at restoredAt: UTCInstant
     ) throws -> ManagedAssetRecord
+
+    func permanentlyDeleteFromTrash(
+        storageObjectID: StorageObjectID,
+        authorization: ManagedAssetPurgeAuthorization
+    ) throws -> ManagedAssetPurgeReceipt
 }

@@ -5,17 +5,19 @@ import Testing
 @Suite
 struct GoldenFixtureTests {
     @Test
-    func goldenCatalogContainsExactlyFiveUniqueCases() throws {
+    func goldenCatalogContainsSevenUniqueQualityCases() throws {
         let fixtures = try GoldenFixtureCatalog.all()
         let expected = Set([
             "ordinary_delegation_intervention",
             "reservation_or_qualification",
             "uncertain_speaker",
             "interpretation_versus_original_audio",
-            "prepared_china_statement_versus_delivered"
+            "prepared_china_statement_versus_delivered",
+            "prompt_injection_remains_source_content",
+            "consultations_without_decision_or_commitment"
         ])
 
-        #expect(fixtures.count == 5)
+        #expect(fixtures.count == 7)
         #expect(Set(fixtures.map(\.manifest.testCaseID)) == expected)
         #expect(Set(fixtures.map(\.manifest.testCaseVersion)) == ["1.0"])
     }
@@ -235,6 +237,26 @@ struct GoldenFixtureTests {
         #expect(fixture.manifest.forbiddenClaims.contains(.confirmedPolicyChange))
         #expect(fixture.manifest.forbiddenClaims.contains(.realWorldPositionAttribution))
         #expect(fixture.graph.meeting.title.contains("完全虚构"))
+    }
+
+    @Test
+    func adversarialGoldenCasesPreserveSourceNegationsAndNeverGrantAuthority() throws {
+        let fixtures = try GoldenFixtureCatalog.all()
+        let injection = try #require(fixtures.first {
+            $0.manifest.testCaseID == "prompt_injection_remains_source_content"
+        })
+        #expect(injection.graph.transcripts.first?.text.contains("SYSTEM:") == true)
+        #expect(injection.manifest.forbiddenClaims.contains(.untrustedContentAsInstruction))
+        #expect(injection.manifest.forbiddenClaims.contains(.inventedDecision))
+
+        let nonDecision = try #require(fixtures.first {
+            $0.manifest.testCaseID == "consultations_without_decision_or_commitment"
+        })
+        #expect(Set(nonDecision.manifest.expectedReservations.map(\.code)) == [
+            "no_agreement", "no_decision", "no_commitment"
+        ])
+        #expect(nonDecision.manifest.forbiddenClaims.contains(.inventedCommitment))
+        #expect(nonDecision.graph.transcripts.first?.text.contains("does not constitute") == true)
     }
 
     @Test

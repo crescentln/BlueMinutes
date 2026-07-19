@@ -253,9 +253,41 @@ public protocol MediaReviewWorkflow: AnyObject {
         fileName: String,
         expectedClassification: DataClassification
     ) async throws -> BriefingExportRecord
+    func storageReport() async throws -> WorkspaceStorageReport
+    func restoreTrashItem(storageObjectID: StorageObjectID) async throws
+        -> WorkspaceStorageReport
+    func permanentlyDeleteTrashItem(
+        storageObjectID: StorageObjectID,
+        confirmsPermanentDeletion: Bool,
+        acknowledgesUnlinkIsNotSecureErasure: Bool
+    ) async throws -> WorkspaceStorageReport
 }
 
 public extension MediaReviewWorkflow {
+    func storageReport() async throws -> WorkspaceStorageReport {
+        throw WorkspaceContractError.managedAssetMismatch(
+            "Workspace storage reporting is unavailable."
+        )
+    }
+
+    func restoreTrashItem(
+        storageObjectID _: StorageObjectID
+    ) async throws -> WorkspaceStorageReport {
+        throw WorkspaceContractError.managedAssetMismatch(
+            "Workspace Trash restore is unavailable."
+        )
+    }
+
+    func permanentlyDeleteTrashItem(
+        storageObjectID _: StorageObjectID,
+        confirmsPermanentDeletion _: Bool,
+        acknowledgesUnlinkIsNotSecureErasure _: Bool
+    ) async throws -> WorkspaceStorageReport {
+        throw WorkspaceContractError.managedAssetMismatch(
+            "Permanent Workspace Trash deletion is unavailable."
+        )
+    }
+
     func transcriptRoute(
         canonicalJobID: JobID,
         submission: TranscriptStartSubmission

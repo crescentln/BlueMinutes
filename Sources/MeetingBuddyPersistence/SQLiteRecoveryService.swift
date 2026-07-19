@@ -550,6 +550,10 @@ public final class SQLiteRecoveryService: RecoveryService, @unchecked Sendable {
             canonical = try roundTrip(ValidationReportV1.self, payload, expectedReference: reference)
         case .finalBriefing:
             canonical = try roundTrip(FinalBriefingV1.self, payload, expectedReference: reference)
+        case .sensitivityLabel:
+            canonical = try roundTrip(SensitivityLabelV1.self, payload, expectedReference: reference)
+        case .accessPolicy:
+            canonical = try roundTrip(AccessPolicyV1.self, payload, expectedReference: reference)
         case .userConfirmedNote, .unrecognized:
             throw WorkspaceContractError.recoveryArtifactInvalid(
                 "The semantic snapshot contains an unsupported object payload."

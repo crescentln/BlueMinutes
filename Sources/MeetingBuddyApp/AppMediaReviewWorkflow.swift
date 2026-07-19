@@ -69,6 +69,8 @@ private final class WorkspaceRuntime: @unchecked Sendable {
     let intake: LocalMediaIntakeService
     let transientSources: TransientMediaSourceRegistry
     let manager: LocalTaskManager
+    let telemetry: LocalTelemetryBuffer
+    let storageReporter: LocalWorkspaceStorageReporter
     let transcriptionProvider: (any TranscriptionProvider)?
     let translationProvider: (any TranslationProvider)?
     let analysisProvider: (any AnalysisProvider)?
@@ -88,6 +90,11 @@ private final class WorkspaceRuntime: @unchecked Sendable {
             fileAccess: fileAccess
         )
         transientSources = TransientMediaSourceRegistry()
+        telemetry = LocalTelemetryBuffer(policy: try TelemetryPolicy())
+        storageReporter = LocalWorkspaceStorageReporter(
+            workspace: descriptor,
+            store: store
+        )
         let intakeExecutor = LocalMediaIntakeJobExecutor(
             intake: intake,
             sources: transientSources
@@ -164,6 +171,12 @@ private final class WorkspaceRuntime: @unchecked Sendable {
         else {
             throw AppWorkflowError.workspaceHealthFailed
         }
+        _ = await telemetry.record(
+            try ContentFreeTelemetryEvent(
+                name: .workspaceHealthChecked,
+                counters: [TelemetryCounter(key: .successful, value: 1)]
+            )
+        )
     }
 }
 
@@ -283,6 +296,35 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
                 createdAt: createdAt
             )
             try runtime.store.insert(meeting)
+            let meetingUUID = try requiredUUID(meeting.meetingID.canonicalString)
+            let securityPolicy = try LocalSecurityPolicyFactory().makeDefault(
+                meeting: meeting,
+                sensitivityLabelID: SensitivityLabelID(meetingUUID),
+                sensitivityLabelRevisionID: RevisionID(UUID()),
+                accessPolicyID: AccessPolicyID(meetingUUID),
+                accessPolicyRevisionID: RevisionID(UUID()),
+                createdAt: createdAt
+            )
+            try runtime.store.insert(securityPolicy.sensitivityLabel)
+            _ = try runtime.store.activate(
+                ActivePublishedRevisionSelection(
+                    logicalID: securityPolicy.sensitivityLabel.labelID,
+                    revisionID: securityPolicy.sensitivityLabel.revision.revisionID
+                ),
+                as: SensitivityLabelV1.self,
+                expectedCurrentRevisionID: nil,
+                markedAt: createdAt
+            )
+            try runtime.store.insert(securityPolicy.accessPolicy)
+            _ = try runtime.store.activate(
+                ActivePublishedRevisionSelection(
+                    logicalID: securityPolicy.accessPolicy.policyID,
+                    revisionID: securityPolicy.accessPolicy.revision.revisionID
+                ),
+                as: AccessPolicyV1.self,
+                expectedCurrentRevisionID: nil,
+                markedAt: createdAt
+            )
             let selectedTrack = try inspection.requireTrack(submission.selectedTrack)
             let expectedSourceByteSize = try sourceByteSize(sourceURL)
             let intakePlan = try LocalMediaIntakeJobPlan(
@@ -384,6 +426,7 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             for: submission.sourceLanguage
         ) ?? false
         let speechRequest = try routeRequest(
+            meetingID: context.plan.meetingID,
             capability: .transcription,
             classification: context.plan.dataClassification,
             categories: [.canonicalAudio],
@@ -399,6 +442,7 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             let installed = speechDecision.route == .appleOnDevice && translationInstalled
             translationDecision = try ModelPolicyRouter().decide(
                 routeRequest(
+                    meetingID: context.plan.meetingID,
                     capability: .translation,
                     classification: context.plan.dataClassification,
                     categories: [.transcriptText],
@@ -461,6 +505,7 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         let context = try await canonicalContext(jobID: canonicalJobID)
         let speechRoute = try ModelPolicyRouter().decide(
             routeRequest(
+                meetingID: context.plan.meetingID,
                 capability: .transcription,
                 classification: context.plan.dataClassification,
                 categories: [.canonicalAudio],
@@ -470,6 +515,7 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         let translationRoute = try submission.targetLanguage.map { _ in
             try ModelPolicyRouter().decide(
                 routeRequest(
+                    meetingID: context.plan.meetingID,
                     capability: .translation,
                     classification: context.plan.dataClassification,
                     categories: [.transcriptText],
@@ -877,6 +923,52 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         )
     }
 
+    func storageReport() async throws -> WorkspaceStorageReport {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        return try runtime.storageReporter.storageReport(
+            calculatedAt: currentInstant(),
+            maximumEntries: 100_000
+        )
+    }
+
+    func restoreTrashItem(
+        storageObjectID: StorageObjectID
+    ) async throws -> WorkspaceStorageReport {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        _ = try runtime.coordinator.restoreFromTrash(
+            storageObjectID: storageObjectID,
+            at: currentInstant()
+        )
+        return try await storageReport()
+    }
+
+    func permanentlyDeleteTrashItem(
+        storageObjectID: StorageObjectID,
+        confirmsPermanentDeletion: Bool,
+        acknowledgesUnlinkIsNotSecureErasure: Bool
+    ) async throws -> WorkspaceStorageReport {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let timestamp = try currentInstant()
+        let method: ManagedAssetDeletionMethod = .filesystemUnlinkNoErasureGuarantee
+        guard acknowledgesUnlinkIsNotSecureErasure else {
+            throw WorkspaceContractError.invalidStorageTransition(
+                "Permanent deletion requires acknowledgment of filesystem unlink semantics."
+            )
+        }
+        let authorization = try ManagedAssetPurgeAuthorization(
+            purgeID: UUID(),
+            storageObjectID: storageObjectID,
+            confirmedAt: timestamp,
+            visibleUserConfirmation: confirmsPermanentDeletion,
+            acknowledgedDeletionMethod: method
+        )
+        _ = try runtime.coordinator.permanentlyDeleteFromTrash(
+            storageObjectID: storageObjectID,
+            authorization: authorization
+        )
+        return try await storageReport()
+    }
+
     private func releasePendingSource() {
         if pendingSourceDidStartScope {
             pendingSourceURL?.stopAccessingSecurityScopedResource()
@@ -1032,7 +1124,10 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             retentionPolicy: .noProviderRetention,
             dataCategories: [.validatedIntelligenceClaims, .evidenceIdentifiers],
             visibleUserAuthorization: visibleUserAuthorization,
-            localModelAvailable: modelAvailable
+            localModelAvailable: modelAvailable,
+            securityPolicy: try securityPolicySnapshot(
+                meetingID: source.meeting.meetingID
+            )
         )
     }
 
@@ -1088,7 +1183,10 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             retentionPolicy: .noProviderRetention,
             dataCategories: categories,
             visibleUserAuthorization: visibleUserAuthorization,
-            localModelAvailable: modelAvailable
+            localModelAvailable: modelAvailable,
+            securityPolicy: try securityPolicySnapshot(
+                meetingID: source.meeting.meetingID
+            )
         )
     }
 
@@ -1108,6 +1206,7 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
     }
 
     private func routeRequest(
+        meetingID: MeetingID,
         capability: AIProcessingCapability,
         classification: DataClassification,
         categories: [ProviderDataCategory],
@@ -1123,8 +1222,47 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             retentionPolicy: .localWorkspaceOnly,
             dataCategories: categories,
             visibleUserAuthorization: false,
-            localModelAvailable: localModelAvailable
+            localModelAvailable: localModelAvailable,
+            securityPolicy: try securityPolicySnapshot(meetingID: meetingID)
         )
+    }
+
+    private func securityPolicySnapshot(
+        meetingID: MeetingID
+    ) throws -> ModelSecurityPolicySnapshot? {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let labelID = try SensitivityLabelID(validating: meetingID.canonicalString)
+        let policyID = try AccessPolicyID(validating: meetingID.canonicalString)
+        guard let label = try runtime.store.activeRevisionState(
+            SensitivityLabelV1.self,
+            logicalID: labelID
+        )?.revision,
+            let policy = try runtime.store.activeRevisionState(
+                AccessPolicyV1.self,
+                logicalID: policyID
+            )?.revision
+        else {
+            // Accepted v5 jobs remain readable and local-only. Absence never
+            // becomes external-processing authority.
+            return nil
+        }
+        let labelReference = try semanticReference(label)
+        guard policy.meetingID == meetingID,
+              label.meetingID == meetingID,
+              policy.sensitivityLabelRevision == labelReference,
+              policy.effectiveClassification == label.effectiveClassification
+        else { throw AppWorkflowError.workspaceHealthFailed }
+        return try LocalSecurityPolicyBundle(
+            sensitivityLabel: label,
+            accessPolicy: policy
+        ).modelSnapshot
+    }
+
+    private func requiredUUID(_ canonicalString: String) throws -> UUID {
+        guard let value = UUID(uuidString: canonicalString) else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+        return value
     }
 
     private func sourceByteSize(_ sourceURL: URL) throws -> UInt64 {

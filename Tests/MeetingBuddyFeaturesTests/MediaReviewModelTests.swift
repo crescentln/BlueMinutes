@@ -29,10 +29,36 @@ struct MediaReviewModelTests {
     @Test
     func analysisAndBriefingAreIndependentNavigationSections() {
         #expect(
-            Set<MediaReviewSection>([.intake, .transcript, .analysis, .briefing]).count == 4
+            Set<MediaReviewSection>([.intake, .transcript, .analysis, .briefing, .storage])
+                .count == 5
         )
         #expect(MediaReviewSection.analysis != .transcript)
         #expect(MediaReviewSection.briefing != .analysis)
+    }
+
+    @Test @MainActor
+    func storageActionsRequireVisibleDeletionConfirmationAndRefreshTheReport() async throws {
+        let workflow = try MediaReviewWorkflowProbe()
+        let store = MediaReviewStore(workflow: workflow)
+        await store.openOrCreateWorkspace(at: URL(fileURLWithPath: "/selected-workspace"))
+        await store.loadStorageReport()
+        let item = try #require(store.storageReport?.trashItems.first)
+
+        await store.permanentlyDeleteTrashItem(
+            item.storageObjectID,
+            confirmedByVisibleDialog: false
+        )
+        #expect(store.safeErrorMessage == "Permanent deletion requires visible confirmation.")
+        #expect(workflow.permanentDeletionCallCount == 0)
+
+        await store.permanentlyDeleteTrashItem(
+            item.storageObjectID,
+            confirmedByVisibleDialog: true
+        )
+        #expect(workflow.permanentDeletionCallCount == 1)
+        #expect(workflow.lastDeletionConfirmed == true)
+        #expect(workflow.lastUnlinkAcknowledged == true)
+        #expect(store.storageReport?.trashItems.isEmpty == true)
     }
 
     @Test @MainActor
@@ -77,6 +103,9 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let openGate: AsyncGate?
     private(set) var inspectCallCount = 0
     private(set) var importCallCount = 0
+    private(set) var permanentDeletionCallCount = 0
+    private(set) var lastDeletionConfirmed = false
+    private(set) var lastUnlinkAcknowledged = false
 
     init(openGate: AsyncGate? = nil) throws {
         self.openGate = openGate
@@ -139,6 +168,60 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     func retry(jobID _: JobID) async throws -> MediaJobReview {
         throw ProbeError.unexpectedCall
     }
+
+    func storageReport() async throws -> WorkspaceStorageReport {
+        try WorkspaceStorageReport(
+            calculatedAt: featureInstant(1_950_000_000_000),
+            totalByteCount: 128,
+            categories: [
+                WorkspaceStorageCategoryUsage(
+                    category: .trash,
+                    byteCount: 128,
+                    fileCount: 1
+                )
+            ],
+            trashItems: [
+                WorkspaceTrashItem(
+                    storageObjectID: featureID(20, StorageObjectID.self),
+                    byteSize: 128,
+                    trashedAt: featureInstant(1_940_000_000_000),
+                    purgeEligibleAt: featureInstant(1_949_000_000_000),
+                    dataClassification: .sensitive,
+                    retentionClass: .workspaceManaged
+                )
+            ],
+            permissionIssueCount: 0,
+            scanTruncated: false
+        )
+    }
+
+    func permanentlyDeleteTrashItem(
+        storageObjectID _: StorageObjectID,
+        confirmsPermanentDeletion: Bool,
+        acknowledgesUnlinkIsNotSecureErasure: Bool
+    ) async throws -> WorkspaceStorageReport {
+        permanentDeletionCallCount += 1
+        lastDeletionConfirmed = confirmsPermanentDeletion
+        lastUnlinkAcknowledged = acknowledgesUnlinkIsNotSecureErasure
+        return try WorkspaceStorageReport(
+            calculatedAt: featureInstant(1_950_000_000_001),
+            totalByteCount: 0,
+            categories: [],
+            trashItems: [],
+            permissionIssueCount: 0,
+            scanTruncated: false
+        )
+    }
+}
+
+private func featureID<Tag>(_ suffix: Int, _ type: StableID<Tag>.Type) -> StableID<Tag> {
+    StableID<Tag>(
+        UUID(uuidString: String(format: "51000000-0000-0000-0000-%012d", suffix))!
+    )
+}
+
+private func featureInstant(_ milliseconds: Int64) -> UTCInstant {
+    try! UTCInstant(millisecondsSinceUnixEpoch: milliseconds)
 }
 
 private actor AsyncGate {

@@ -1231,6 +1231,25 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         }
     }
 
+    public func managedAssets(maximumEntries: UInt32) throws -> [ManagedAssetRecord] {
+        guard maximumEntries > 0, maximumEntries <= 1_000_001 else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "Managed-asset inventory requires a bounded entry count."
+            )
+        }
+        return try databasePool.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM managed_assets
+                ORDER BY created_at_ms, storage_object_id
+                LIMIT ?
+                """,
+                arguments: [Int64(maximumEntries)]
+            ).map(SQLitePayloadCodec.managedAsset)
+        }
+    }
+
     public func sourceAsset(revisionID: RevisionID) throws -> SourceAssetV1? {
         try fetch(SourceAssetV1.self, revisionID: revisionID)
     }
@@ -1274,6 +1293,8 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             || type is BriefingSectionV1.Type
             || type is ValidationReportV1.Type
             || type is FinalBriefingV1.Type
+            || type is SensitivityLabelV1.Type
+            || type is AccessPolicyV1.Type
         guard supported else {
             throw PersistenceContractError.unsupportedStoredObjectType(
                 Object.ObjectIDTag.semanticObjectType.encodedValue
@@ -2530,6 +2551,10 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             _ = try decode(ValidationReportV1.self, row: row)
         case .finalBriefing:
             _ = try decode(FinalBriefingV1.self, row: row)
+        case .sensitivityLabel:
+            _ = try decode(SensitivityLabelV1.self, row: row)
+        case .accessPolicy:
+            _ = try decode(AccessPolicyV1.self, row: row)
         case .userConfirmedNote, .unrecognized:
             throw PersistenceContractError.unsupportedStoredObjectType(objectTypeValue)
         }

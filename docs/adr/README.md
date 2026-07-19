@@ -27,6 +27,7 @@ task authorization.
 | [ADR-0006](ADR-0006-provider-and-agent-boundaries.md) | Accepted | Inference providers and agent-control adapters are separate boundaries |
 | [ADR-0007](ADR-0007-data-classification-and-cloud-routing.md) | Accepted | Classification inheritance and deny-by-default cloud-routing intersection |
 | [ADR-0008](ADR-0008-media-and-external-processes.md) | Accepted | Native media APIs first; no external executable is currently approved |
+| [ADR-0012](ADR-0012-task-007-workspace-encryption-boundary.md) | Accepted for implementation | No application-level workspace encryption in Task 007; private local files, Keychain secrets, readable recovery, and explicit revisit triggers |
 
 ## Open decisions by blocking task
 
@@ -35,6 +36,11 @@ task authorization.
 | Production transcription and translation routes | Task 005B |
 | Production inference and optional independent review routes | Task 006A/006B |
 | UN Web TV acquisition and live-capture entitlement boundaries | Task 008B, after Task 008A |
+
+Task 007 adds ADR-0012: the current single-user local workspace format remains
+readable and keyless at the application layer, with private permissions,
+Keychain-only secrets, and no claim that FileVault is enabled. A different
+encryption boundary requires a later explicit ADR and migration design.
 
 There are no open P0 architecture decisions after the user confirmed the
 canonical greenfield root.

@@ -53,7 +53,8 @@ struct ProviderContractTests {
             retentionPolicy: .noProviderRetention,
             dataCategories: [.canonicalAudio],
             visibleUserAuthorization: true,
-            localModelAvailable: false
+            localModelAvailable: false,
+            securityPolicy: try externalSecurityPolicy()
         )
         #expect(throws: AIProviderContractError.self) {
             _ = try router.decide(externalCandidate)
@@ -69,7 +70,8 @@ struct ProviderContractTests {
             retentionPolicy: .noProviderRetention,
             dataCategories: [.canonicalAudio],
             visibleUserAuthorization: false,
-            localModelAvailable: false
+            localModelAvailable: false,
+            securityPolicy: try externalSecurityPolicy()
         )
         #expect(try router.decide(missingAuthorization).route == .manualFallback)
 
@@ -83,7 +85,8 @@ struct ProviderContractTests {
             retentionPolicy: .noProviderRetention,
             dataCategories: [.canonicalAudio],
             visibleUserAuthorization: true,
-            localModelAvailable: false
+            localModelAvailable: false,
+            securityPolicy: try externalSecurityPolicy()
         )
         #expect(try router.decide(deniedDestination).route == .manualFallback)
 
@@ -97,9 +100,126 @@ struct ProviderContractTests {
             retentionPolicy: .localWorkspaceOnly,
             dataCategories: [.canonicalAudio],
             visibleUserAuthorization: true,
-            localModelAvailable: false
+            localModelAvailable: false,
+            securityPolicy: try externalSecurityPolicy()
         )
         #expect(try router.decide(deniedRetention).route == .manualFallback)
+
+        let noOutbound = try ModelRouteRequest(
+            capability: .transcription,
+            dataClassification: .internal,
+            offlineMode: false,
+            organizationAllowsExternalProcessing: true,
+            deploymentEnvironment: .production,
+            destination: .approvedProvider(identifier: "synthetic-approved"),
+            retentionPolicy: .noProviderRetention,
+            dataCategories: [.canonicalAudio],
+            visibleUserAuthorization: true,
+            localModelAvailable: false,
+            securityPolicy: try localOnlySecurityPolicy()
+        )
+        #expect(try router.decide(noOutbound).reasonCode == "no_outbound_mode")
+
+        let localDenied = try ModelRouteRequest(
+            capability: .transcription,
+            dataClassification: .internal,
+            offlineMode: true,
+            organizationAllowsExternalProcessing: false,
+            deploymentEnvironment: .production,
+            destination: .localDevice,
+            retentionPolicy: .localWorkspaceOnly,
+            dataCategories: [.canonicalAudio],
+            visibleUserAuthorization: false,
+            localModelAvailable: true,
+            securityPolicy: try localOnlySecurityPolicy(localProcessingAllowed: false)
+        )
+        #expect(try router.decide(localDenied).reasonCode == "local_processing_denied")
+    }
+
+    @Test
+    func routePolicyMatrixKeepsEveryClassificationLocalAndRejectsPolicyDrift() throws {
+        let router = ModelPolicyRouter()
+        for (index, classification) in [
+            DataClassification.public,
+            .internal,
+            .sensitive,
+            .restricted
+        ].enumerated() {
+            let policy = try localOnlySecurityPolicy(
+                classification: classification,
+                identifierOffset: 920 + index * 4
+            )
+            let local = try ModelRouteRequest(
+                capability: .analysis,
+                dataClassification: classification,
+                offlineMode: false,
+                organizationAllowsExternalProcessing: true,
+                deploymentEnvironment: .production,
+                destination: .approvedProvider(identifier: "ignored-ui-selection"),
+                retentionPolicy: .approvedProviderRetention,
+                dataCategories: [
+                    .transcriptText,
+                    .speakerContext,
+                    .evidenceIdentifiers
+                ],
+                visibleUserAuthorization: true,
+                localModelAvailable: true,
+                securityPolicy: policy
+            )
+            let decision = try router.decide(local)
+            #expect(decision.route == .appleOnDevice)
+            #expect(decision.route.privacyRoute == .localOnly)
+        }
+
+        let legacyExternal = try ModelRouteRequest(
+            capability: .transcription,
+            dataClassification: .internal,
+            offlineMode: false,
+            organizationAllowsExternalProcessing: true,
+            deploymentEnvironment: .production,
+            destination: .approvedProvider(identifier: "synthetic-approved"),
+            retentionPolicy: .noProviderRetention,
+            dataCategories: [.canonicalAudio],
+            visibleUserAuthorization: true,
+            localModelAvailable: false
+        )
+        #expect(try router.decide(legacyExternal).reasonCode == "legacy_policy_is_local_only")
+
+        #expect(throws: AIProviderContractError.self) {
+            _ = try ModelRouteRequest(
+                capability: .transcription,
+                dataClassification: .sensitive,
+                offlineMode: false,
+                organizationAllowsExternalProcessing: true,
+                deploymentEnvironment: .production,
+                destination: .approvedProvider(identifier: "synthetic-approved"),
+                retentionPolicy: .noProviderRetention,
+                dataCategories: [.canonicalAudio],
+                visibleUserAuthorization: true,
+                localModelAvailable: false,
+                securityPolicy: externalSecurityPolicy()
+            )
+        }
+        #expect(throws: AIProviderContractError.self) {
+            _ = try ModelSecurityPolicySnapshot(
+                sensitivityLabelRevision: SemanticRevisionReference(
+                    logicalID: aiID(940, SensitivityLabelID.self),
+                    revisionID: aiID(941, RevisionID.self)
+                ),
+                accessPolicyRevision: SemanticRevisionReference(
+                    logicalID: aiID(942, AccessPolicyID.self),
+                    revisionID: aiID(943, RevisionID.self)
+                ),
+                effectiveClassification: .restricted,
+                noOutboundMode: false,
+                localProcessingAllowed: true,
+                manualLocalReviewAllowed: true,
+                externalProcessingAllowed: true,
+                approvedExternalProviderIdentifiers: ["synthetic-approved"],
+                approvedDeploymentEnvironments: [.production],
+                approvedRetentionPolicies: [.noProviderRetention]
+            )
+        }
     }
 
     @Test
@@ -192,17 +312,113 @@ struct ProviderContractTests {
     @Test
     func keychainRoundTripsOpaqueSecretWithoutFilesystemStorage() throws {
         let store = MacOSKeychainSecretStore()
+        #expect(throws: AIProviderContractError.self) {
+            _ = try SecretIdentifier(service: "com.meetingbuddy/tests", account: "ephemeral")
+        }
+        #expect(throws: AIProviderContractError.self) {
+            _ = try SecretIdentifier(service: "com.meetingbuddy.tests", account: "")
+        }
         let identifier = try SecretIdentifier(
             service: "com.meetingbuddy.tests.\(UUID().uuidString.lowercased())",
             account: "ephemeral"
         )
         defer { try? store.remove(identifier) }
         let value = Data("synthetic-secret-not-a-credential".utf8)
+        #expect(throws: KeychainSecretStoreError.valueTooLarge) {
+            try store.write(Data(), for: identifier)
+        }
+        #expect(throws: KeychainSecretStoreError.valueTooLarge) {
+            try store.write(
+                Data(repeating: 0x5a, count: MacOSKeychainSecretStore.maximumValueBytes + 1),
+                for: identifier
+            )
+        }
         try store.write(value, for: identifier)
         #expect(try store.read(identifier) == value)
         try store.remove(identifier)
         #expect(try store.read(identifier) == nil)
     }
+
+    @Test
+    func telemetryIsDefaultOffBoundedAndContentFreeByConstruction() async throws {
+        let event = try ContentFreeTelemetryEvent(
+            name: .taskStateChanged,
+            counters: [TelemetryCounter(key: .successful, value: 1)]
+        )
+        let disabled = LocalTelemetryBuffer(policy: try TelemetryPolicy())
+        #expect(await disabled.record(event) == .suppressedDisabled)
+        #expect(await disabled.bufferedEvents().isEmpty)
+
+        let local = LocalTelemetryBuffer(
+            policy: try TelemetryPolicy(
+                mode: .localDiagnostics,
+                noOutboundMode: true,
+                maximumBufferedEvents: 2
+            )
+        )
+        #expect(await local.record(event) == .recordedInMemory)
+        #expect(await local.bufferedEvents() == [event])
+
+        let encoded = try JSONEncoder().encode(event)
+        let text = String(decoding: encoded, as: UTF8.self)
+        let forbiddenFixtures = [
+            "Synthetic Secret Meeting",
+            "transcript sentence",
+            "sk-test-credential",
+            "recording.wav",
+            "/Users/example/private",
+            "60000000-0000-0000-0000-000000000001"
+        ]
+        #expect(forbiddenFixtures.allSatisfy { !text.contains($0) })
+        #expect(!text.contains("title"))
+        #expect(!text.contains("filename"))
+        #expect(!text.contains("path"))
+        #expect(!text.contains("meeting_id"))
+    }
+}
+
+private func externalSecurityPolicy() throws -> ModelSecurityPolicySnapshot {
+    try ModelSecurityPolicySnapshot(
+        sensitivityLabelRevision: SemanticRevisionReference(
+            logicalID: aiID(901, SensitivityLabelID.self),
+            revisionID: aiID(902, RevisionID.self)
+        ),
+        accessPolicyRevision: SemanticRevisionReference(
+            logicalID: aiID(903, AccessPolicyID.self),
+            revisionID: aiID(904, RevisionID.self)
+        ),
+        effectiveClassification: .internal,
+        noOutboundMode: false,
+        localProcessingAllowed: true,
+        manualLocalReviewAllowed: true,
+        externalProcessingAllowed: true,
+        approvedExternalProviderIdentifiers: ["synthetic-approved"],
+        approvedDeploymentEnvironments: [.production],
+        approvedRetentionPolicies: [.noProviderRetention]
+    )
+}
+
+private func localOnlySecurityPolicy(
+    localProcessingAllowed: Bool = true,
+    classification: DataClassification = .internal,
+    identifierOffset: Int = 905
+) throws -> ModelSecurityPolicySnapshot {
+    try ModelSecurityPolicySnapshot(
+        sensitivityLabelRevision: SemanticRevisionReference(
+            logicalID: aiID(identifierOffset, SensitivityLabelID.self),
+            revisionID: aiID(identifierOffset + 1, RevisionID.self)
+        ),
+        accessPolicyRevision: SemanticRevisionReference(
+            logicalID: aiID(identifierOffset + 2, AccessPolicyID.self),
+            revisionID: aiID(identifierOffset + 3, RevisionID.self)
+        ),
+        effectiveClassification: classification,
+        noOutboundMode: true,
+        localProcessingAllowed: localProcessingAllowed,
+        manualLocalReviewAllowed: true,
+        externalProcessingAllowed: false,
+        approvedExternalProviderIdentifiers: []
+    )
 }
 
 private func request(

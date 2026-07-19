@@ -188,7 +188,7 @@ struct AnalysisPipelineIntegrationTests {
         let snapshot = try recovery.createRecoverySnapshot(
             createdAt: aiInstant(1_900_000_000_260)
         )
-        #expect(snapshot.schemaVersion == 5)
+        #expect(snapshot.schemaVersion == 6)
         #expect(snapshot.revisionCount >= 16)
         try recovery.verifyRecoverySnapshot(snapshot)
 
