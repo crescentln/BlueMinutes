@@ -350,3 +350,117 @@ public actor AppleFoundationModelsAnalysisProvider: AnalysisProvider {
         )
     }
 }
+
+@available(macOS 26.0, *)
+@Generable(description: "One evidence-keyed item in a bounded diplomatic briefing section.")
+private struct AppleDiplomaticBriefingItemOutput {
+    @Guide(.maximumCount(16))
+    var sourceKeys: [String]
+    var text: String
+    @Guide(.range(0...1_000_000))
+    var confidenceMillionths: Int
+}
+
+@available(macOS 26.0, *)
+@Generable(description: "One independently generated diplomatic briefing section.")
+private struct AppleDiplomaticBriefingSectionOutput {
+    @Guide(.anyOf([
+        "meeting_overview",
+        "major_issues",
+        "major_delegations"
+    ]))
+    var sectionType: String
+    @Guide(.maximumCount(128))
+    var items: [AppleDiplomaticBriefingItemOutput]
+}
+
+/// Local-only Apple Foundation Models adapter for the three independently
+/// generated Task 006B sections. Identity, revisions, evidence resolution,
+/// validation, rendering and publication remain application-owned.
+@available(macOS 26.0, *)
+public actor AppleFoundationModelsBriefingProvider: BriefingSectionProvider {
+    public static let adapterVersion = "meetingbuddy-task006b-v1"
+
+    public nonisolated let metadata = try! ProviderMetadata(
+        providerIdentifier: "apple-foundation-models",
+        modelIdentifier: "system-language-model-default",
+        modelVersion: appleSystemModelVersion,
+        clientVersion: adapterVersion
+    )
+    public nonisolated let route: ModelExecutionRoute = .appleOnDevice
+
+    private let model: SystemLanguageModel
+
+    public init(model: SystemLanguageModel = .default) {
+        self.model = model
+    }
+
+    public func isModelAvailable(localeIdentifier: String) async -> Bool {
+        model.availability == .available
+            && model.supportsLocale(Locale(identifier: localeIdentifier))
+    }
+
+    public func generateSection(
+        _ request: BriefingSectionRequest
+    ) async throws -> BriefingSectionCandidate {
+        guard await isModelAvailable(localeIdentifier: request.localeIdentifier) else {
+            throw AIProviderContractError.modelUnavailable(
+                "The on-device Apple Foundation Model is unavailable for this locale."
+            )
+        }
+        let session = LanguageModelSession(
+            model: model,
+            tools: [],
+            instructions: DiplomaticBriefingPrompt.protectedRules
+        )
+        let response: LanguageModelSession.Response<AppleDiplomaticBriefingSectionOutput>
+        do {
+            response = try await session.respond(
+                to: DiplomaticBriefingPrompt.prompt(for: request),
+                generating: AppleDiplomaticBriefingSectionOutput.self,
+                options: GenerationOptions(
+                    sampling: .greedy,
+                    temperature: nil,
+                    maximumResponseTokens: 8_192
+                )
+            )
+        } catch let error as AIProviderContractError {
+            throw error
+        } catch {
+            throw AIProviderContractError.invalidResponse(
+                "Apple Foundation Models did not return a valid guided briefing section."
+            )
+        }
+        return try Self.validate(response.content, request: request)
+    }
+
+    private static func validate(
+        _ output: AppleDiplomaticBriefingSectionOutput,
+        request: BriefingSectionRequest
+    ) throws -> BriefingSectionCandidate {
+        let sectionType = BriefingSectionType(encodedValue: output.sectionType)
+        guard sectionType == request.sectionDefinition.sectionType else {
+            throw AIProviderContractError.invalidResponse(
+                "The guided briefing response returned a different section type."
+            )
+        }
+        let allowedKeys = Set(request.sourceClaims.map(\.sourceKey))
+        let items = try output.items.map { item -> BriefingGeneratedItemCandidate in
+            guard (0...1_000_000).contains(item.confidenceMillionths),
+                  Set(item.sourceKeys).isSubset(of: allowedKeys)
+            else {
+                throw AIProviderContractError.invalidResponse(
+                    "The guided briefing response invented a source key or invalid confidence."
+                )
+            }
+            return try BriefingGeneratedItemCandidate(
+                sourceKeys: item.sourceKeys,
+                text: item.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                confidence: ConfidenceScore(
+                    millionths: UInt32(item.confidenceMillionths)
+                )
+            )
+        }
+        return try BriefingSectionCandidate(sectionType: sectionType, items: items)
+    }
+}

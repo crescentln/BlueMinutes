@@ -16,6 +16,10 @@ public final class MediaReviewStore {
     public private(set) var analysisJob: MediaJobReview?
     public private(set) var analysisRouteReview: AnalysisRouteReview?
     public private(set) var analysisReview: AnalysisReviewBundle?
+    public private(set) var briefingJob: MediaJobReview?
+    public private(set) var briefingRouteReview: BriefingRouteReview?
+    public private(set) var briefingReview: BriefingReviewBundle?
+    public private(set) var lastBriefingExport: BriefingExportRecord?
     public private(set) var isWorking = false
     public private(set) var safeErrorMessage: String?
 
@@ -30,6 +34,7 @@ public final class MediaReviewStore {
     public var manualTranscriptText = ""
     public var manualTranslationText = ""
     public var manualCoverageConfirmed = false
+    public var briefingExportFileName = "meeting-briefing"
 
     @ObservationIgnored
     private let workflow: any MediaReviewWorkflow
@@ -337,6 +342,92 @@ public final class MediaReviewStore {
         }
     }
 
+    public func refreshBriefingRoute() async {
+        guard let job, job.state == .succeeded else {
+            safeErrorMessage = "Finish canonical local audio processing first."
+            return
+        }
+        await perform {
+            briefingRouteReview = try await workflow.briefingRoute(
+                canonicalJobID: job.jobID
+            )
+        }
+    }
+
+    public func startBriefing() async {
+        guard let job, job.state == .succeeded else {
+            safeErrorMessage = "Finish canonical local audio processing first."
+            return
+        }
+        await perform {
+            let route = try await workflow.briefingRoute(canonicalJobID: job.jobID)
+            briefingRouteReview = route
+            guard route.isOnDeviceReady else {
+                safeErrorMessage = "The Apple on-device briefing model is unavailable. Existing validated analysis remains unchanged."
+                return
+            }
+            briefingJob = try await workflow.startBriefing(
+                canonicalJobID: job.jobID
+            )
+            if let briefingJob { beginBriefingPolling(jobID: briefingJob.jobID) }
+        }
+    }
+
+    public func loadBriefingReview() async {
+        guard let job, job.state == .succeeded else { return }
+        await perform {
+            briefingReview = try await workflow.briefingReview(
+                canonicalJobID: job.jobID
+            )
+        }
+    }
+
+    public func regenerateBriefingSection(_ sectionType: BriefingSectionType) async {
+        guard let job else { return }
+        await perform {
+            briefingJob = try await workflow.regenerateBriefingSection(
+                canonicalJobID: job.jobID,
+                sectionType: sectionType
+            )
+            if let briefingJob { beginBriefingPolling(jobID: briefingJob.jobID) }
+        }
+    }
+
+    public func updateBriefingSection(
+        _ sectionType: BriefingSectionType,
+        editedTextByItemID: [BriefingItemID: String],
+        locked: Bool
+    ) async {
+        guard let job else { return }
+        await perform {
+            briefingReview = try await workflow.updateBriefingSection(
+                canonicalJobID: job.jobID,
+                sectionType: sectionType,
+                editedTextByItemID: editedTextByItemID,
+                locked: locked
+            )
+        }
+    }
+
+    public func exportBriefing() async {
+        guard let job, let briefingReview else { return }
+        let fileName = briefingExportFileName.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !fileName.isEmpty else {
+            safeErrorMessage = "Enter a local Markdown export name."
+            return
+        }
+        await perform {
+            lastBriefingExport = try await workflow.exportBriefingMarkdown(
+                canonicalJobID: job.jobID,
+                fileName: fileName,
+                expectedClassification: briefingReview.publication.finalBriefing
+                    .revision.dataClassification
+            )
+        }
+    }
+
     public func clearError() {
         safeErrorMessage = nil
     }
@@ -370,6 +461,10 @@ public final class MediaReviewStore {
         analysisJob = nil
         analysisRouteReview = nil
         analysisReview = nil
+        briefingJob = nil
+        briefingRouteReview = nil
+        briefingReview = nil
+        lastBriefingExport = nil
         manualCoverageConfirmed = false
         selectedTrack = nil
         safeErrorMessage = nil
@@ -436,6 +531,31 @@ public final class MediaReviewStore {
                     }
                 } catch {
                     safeErrorMessage = "Analysis processing status is temporarily unavailable."
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(400))
+            }
+        }
+    }
+
+    private func beginBriefingPolling(jobID: JobID) {
+        pollingTask?.cancel()
+        pollingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                do {
+                    let current = try await workflow.jobReview(jobID: jobID)
+                    briefingJob = current
+                    if current.state.isTerminal {
+                        if current.state == .succeeded, let canonicalJob = job {
+                            briefingReview = try await workflow.briefingReview(
+                                canonicalJobID: canonicalJob.jobID
+                            )
+                        }
+                        return
+                    }
+                } catch {
+                    safeErrorMessage = "Briefing processing status is temporarily unavailable."
                     return
                 }
                 try? await Task.sleep(for: .milliseconds(400))

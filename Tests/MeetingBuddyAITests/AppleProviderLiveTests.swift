@@ -144,6 +144,87 @@ struct AppleProviderLiveTests {
         #expect(result.conditions.contains { $0.contains("participation remains optional") })
         #expect(result.reservations.contains { $0.contains("annual review") })
     }
+
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["MEETINGBUDDY_RUN_LIVE_APPLE_BRIEFING"] == "1",
+            "Live Apple Foundation Models briefing validation is opt-in."
+        )
+    )
+    func installedAppleFoundationModelGeneratesOnlyEvidenceKeyedSyntheticBriefing() async throws {
+        guard #available(macOS 26.0, *) else { return }
+        let provider = AppleFoundationModelsBriefingProvider()
+        guard await provider.isModelAvailable(localeIdentifier: "en") else { return }
+        let routeRequest = try ModelRouteRequest(
+            capability: .analysis,
+            dataClassification: .internal,
+            offlineMode: true,
+            organizationAllowsExternalProcessing: false,
+            deploymentEnvironment: .production,
+            destination: .localDevice,
+            retentionPolicy: .noProviderRetention,
+            dataCategories: [.validatedIntelligenceClaims, .evidenceIdentifiers],
+            visibleUserAuthorization: true,
+            localModelAvailable: true
+        )
+        let decision = try ModelPolicyRouter().decide(routeRequest)
+        #expect(decision.route == .appleOnDevice)
+        #expect(decision.providerIdentifier == provider.metadata.providerIdentifier)
+
+        let evidence = try SemanticRevisionReference(
+            logicalID: aiID(96, EvidenceID.self),
+            revisionID: aiID(97, RevisionID.self)
+        )
+        let request = try BriefingSectionRequest(
+            packageIdentifier: "task006b-live-synthetic-briefing-001@1",
+            templateRevision: SemanticRevisionReference(
+                logicalID: aiID(98, BriefingTemplateID.self),
+                revisionID: aiID(99, RevisionID.self)
+            ),
+            graphRevision: SemanticRevisionReference(
+                logicalID: aiID(100, IssuePositionGraphID.self),
+                revisionID: aiID(101, RevisionID.self)
+            ),
+            sectionDefinition: TemplateSectionDefinition(
+                key: "major-issues",
+                sectionType: .majorIssues,
+                order: 2,
+                title: "Major Issues",
+                targetLengthUTF8Bytes: 8_192,
+                requiredInputObjectTypes: [.issuePositionGraph, .issue],
+                promptModules: [
+                    VersionedComponent(
+                        identifier: "briefing-major-issues-generator",
+                        version: "1.0.0"
+                    )
+                ]
+            ),
+            outputLanguage: LanguageTag("en"),
+            sourceClaims: [
+                BriefingSourceClaim(
+                    sourceKey: "issue_synthetic_001",
+                    sourceRevision: SemanticRevisionReference(
+                        logicalID: aiID(102, IssueID.self),
+                        revisionID: aiID(103, RevisionID.self)
+                    ),
+                    claim: EvidenceLinkedClaim(
+                        text: "The synthetic issue concerns a voluntary reporting proposal.",
+                        taxonomy: .meetingBuddyExtraction,
+                        supportStatus: .supported,
+                        evidenceRevisions: [evidence],
+                        confidence: ConfidenceScore(millionths: 900_000)
+                    )
+                )
+            ],
+            dataClassification: .internal,
+            localeIdentifier: "en"
+        )
+        let result = try await provider.generateSection(request)
+        #expect(result.sectionType == .majorIssues)
+        #expect(!result.items.isEmpty)
+        #expect(Set(result.items.flatMap(\.sourceKeys)) == Set(["issue_synthetic_001"]))
+        #expect(result.items.allSatisfy { !$0.text.isEmpty })
+    }
 }
 
 private func localDecisionRequest(

@@ -4,7 +4,8 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAssetCatalog,
-    TranscriptReviewRepository, AnalysisRepository, @unchecked Sendable
+    TranscriptReviewRepository, AnalysisRepository, BriefingRepository,
+    BriefingExportRepository, @unchecked Sendable
 {
     public let workspace: LocalWorkspaceDescriptor
     public let migrationOutcome: MigrationOutcome
@@ -869,6 +870,334 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         )
     }
 
+    public func recordIncompleteBriefing(_ ledger: BriefingCoverageLedger) throws {
+        guard ledger.status == .incomplete else {
+            throw BriefingCoverageError.publicationConflict
+        }
+        try ledger.validate()
+        do {
+            try databasePool.write { db in
+                try insertBriefingLedger(ledger, activate: false, in: db)
+            }
+        } catch let error as BriefingCoverageError {
+            throw error
+        } catch {
+            throw PersistenceContractError.dependencyIntegrity(String(describing: error))
+        }
+    }
+
+    public func briefingSourceBundle(
+        meetingRevision: SemanticRevisionReference,
+        template: MeetingTemplateV1,
+        analysisLedgerID: AnalysisCoverageLedgerID
+    ) throws -> BriefingSourceBundle {
+        guard meetingRevision.objectType == .meetingProfile,
+              let meeting = try fetch(
+                  MeetingProfileV1.self,
+                  revisionID: meetingRevision.revisionID
+              ),
+              meeting.meetingID.canonicalString == meetingRevision.logicalID.canonicalString,
+              let transcriptReview = try activeTranscriptReview(meetingID: meeting.meetingID),
+              let analysis = try activeAnalysisReview(meetingID: meeting.meetingID),
+              analysis.ledger.ledgerID == analysisLedgerID
+        else { throw BriefingCoverageError.reviewUnavailable }
+        return try BriefingSourceBundle(
+            meeting: meeting,
+            template: template,
+            transcriptReview: transcriptReview,
+            analysis: analysis
+        )
+    }
+
+    public func briefingCoverageLedgers(
+        meetingID: MeetingID
+    ) throws -> [BriefingCoverageLedger] {
+        try databasePool.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM briefing_coverage_ledgers
+                WHERE meeting_id = ?
+                ORDER BY created_at_ms, ledger_id
+                """,
+                arguments: [meetingID.canonicalString]
+            ).map { try decodeBriefingLedger($0, in: db) }
+        }
+    }
+
+    public func publishBriefing(
+        _ publication: BriefingPublication,
+        validatingInputRevisions inputRevisions: [SemanticRevisionReference]
+    ) throws {
+        guard publication.ledger.status == .published,
+              publication.ledger.supersedesLedgerID == nil
+        else { throw BriefingCoverageError.publicationConflict }
+        do {
+            try databasePool.write { db in
+                try validateCurrentInputRevisions(inputRevisions, in: db)
+                try validateBriefingUpstream(publication.ledger, in: db)
+                try insertPublicationObject(publication.template, in: db)
+                try insertPublicationObject(publication.graph, in: db)
+                for section in publication.sections {
+                    try insertPublicationObject(section, in: db)
+                }
+                try insertPublicationObject(publication.validationReport, in: db)
+                try insertPublicationObject(publication.finalBriefing, in: db)
+
+                let changedAt = publication.ledger.createdAt
+                try initializeActivePointer(for: publication.template, at: changedAt, in: db)
+                try initializeActivePointer(for: publication.graph, at: changedAt, in: db)
+                for section in publication.sections {
+                    try initializeActivePointer(for: section, at: changedAt, in: db)
+                }
+                try initializeActivePointer(for: publication.validationReport, at: changedAt, in: db)
+                try initializeActivePointer(for: publication.finalBriefing, at: changedAt, in: db)
+                try insertBriefingLedger(publication.ledger, activate: true, in: db)
+            }
+        } catch let error as BriefingCoverageError {
+            throw error
+        } catch let error as PersistenceContractError {
+            throw error
+        } catch {
+            throw PersistenceContractError.dependencyIntegrity(String(describing: error))
+        }
+    }
+
+    public func replaceBriefingSection(
+        _ publication: BriefingPublication,
+        replacing expectedSectionRevisionID: RevisionID,
+        changedAt: UTCInstant
+    ) throws {
+        guard publication.ledger.status == .published,
+              publication.ledger.supersedesLedgerID != nil,
+              let replacement = publication.sections.first(where: {
+                  $0.revision.supersedesRevisionID == expectedSectionRevisionID
+              })
+        else { throw BriefingCoverageError.publicationConflict }
+        do {
+            try databasePool.write { db in
+                try validateBriefingUpstream(publication.ledger, in: db)
+                guard let previous = try fetch(
+                    BriefingSectionV1.self,
+                    revisionID: expectedSectionRevisionID,
+                    in: db
+                ),
+                    previous.sectionID == replacement.sectionID,
+                    previous.meetingID == replacement.meetingID,
+                    replacement.templateRevision == previous.templateRevision,
+                    replacement.graphRevision == previous.graphRevision
+                else { throw BriefingCoverageError.publicationConflict }
+                if replacement.manualEditStatus == .generated,
+                   previous.locked || previous.manualEditStatus == .userEdited
+                {
+                    throw BriefingCoverageError.lockedSection
+                }
+                let activeSectionID = try String.fetchOne(
+                    db,
+                    sql: """
+                    SELECT revision_id FROM active_published_revisions
+                    WHERE object_type = 'briefing_section' AND logical_id = ?
+                    """,
+                    arguments: [replacement.sectionID.canonicalString]
+                )
+                guard activeSectionID == expectedSectionRevisionID.canonicalString else {
+                    throw BriefingCoverageError.publicationConflict
+                }
+                let unchanged = publication.sections.filter { $0.sectionID != replacement.sectionID }
+                for section in unchanged {
+                    let activeID = try String.fetchOne(
+                        db,
+                        sql: """
+                        SELECT revision_id FROM active_published_revisions
+                        WHERE object_type = 'briefing_section' AND logical_id = ?
+                        """,
+                        arguments: [section.sectionID.canonicalString]
+                    )
+                    guard activeID == section.revision.revisionID.canonicalString else {
+                        throw BriefingCoverageError.publicationConflict
+                    }
+                }
+
+                try insertPublicationObject(replacement, in: db)
+                try insertPublicationObject(publication.validationReport, in: db)
+                try insertPublicationObject(publication.finalBriefing, in: db)
+                _ = try moveActivePointer(
+                    for: replacement,
+                    expectedCurrentRevisionID: expectedSectionRevisionID,
+                    handlingPolicies: [],
+                    markedAt: changedAt,
+                    in: db
+                )
+                _ = try moveActivePointer(
+                    for: publication.validationReport,
+                    expectedCurrentRevisionID: publication.validationReport.revision.supersedesRevisionID,
+                    handlingPolicies: [],
+                    markedAt: changedAt,
+                    in: db
+                )
+                _ = try moveActivePointer(
+                    for: publication.finalBriefing,
+                    expectedCurrentRevisionID: publication.finalBriefing.revision.supersedesRevisionID,
+                    handlingPolicies: [],
+                    markedAt: changedAt,
+                    in: db
+                )
+                try insertBriefingLedger(publication.ledger, activate: true, in: db)
+            }
+        } catch let error as BriefingCoverageError {
+            throw error
+        } catch let error as PersistenceContractError {
+            throw error
+        } catch {
+            throw PersistenceContractError.dependencyIntegrity(String(describing: error))
+        }
+    }
+
+    public func activeBriefingReview(
+        meetingID: MeetingID
+    ) throws -> BriefingReviewBundle? {
+        try databasePool.read { db in
+            guard let ledgerRow = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT ledger.*
+                FROM active_briefing_ledgers AS active
+                JOIN briefing_coverage_ledgers AS ledger
+                  ON ledger.ledger_id = active.ledger_id
+                WHERE active.meeting_id = ?
+                """,
+                arguments: [meetingID.canonicalString]
+            ) else { return nil }
+            let ledger = try decodeBriefingLedger(ledgerRow, in: db)
+            let template = try requiredFetch(
+                MeetingTemplateV1.self,
+                reference: ledger.templateRevision,
+                in: db
+            )
+            let graph = try requiredFetch(
+                IssuePositionGraphV1.self,
+                reference: ledger.graphRevision,
+                in: db
+            )
+            let sections = try ledger.sectionRevisions.map {
+                try requiredFetch(BriefingSectionV1.self, reference: $0, in: db)
+            }
+            let activeFinalRows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT revision.*
+                FROM active_published_revisions AS active
+                JOIN semantic_revisions AS revision
+                  ON revision.object_type = active.object_type
+                 AND revision.logical_id = active.logical_id
+                 AND revision.revision_id = active.revision_id
+                WHERE active.object_type = 'final_briefing'
+                ORDER BY active.logical_id
+                """
+            )
+            let finals = try activeFinalRows.map { try decode(FinalBriefingV1.self, row: $0) }
+            guard let final = finals.first(where: {
+                $0.meetingID == meetingID && $0.sectionRevisions == ledger.sectionRevisions
+            }) else { throw BriefingCoverageError.publicationConflict }
+            let report = try requiredFetch(
+                ValidationReportV1.self,
+                reference: final.validationReportRevision,
+                in: db
+            )
+            let publication = try BriefingPublication(
+                template: template,
+                graph: graph,
+                sections: sections,
+                validationReport: report,
+                finalBriefing: final,
+                ledger: ledger
+            )
+            let references = [ledger.graphRevision]
+                + ledger.sectionRevisions
+                + [final.validationReportRevision, try semanticReference(final)]
+            let marks = try references.flatMap { try staleMarks(for: $0, in: db) }
+            return BriefingReviewBundle(publication: publication, staleMarks: marks)
+        }
+    }
+
+    public func insertBriefingExportRecord(_ record: BriefingExportRecord) throws {
+        let payload = try SQLitePayloadCodec.canonicalData(record)
+        let digest = SQLitePayloadCodec.sha256(payload)
+        guard payload.count <= 1_048_576 else { throw BriefingExportError.integrityFailure }
+        try databasePool.write { db in
+            if let existing = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT canonical_payload, payload_sha256
+                FROM briefing_export_records WHERE export_id = ?
+                """,
+                arguments: [record.exportID.canonicalString]
+            ) {
+                let existingPayload: Data = existing["canonical_payload"]
+                let existingDigest: String = existing["payload_sha256"]
+                guard existingPayload == payload, existingDigest == digest else {
+                    throw BriefingExportError.integrityFailure
+                }
+                return
+            }
+            guard let final = try fetch(
+                FinalBriefingV1.self,
+                revisionID: record.finalBriefingRevision.revisionID,
+                in: db
+            ),
+                final.finalBriefingID.canonicalString
+                    == record.finalBriefingRevision.logicalID.canonicalString,
+                final.meetingID == record.meetingID,
+                final.revision.dataClassification == record.dataClassification
+            else { throw BriefingExportError.integrityFailure }
+            try db.execute(
+                sql: """
+                INSERT INTO briefing_export_records(
+                    export_id, meeting_id, final_revision_id, relative_path,
+                    data_classification, exported_at_ms, canonical_payload,
+                    payload_sha256, payload_byte_size
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    record.exportID.canonicalString,
+                    record.meetingID.canonicalString,
+                    record.finalBriefingRevision.revisionID.canonicalString,
+                    record.relativePath.rawValue,
+                    record.dataClassification.encodedValue,
+                    record.exportedAt.millisecondsSinceUnixEpoch,
+                    payload,
+                    digest,
+                    payload.count
+                ]
+            )
+        }
+    }
+
+    public func briefingExportRecords(meetingID: MeetingID) throws -> [BriefingExportRecord] {
+        try databasePool.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM briefing_export_records
+                WHERE meeting_id = ? ORDER BY exported_at_ms, export_id
+                """,
+                arguments: [meetingID.canonicalString]
+            ).map { row in
+                let payload: Data = row["canonical_payload"]
+                let digest: String = row["payload_sha256"]
+                guard SQLitePayloadCodec.sha256(payload) == digest else {
+                    throw BriefingExportError.integrityFailure
+                }
+                let record = try JSONDecoder().decode(BriefingExportRecord.self, from: payload)
+                guard try SQLitePayloadCodec.canonicalData(record) == payload,
+                      row["export_id"] == record.exportID.canonicalString,
+                      row["relative_path"] == record.relativePath.rawValue
+                else { throw BriefingExportError.integrityFailure }
+                return record
+            }
+        }
+    }
+
     func registerManagedAsset(_ record: ManagedAssetRecord) throws {
         let payload = try SQLitePayloadCodec.canonicalData(record)
         let digest = SQLitePayloadCodec.sha256(payload)
@@ -940,6 +1269,11 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             || type is DecisionV1.Type
             || type is InterventionCardV1.Type
             || type is DelegationPositionCardV1.Type
+            || type is MeetingTemplateV1.Type
+            || type is IssuePositionGraphV1.Type
+            || type is BriefingSectionV1.Type
+            || type is ValidationReportV1.Type
+            || type is FinalBriefingV1.Type
         guard supported else {
             throw PersistenceContractError.unsupportedStoredObjectType(
                 Object.ObjectIDTag.semanticObjectType.encodedValue
@@ -1025,6 +1359,179 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
                 changedAt.millisecondsSinceUnixEpoch
             ]
         )
+    }
+
+    private func semanticReference<Object: SemanticRevisionContract>(
+        _ object: Object
+    ) throws -> SemanticRevisionReference {
+        try SemanticRevisionReference(
+            logicalID: object.revision.logicalID,
+            revisionID: object.revision.revisionID
+        )
+    }
+
+    private func moveActivePointer<Object: SemanticRevisionContract>(
+        for replacement: Object,
+        expectedCurrentRevisionID: RevisionID?,
+        handlingPolicies: [RevisionHandlingPolicy],
+        markedAt: UTCInstant,
+        in db: Database
+    ) throws -> StalePlan {
+        let selection = try ActivePublishedRevisionSelection(
+            logicalID: replacement.revision.logicalID,
+            revisionID: replacement.revision.revisionID
+        )
+        _ = try ActivePublishedRevisionSelector.select(selection, from: [replacement])
+        let state = try String.fetchOne(
+            db,
+            sql: """
+            SELECT currency_state FROM revision_current_state
+            WHERE object_type = ? AND logical_id = ? AND revision_id = ?
+            """,
+            arguments: [
+                selection.objectType.encodedValue,
+                selection.logicalID.canonicalString,
+                selection.revisionID.canonicalString
+            ]
+        )
+        guard state == "current" else {
+            throw PersistenceContractError.activeRevisionIntegrity(
+                "A stale revision cannot become the active published revision."
+            )
+        }
+        try validateCurrentDependencyClosure(
+            objectType: selection.objectType,
+            logicalID: selection.logicalID,
+            revisionID: selection.revisionID,
+            in: db
+        )
+        let pointer = try Row.fetchOne(
+            db,
+            sql: """
+            SELECT revision_id, pointer_version FROM active_published_revisions
+            WHERE object_type = ? AND logical_id = ?
+            """,
+            arguments: [selection.objectType.encodedValue, selection.logicalID.canonicalString]
+        )
+        let actualPreviousID = try pointer.map {
+            try RevisionID(validating: $0["revision_id"] as String)
+        }
+        guard actualPreviousID == expectedCurrentRevisionID else {
+            throw PersistenceContractError.activeRevisionIntegrity(
+                "The active pointer changed after the caller's expected state."
+            )
+        }
+        let previous = try actualPreviousID.map {
+            try ActivePublishedRevisionSelection<Object.ObjectIDTag>(
+                logicalID: selection.logicalID,
+                revisionID: $0
+            )
+        }
+        let change = try ActivePublishedRevisionChange(
+            previous: previous,
+            replacement: selection
+        )
+        let plan = try DeterministicStalePlanner.plan(
+            for: change,
+            dependencyEdges: dependencyEdges(in: db),
+            handlingPolicies: handlingPolicies
+        )
+        if change.isNoOp { return plan }
+        let nextVersion = (pointer?["pointer_version"] as Int64? ?? 0) + 1
+        let eventID = UUID().uuidString.lowercased()
+        try db.execute(
+            sql: """
+            INSERT INTO active_revision_events(
+                event_id, object_type, logical_id, previous_revision_id,
+                replacement_revision_id, pointer_version, changed_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                eventID,
+                selection.objectType.encodedValue,
+                selection.logicalID.canonicalString,
+                actualPreviousID?.canonicalString,
+                selection.revisionID.canonicalString,
+                nextVersion,
+                markedAt.millisecondsSinceUnixEpoch
+            ]
+        )
+        try db.execute(
+            sql: """
+            INSERT INTO active_published_revisions(
+                object_type, logical_id, revision_id, pointer_version, changed_at_ms
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(object_type, logical_id) DO UPDATE SET
+                revision_id = excluded.revision_id,
+                pointer_version = excluded.pointer_version,
+                changed_at_ms = excluded.changed_at_ms
+            """,
+            arguments: [
+                selection.objectType.encodedValue,
+                selection.logicalID.canonicalString,
+                selection.revisionID.canonicalString,
+                nextVersion,
+                markedAt.millisecondsSinceUnixEpoch
+            ]
+        )
+        for mark in plan.marks {
+            try insert(staleMark: mark, eventID: eventID, markedAt: markedAt, in: db)
+        }
+        return plan
+    }
+
+    private func validateBriefingUpstream(
+        _ ledger: BriefingCoverageLedger,
+        in db: Database
+    ) throws {
+        guard let transcriptRow = try Row.fetchOne(
+            db,
+            sql: """
+            SELECT manifest.*
+            FROM active_transcript_manifests AS active
+            JOIN transcript_coverage_manifests AS manifest
+              ON manifest.manifest_id = active.manifest_id
+            WHERE active.meeting_id = ?
+            """,
+            arguments: [ledger.meetingID.canonicalString]
+        ),
+            let analysisRow = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT analysis.*
+                FROM active_analysis_ledgers AS active
+                JOIN analysis_coverage_ledgers AS analysis
+                  ON analysis.ledger_id = active.ledger_id
+                WHERE active.meeting_id = ?
+                """,
+                arguments: [ledger.meetingID.canonicalString]
+            )
+        else { throw BriefingCoverageError.publicationConflict }
+        let transcript = try decodeManifest(transcriptRow)
+        let analysis = try decodeAnalysisLedger(analysisRow, in: db)
+        guard transcript.manifestID == ledger.transcriptManifestID,
+              transcript.contentHash == ledger.transcriptManifestHash,
+              analysis.ledgerID == ledger.analysisLedgerID,
+              analysis.contentHash == ledger.analysisLedgerHash,
+              analysis.transcriptManifestID == transcript.manifestID,
+              analysis.transcriptManifestHash == transcript.contentHash,
+              analysis.eligibleSegmentRevisions == ledger.eligibleSegmentRevisions,
+              analysis.status == .published,
+              analysis.segments.count == ledger.segments.count
+        else { throw BriefingCoverageError.publicationConflict }
+        for (analysisSegment, briefingSegment) in zip(analysis.segments, ledger.segments) {
+            guard analysisSegment.segmentRevision == briefingSegment.segmentRevision,
+                  analysisSegment.evidenceRevisions == briefingSegment.evidenceRevisions,
+                  analysisSegment.outputRevisions == briefingSegment.analysisOutputRevisions
+            else { throw BriefingCoverageError.publicationConflict }
+            switch (analysisSegment.disposition, briefingSegment.disposition) {
+            case (.substantive, .represented), (.substantive, .reviewedNotRendered),
+                 (.nonSubstantive, .nonSubstantive):
+                break
+            default:
+                throw BriefingCoverageError.publicationConflict
+            }
+        }
     }
 
     private func insertAnalysisLedger(
@@ -1283,6 +1790,319 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         }
     }
 
+    private func insertBriefingLedger(
+        _ ledger: BriefingCoverageLedger,
+        activate: Bool,
+        in db: Database
+    ) throws {
+        try ledger.validate()
+        guard let transcriptRow = try Row.fetchOne(
+            db,
+            sql: """
+            SELECT meeting_id, content_hash_hex FROM transcript_coverage_manifests
+            WHERE manifest_id = ?
+            """,
+            arguments: [ledger.transcriptManifestID.canonicalString]
+        ),
+            transcriptRow["meeting_id"] == ledger.meetingID.canonicalString,
+            transcriptRow["content_hash_hex"] == ledger.transcriptManifestHash.lowercaseHex,
+            let analysisRow = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT meeting_id, content_hash_hex FROM analysis_coverage_ledgers
+                WHERE ledger_id = ?
+                """,
+                arguments: [ledger.analysisLedgerID.canonicalString]
+            ),
+            analysisRow["meeting_id"] == ledger.meetingID.canonicalString,
+            analysisRow["content_hash_hex"] == ledger.analysisLedgerHash.lowercaseHex
+        else { throw BriefingCoverageError.publicationConflict }
+
+        let payload = try SQLitePayloadCodec.canonicalData(ledger)
+        let digest = SQLitePayloadCodec.sha256(payload)
+        guard payload.count <= SQLiteSchema.maximumSemanticPayloadBytes else {
+            throw BriefingCoverageError.publicationConflict
+        }
+        if let existing = try Row.fetchOne(
+            db,
+            sql: """
+            SELECT canonical_payload, payload_sha256
+            FROM briefing_coverage_ledgers WHERE ledger_id = ?
+            """,
+            arguments: [ledger.ledgerID.canonicalString]
+        ) {
+            let existingPayload: Data = existing["canonical_payload"]
+            let existingDigest: String = existing["payload_sha256"]
+            guard existingPayload == payload, existingDigest == digest else {
+                throw BriefingCoverageError.publicationConflict
+            }
+        } else {
+            try db.execute(
+                sql: """
+                INSERT INTO briefing_coverage_ledgers(
+                    ledger_id, supersedes_ledger_id, meeting_id,
+                    transcript_manifest_id, analysis_ledger_id, status,
+                    created_at_ms, content_hash_algorithm, content_hash_hex,
+                    canonical_payload, payload_sha256, payload_byte_size
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    ledger.ledgerID.canonicalString,
+                    ledger.supersedesLedgerID?.canonicalString,
+                    ledger.meetingID.canonicalString,
+                    ledger.transcriptManifestID.canonicalString,
+                    ledger.analysisLedgerID.canonicalString,
+                    ledger.status.rawValue,
+                    ledger.createdAt.millisecondsSinceUnixEpoch,
+                    ledger.contentHash.algorithm.encodedValue,
+                    ledger.contentHash.lowercaseHex,
+                    payload,
+                    digest,
+                    payload.count
+                ]
+            )
+            for (ordinal, segment) in ledger.segments.enumerated() {
+                try db.execute(
+                    sql: """
+                    INSERT INTO briefing_coverage_entries(
+                        ledger_id, ordinal, segment_object_type, segment_logical_id,
+                        segment_revision_id, disposition, safe_reason_code
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        ledger.ledgerID.canonicalString,
+                        ordinal,
+                        segment.segmentRevision.objectType.encodedValue,
+                        segment.segmentRevision.logicalID.canonicalString,
+                        segment.segmentRevision.revisionID.canonicalString,
+                        segment.disposition.rawValue,
+                        segment.safeReasonCode
+                    ]
+                )
+                for evidence in segment.evidenceRevisions {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO briefing_coverage_evidence(
+                            ledger_id, segment_revision_id, evidence_object_type,
+                            evidence_logical_id, evidence_revision_id
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        arguments: [
+                            ledger.ledgerID.canonicalString,
+                            segment.segmentRevision.revisionID.canonicalString,
+                            evidence.objectType.encodedValue,
+                            evidence.logicalID.canonicalString,
+                            evidence.revisionID.canonicalString
+                        ]
+                    )
+                }
+                for output in segment.analysisOutputRevisions {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO briefing_coverage_analysis_outputs(
+                            ledger_id, segment_revision_id, output_object_type,
+                            output_logical_id, output_revision_id
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        arguments: [
+                            ledger.ledgerID.canonicalString,
+                            segment.segmentRevision.revisionID.canonicalString,
+                            output.objectType.encodedValue,
+                            output.logicalID.canonicalString,
+                            output.revisionID.canonicalString
+                        ]
+                    )
+                }
+                for conclusion in segment.conclusionReferences {
+                    try db.execute(
+                        sql: """
+                        INSERT INTO briefing_coverage_conclusions(
+                            ledger_id, segment_revision_id, output_object_type,
+                            output_logical_id, output_revision_id, item_id
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        arguments: [
+                            ledger.ledgerID.canonicalString,
+                            segment.segmentRevision.revisionID.canonicalString,
+                            conclusion.outputRevision.objectType.encodedValue,
+                            conclusion.outputRevision.logicalID.canonicalString,
+                            conclusion.outputRevision.revisionID.canonicalString,
+                            conclusion.itemID.canonicalString
+                        ]
+                    )
+                }
+            }
+        }
+        guard activate else { return }
+        let pointer = try Row.fetchOne(
+            db,
+            sql: """
+            SELECT ledger_id, pointer_version FROM active_briefing_ledgers
+            WHERE meeting_id = ?
+            """,
+            arguments: [ledger.meetingID.canonicalString]
+        )
+        let currentID: String? = pointer?["ledger_id"]
+        if currentID == ledger.ledgerID.canonicalString { return }
+        guard currentID == ledger.supersedesLedgerID?.canonicalString else {
+            throw BriefingCoverageError.publicationConflict
+        }
+        let nextVersion = (pointer?["pointer_version"] as Int64? ?? 0) + 1
+        try db.execute(
+            sql: """
+            INSERT INTO briefing_ledger_events(
+                event_id, meeting_id, previous_ledger_id, replacement_ledger_id,
+                pointer_version, changed_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                UUID().uuidString.lowercased(),
+                ledger.meetingID.canonicalString,
+                currentID,
+                ledger.ledgerID.canonicalString,
+                nextVersion,
+                ledger.createdAt.millisecondsSinceUnixEpoch
+            ]
+        )
+        try db.execute(
+            sql: """
+            INSERT INTO active_briefing_ledgers(
+                meeting_id, ledger_id, pointer_version, changed_at_ms
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT(meeting_id) DO UPDATE SET
+                ledger_id = excluded.ledger_id,
+                pointer_version = excluded.pointer_version,
+                changed_at_ms = excluded.changed_at_ms
+            """,
+            arguments: [
+                ledger.meetingID.canonicalString,
+                ledger.ledgerID.canonicalString,
+                nextVersion,
+                ledger.createdAt.millisecondsSinceUnixEpoch
+            ]
+        )
+    }
+
+    private func decodeBriefingLedger(
+        _ row: Row,
+        in db: Database
+    ) throws -> BriefingCoverageLedger {
+        let payload: Data = row["canonical_payload"]
+        let digest: String = row["payload_sha256"]
+        guard SQLitePayloadCodec.sha256(payload) == digest else {
+            throw BriefingCoverageError.publicationConflict
+        }
+        let ledger = try JSONDecoder().decode(BriefingCoverageLedger.self, from: payload)
+        try ledger.validate()
+        guard try SQLitePayloadCodec.canonicalData(ledger) == payload,
+              row["ledger_id"] == ledger.ledgerID.canonicalString,
+              row["meeting_id"] == ledger.meetingID.canonicalString,
+              row["transcript_manifest_id"] == ledger.transcriptManifestID.canonicalString,
+              row["analysis_ledger_id"] == ledger.analysisLedgerID.canonicalString,
+              row["content_hash_hex"] == ledger.contentHash.lowercaseHex
+        else { throw BriefingCoverageError.publicationConflict }
+        try validateBriefingLedgerIndex(ledger, in: db)
+        return ledger
+    }
+
+    private func validateBriefingLedgerIndex(
+        _ ledger: BriefingCoverageLedger,
+        in db: Database
+    ) throws {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT ordinal, segment_object_type, segment_logical_id,
+                   segment_revision_id, disposition, safe_reason_code
+            FROM briefing_coverage_entries
+            WHERE ledger_id = ? ORDER BY ordinal
+            """,
+            arguments: [ledger.ledgerID.canonicalString]
+        )
+        guard rows.count == ledger.segments.count else {
+            throw BriefingCoverageError.publicationConflict
+        }
+        for (ordinal, pair) in zip(rows.indices, zip(rows, ledger.segments)) {
+            let (row, segment) = pair
+            let segmentReference = try SQLiteReferenceCodec.reference(
+                objectTypeValue: row["segment_object_type"],
+                logicalIDValue: row["segment_logical_id"],
+                revisionIDValue: row["segment_revision_id"]
+            )
+            let disposition: String = row["disposition"]
+            let safeReasonCode: String? = row["safe_reason_code"]
+            guard (row["ordinal"] as Int) == ordinal,
+                  segmentReference == segment.segmentRevision,
+                  disposition == segment.disposition.rawValue,
+                  safeReasonCode == segment.safeReasonCode
+            else { throw BriefingCoverageError.publicationConflict }
+            let evidence = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT evidence_object_type, evidence_logical_id, evidence_revision_id
+                FROM briefing_coverage_evidence
+                WHERE ledger_id = ? AND segment_revision_id = ?
+                ORDER BY evidence_object_type, evidence_logical_id, evidence_revision_id
+                """,
+                arguments: [
+                    ledger.ledgerID.canonicalString,
+                    segment.segmentRevision.revisionID.canonicalString
+                ]
+            ).map {
+                try SQLiteReferenceCodec.reference(
+                    objectTypeValue: $0["evidence_object_type"],
+                    logicalIDValue: $0["evidence_logical_id"],
+                    revisionIDValue: $0["evidence_revision_id"]
+                )
+            }
+            let outputs = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT output_object_type, output_logical_id, output_revision_id
+                FROM briefing_coverage_analysis_outputs
+                WHERE ledger_id = ? AND segment_revision_id = ?
+                ORDER BY output_object_type, output_logical_id, output_revision_id
+                """,
+                arguments: [
+                    ledger.ledgerID.canonicalString,
+                    segment.segmentRevision.revisionID.canonicalString
+                ]
+            ).map {
+                try SQLiteReferenceCodec.reference(
+                    objectTypeValue: $0["output_object_type"],
+                    logicalIDValue: $0["output_logical_id"],
+                    revisionIDValue: $0["output_revision_id"]
+                )
+            }
+            let conclusions = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT output_object_type, output_logical_id, output_revision_id, item_id
+                FROM briefing_coverage_conclusions
+                WHERE ledger_id = ? AND segment_revision_id = ?
+                ORDER BY output_object_type, output_logical_id, output_revision_id, item_id
+                """,
+                arguments: [
+                    ledger.ledgerID.canonicalString,
+                    segment.segmentRevision.revisionID.canonicalString
+                ]
+            ).map {
+                try BriefingConclusionReference(
+                    outputRevision: SQLiteReferenceCodec.reference(
+                        objectTypeValue: $0["output_object_type"],
+                        logicalIDValue: $0["output_logical_id"],
+                        revisionIDValue: $0["output_revision_id"]
+                    ),
+                    itemID: BriefingItemID(validating: $0["item_id"] as String)
+                )
+            }
+            guard evidence == segment.evidenceRevisions,
+                  outputs == segment.analysisOutputRevisions,
+                  conclusions == segment.conclusionReferences
+            else { throw BriefingCoverageError.publicationConflict }
+        }
+    }
+
     private func requiredFetch<Object: SemanticRevisionContract>(
         _ type: Object.Type,
         reference: SemanticRevisionReference,
@@ -1482,6 +2302,14 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         case let value as InterventionCardV1:
             meetingID = value.meetingID
         case let value as DelegationPositionCardV1:
+            meetingID = value.meetingID
+        case let value as IssuePositionGraphV1:
+            meetingID = value.meetingID
+        case let value as BriefingSectionV1:
+            meetingID = value.meetingID
+        case let value as ValidationReportV1:
+            meetingID = value.meetingID
+        case let value as FinalBriefingV1:
             meetingID = value.meetingID
         default:
             meetingID = nil
@@ -1692,6 +2520,16 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             _ = try decode(InterventionCardV1.self, row: row)
         case .delegationPositionCard:
             _ = try decode(DelegationPositionCardV1.self, row: row)
+        case .meetingTemplate:
+            _ = try decode(MeetingTemplateV1.self, row: row)
+        case .issuePositionGraph:
+            _ = try decode(IssuePositionGraphV1.self, row: row)
+        case .briefingSection:
+            _ = try decode(BriefingSectionV1.self, row: row)
+        case .validationReport:
+            _ = try decode(ValidationReportV1.self, row: row)
+        case .finalBriefing:
+            _ = try decode(FinalBriefingV1.self, row: row)
         case .userConfirmedNote, .unrecognized:
             throw PersistenceContractError.unsupportedStoredObjectType(objectTypeValue)
         }

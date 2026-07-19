@@ -20,6 +20,7 @@ enum AppWorkflowError: LocalizedError {
     case onDeviceModelUnavailable
     case transcriptUnavailable
     case analysisUnavailable
+    case briefingUnavailable
     case reviewFailed
 
     var errorDescription: String? {
@@ -50,6 +51,8 @@ enum AppWorkflowError: LocalizedError {
             "No published transcript review is available for this meeting."
         case .analysisUnavailable:
             "Analysis requires a complete reviewed transcript with exactly one resolved speaker and capacity for every segment."
+        case .briefingUnavailable:
+            "A current, fully validated analysis is required before creating or changing the briefing."
         case .reviewFailed:
             "The review change failed without replacing accepted content."
         }
@@ -69,6 +72,7 @@ private final class WorkspaceRuntime: @unchecked Sendable {
     let transcriptionProvider: (any TranscriptionProvider)?
     let translationProvider: (any TranslationProvider)?
     let analysisProvider: (any AnalysisProvider)?
+    let briefingProvider: (any BriefingSectionProvider)?
 
     init(descriptor: LocalWorkspaceDescriptor) throws {
         self.descriptor = descriptor
@@ -99,9 +103,11 @@ private final class WorkspaceRuntime: @unchecked Sendable {
             let speech = AppleOnDeviceTranscriptionProvider()
             let translation = AppleOnDeviceTranslationProvider()
             let analysis = AppleFoundationModelsAnalysisProvider()
+            let briefing = AppleFoundationModelsBriefingProvider()
             transcriptionProvider = speech
             translationProvider = translation
             analysisProvider = analysis
+            briefingProvider = briefing
             executors.append(
                 TranscriptPipelineJobExecutor(
                     transcriptionProvider: speech,
@@ -118,10 +124,17 @@ private final class WorkspaceRuntime: @unchecked Sendable {
                     repository: store
                 )
             )
+            executors.append(
+                BriefingPipelineJobExecutor(
+                    provider: briefing,
+                    repository: store
+                )
+            )
         } else {
             transcriptionProvider = nil
             translationProvider = nil
             analysisProvider = nil
+            briefingProvider = nil
         }
         manager = try LocalTaskManager(
             repository: SQLiteJobRepository(store: store),
@@ -703,6 +716,167 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         return updated
     }
 
+    func briefingRoute(canonicalJobID: JobID) async throws -> BriefingRouteReview {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let template = try BriefingSemanticFactory.builtInTemplate(
+            createdAt: try currentInstant()
+        )
+        let source = try await briefingSource(
+            canonicalJobID: canonicalJobID,
+            template: template
+        )
+        let locale = source.meeting.outputLanguage.value
+        let available = await runtime.briefingProvider?.isModelAvailable(
+            localeIdentifier: locale
+        ) ?? false
+        return BriefingRouteReview(
+            briefing: try ModelPolicyRouter().decide(
+                briefingRouteRequest(
+                    source: source,
+                    modelAvailable: available,
+                    visibleUserAuthorization: false
+                )
+            ),
+            runtimeEvidence: try briefingRuntimeEvidence(
+                localeIdentifier: locale,
+                modelAvailable: available
+            )
+        )
+    }
+
+    func startBriefing(canonicalJobID: JobID) async throws -> MediaJobReview {
+        guard let runtime, runtime.briefingProvider != nil else {
+            throw AppWorkflowError.onDeviceModelUnavailable
+        }
+        let createdAt = try currentInstant()
+        let template = try BriefingSemanticFactory.builtInTemplate(createdAt: createdAt)
+        let source = try await briefingSource(
+            canonicalJobID: canonicalJobID,
+            template: template
+        )
+        guard try runtime.store.activeBriefingReview(meetingID: source.meeting.meetingID) == nil
+        else { throw AppWorkflowError.reviewFailed }
+        let decision = try await approvedBriefingRoute(
+            source: source,
+            visibleUserAuthorization: true
+        )
+        let plan = try BriefingPipelineJobPlan(
+            source: source,
+            sectionRoute: decision,
+            createdAt: createdAt
+        )
+        return MediaJobReview(
+            record: try await runtime.manager.enqueue(
+                BriefingPipelineJobFactory().request(
+                    plan: plan,
+                    requestedBy: JobRequester("meetingbuddy-app")
+                )
+            )
+        )
+    }
+
+    func briefingReview(canonicalJobID: JobID) async throws -> BriefingReviewBundle? {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        return try runtime.store.activeBriefingReview(meetingID: context.plan.meetingID)
+    }
+
+    func regenerateBriefingSection(
+        canonicalJobID: JobID,
+        sectionType: BriefingSectionType
+    ) async throws -> MediaJobReview {
+        guard let runtime, runtime.briefingProvider != nil else {
+            throw AppWorkflowError.onDeviceModelUnavailable
+        }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        guard let active = try runtime.store.activeBriefingReview(
+            meetingID: context.plan.meetingID
+        ),
+            active.isCurrent,
+            let section = active.publication.sections.first(where: {
+                $0.sectionType == sectionType
+            }),
+            !section.locked,
+            section.manualEditStatus == .generated
+        else { throw AppWorkflowError.briefingUnavailable }
+        let source = try await briefingSource(
+            canonicalJobID: canonicalJobID,
+            template: active.publication.template
+        )
+        let createdAt = try currentInstant()
+        let operation = BriefingJobOperation.regenerate(
+            sectionType: sectionType,
+            expectedSectionRevisionID: section.revision.revisionID,
+            graphRevision: try semanticReference(active.publication.graph),
+            sectionRevisions: try active.publication.sections.map(semanticReference),
+            validationReportRevision: try semanticReference(
+                active.publication.validationReport
+            ),
+            finalBriefingRevision: try semanticReference(
+                active.publication.finalBriefing
+            ),
+            briefingLedgerID: active.publication.ledger.ledgerID
+        )
+        let plan = try BriefingPipelineJobPlan(
+            source: source,
+            sectionRoute: try await approvedBriefingRoute(
+                source: source,
+                visibleUserAuthorization: true
+            ),
+            operation: operation,
+            createdAt: createdAt
+        )
+        return MediaJobReview(
+            record: try await runtime.manager.enqueue(
+                BriefingPipelineJobFactory().request(
+                    plan: plan,
+                    requestedBy: JobRequester("meetingbuddy-app")
+                )
+            )
+        )
+    }
+
+    func updateBriefingSection(
+        canonicalJobID: JobID,
+        sectionType: BriefingSectionType,
+        editedTextByItemID: [BriefingItemID: String],
+        locked: Bool
+    ) async throws -> BriefingReviewBundle {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        return try BriefingManualReviewService(repository: runtime.store).updateSection(
+            meetingID: context.plan.meetingID,
+            sectionType: sectionType,
+            editedTextByItemID: editedTextByItemID,
+            locked: locked,
+            changedAt: try currentInstant()
+        )
+    }
+
+    func exportBriefingMarkdown(
+        canonicalJobID: JobID,
+        fileName: String,
+        expectedClassification: DataClassification
+    ) async throws -> BriefingExportRecord {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        guard let active = try runtime.store.activeBriefingReview(
+            meetingID: context.plan.meetingID
+        ), active.isCurrent else { throw AppWorkflowError.briefingUnavailable }
+        return try LocalMarkdownExportService(store: runtime.store).exportMarkdown(
+            BriefingMarkdownExportRequest(
+                meetingID: context.plan.meetingID,
+                finalBriefingRevision: try semanticReference(
+                    active.publication.finalBriefing
+                ),
+                fileName: fileName,
+                expectedClassification: expectedClassification,
+                explicitUserAuthorization: true,
+                requestedAt: try currentInstant()
+            )
+        )
+    }
+
     private func releasePendingSource() {
         if pendingSourceDidStartScope {
             pendingSourceURL?.stopAccessingSecurityScopedResource()
@@ -773,6 +947,117 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         } catch {
             throw AppWorkflowError.analysisUnavailable
         }
+    }
+
+    private func briefingSource(
+        canonicalJobID: JobID,
+        template: MeetingTemplateV1
+    ) async throws -> BriefingSourceBundle {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        guard let analysis = try runtime.store.activeAnalysisReview(
+            meetingID: context.plan.meetingID
+        ), analysis.ledger.status == .published else {
+            throw AppWorkflowError.briefingUnavailable
+        }
+        let meetingState = try runtime.store.activeRevisionState(
+            MeetingProfileV1.self,
+            logicalID: context.plan.meetingID
+        )
+        let meeting: MeetingProfileV1
+        if let meetingState {
+            meeting = meetingState.revision
+        } else {
+            let revisions = try runtime.store.revisions(
+                MeetingProfileV1.self,
+                logicalID: context.plan.meetingID
+            )
+            guard revisions.count == 1, let only = revisions.first else {
+                throw AppWorkflowError.briefingUnavailable
+            }
+            meeting = only
+        }
+        do {
+            return try runtime.store.briefingSourceBundle(
+                meetingRevision: try semanticReference(meeting),
+                template: template,
+                analysisLedgerID: analysis.ledger.ledgerID
+            )
+        } catch {
+            throw AppWorkflowError.briefingUnavailable
+        }
+    }
+
+    private func approvedBriefingRoute(
+        source: BriefingSourceBundle,
+        visibleUserAuthorization: Bool
+    ) async throws -> ModelRouteDecision {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let locale = source.meeting.outputLanguage.value
+        let available = await runtime.briefingProvider?.isModelAvailable(
+            localeIdentifier: locale
+        ) ?? false
+        let decision = try ModelPolicyRouter().decide(
+            briefingRouteRequest(
+                source: source,
+                modelAvailable: available,
+                visibleUserAuthorization: visibleUserAuthorization
+            )
+        )
+        guard decision.route == .appleOnDevice,
+              decision.providerIdentifier == "apple-foundation-models",
+              available else { throw AppWorkflowError.onDeviceModelUnavailable }
+        return decision
+    }
+
+    private func briefingRouteRequest(
+        source: BriefingSourceBundle,
+        modelAvailable: Bool,
+        visibleUserAuthorization: Bool
+    ) throws -> ModelRouteRequest {
+        let classification = DataClassification.mostRestrictive(
+            [source.meeting.revision.dataClassification]
+                + source.analysis.evidence.map(\.revision.dataClassification)
+                + source.analysis.positions.map(\.revision.dataClassification)
+                + source.analysis.interventionCards.map(\.revision.dataClassification)
+                + source.analysis.delegationPositionCards.map(\.revision.dataClassification)
+        ) ?? .restricted
+        return try ModelRouteRequest(
+            capability: .analysis,
+            dataClassification: classification,
+            offlineMode: true,
+            organizationAllowsExternalProcessing: false,
+            deploymentEnvironment: .production,
+            destination: .localDevice,
+            retentionPolicy: .noProviderRetention,
+            dataCategories: [.validatedIntelligenceClaims, .evidenceIdentifiers],
+            visibleUserAuthorization: visibleUserAuthorization,
+            localModelAvailable: modelAvailable
+        )
+    }
+
+    private func briefingRuntimeEvidence(
+        localeIdentifier: String,
+        modelAvailable: Bool
+    ) throws -> AnalysisRuntimeEvidence {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return try AnalysisRuntimeEvidence(
+            operatingSystemVersion: "macOS-\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)",
+            frameworkIdentifier: "com.apple.FoundationModels",
+            adapterVersion: "meetingbuddy-task006b-v1",
+            localeIdentifier: localeIdentifier,
+            modelAvailable: modelAvailable,
+            noOutboundMode: true
+        )
+    }
+
+    private func semanticReference<Object: SemanticRevisionContract>(
+        _ value: Object
+    ) throws -> SemanticRevisionReference {
+        try SemanticRevisionReference(
+            logicalID: value.revision.logicalID,
+            revisionID: value.revision.revisionID
+        )
     }
 
     private func analysisRouteRequest(

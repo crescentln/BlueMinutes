@@ -1,6 +1,6 @@
 import CryptoKit
 import Foundation
-import MeetingBuddyAI
+@testable import MeetingBuddyAI
 import MeetingBuddyApplication
 import MeetingBuddyDomain
 import MeetingBuddyPersistence
@@ -188,7 +188,7 @@ struct AnalysisPipelineIntegrationTests {
         let snapshot = try recovery.createRecoverySnapshot(
             createdAt: aiInstant(1_900_000_000_260)
         )
-        #expect(snapshot.schemaVersion == 4)
+        #expect(snapshot.schemaVersion == 5)
         #expect(snapshot.revisionCount >= 16)
         try recovery.verifyRecoverySnapshot(snapshot)
 
@@ -695,19 +695,19 @@ struct AnalysisPipelineIntegrationTests {
     }
 }
 
-private enum AnalysisProviderMode: Sendable {
+enum AnalysisProviderMode: Sendable {
     case valid
     case fail
 }
 
-private let deterministicAnalysisMetadata = try! ProviderMetadata(
+let deterministicAnalysisMetadata = try! ProviderMetadata(
     providerIdentifier: "meetingbuddy-deterministic-analysis",
     modelIdentifier: "task006a-fixture-v1",
     modelVersion: "1",
     clientVersion: "analysis-test-adapter-v1"
 )
 
-private actor DeterministicAnalysisProvider: AnalysisProvider {
+actor DeterministicAnalysisProvider: AnalysisProvider {
     nonisolated let metadata = deterministicAnalysisMetadata
     nonisolated let route: ModelExecutionRoute = .deterministicTest
     private let mode: AnalysisProviderMode
@@ -730,7 +730,7 @@ private actor DeterministicAnalysisProvider: AnalysisProvider {
     }
 }
 
-private func deterministicAnalysisCandidate() throws -> AnalysisOutputCandidate {
+func deterministicAnalysisCandidate() throws -> AnalysisOutputCandidate {
     try AnalysisOutputCandidate(
         substantive: true,
         interventionType: .statement,
@@ -757,7 +757,7 @@ private let analysisFixtureIdentifier = "task006a-synthetic-diplomatic-001"
 private let analysisFixtureVersion = "1"
 private let analysisFixtureText = "The delegation supports the draft reporting framework, provided reporting remains voluntary and subject to annual review. It will submit a technical note before the next session, subject to domestic consultation."
 
-private func prepareAnalysisSource(_ workspace: AIWorkspace) throws -> AnalysisSourceBundle {
+func prepareAnalysisSource(_ workspace: AIWorkspace) throws -> AnalysisSourceBundle {
     let canonicalSource = try workspace.installCanonicalSource(totalFrames: 600_000)
     let transcriptRoute = try ModelPolicyRouter().decide(
         ModelRouteRequest(
@@ -786,14 +786,32 @@ private func prepareAnalysisSource(_ workspace: AIWorkspace) throws -> AnalysisS
         classification: .internal,
         transcriptionRoute: transcriptRoute,
         translationRoute: nil,
-        createdAt: aiInstant(1_900_000_000_200)
+        createdAt: aiInstant(1_900_000_000_200),
+        identifiers: ManualTranscriptPublicationIdentifiers(
+            transcriptID: aiID(401, TranscriptSegmentID.self),
+            transcriptRevisionID: aiID(402, RevisionID.self),
+            translationID: aiID(403, TranslationSegmentID.self),
+            translationRevisionID: aiID(404, RevisionID.self),
+            transcriptSetID: aiID(405, TranscriptSetID.self),
+            manifestID: aiID(406, TranscriptCoverageManifestID.self)
+        )
     )
     try workspace.store.publishTranscript(transcriptPublication)
     let transcript = try #require(transcriptPublication.transcriptSegments.first)
     let confirmation = try TranscriptSemanticFactory.speakerConfirmation(
         transcript: transcript,
         displayName: "Synthetic Delegate",
-        changedAt: aiInstant(1_900_000_000_210)
+        changedAt: aiInstant(1_900_000_000_210),
+        identifiers: SpeakerConfirmationIdentifiers(
+            actorID: aiID(407, ActorID.self),
+            actorRevisionID: aiID(408, RevisionID.self),
+            capacityID: aiID(409, SpeakingCapacityID.self),
+            capacityRevisionID: aiID(410, RevisionID.self),
+            evidenceID: aiID(411, EvidenceID.self),
+            evidenceRevisionID: aiID(412, RevisionID.self),
+            assignmentID: aiID(413, SpeakerAssignmentID.self),
+            assignmentRevisionID: aiID(414, RevisionID.self)
+        )
     )
     try workspace.store.publishSpeakerConfirmation(
         actor: confirmation.0,
@@ -816,7 +834,7 @@ private func prepareAnalysisSource(_ workspace: AIWorkspace) throws -> AnalysisS
     )
 }
 
-private func analysisPlan(source: AnalysisSourceBundle) throws -> AnalysisPipelineJobPlan {
+func analysisPlan(source: AnalysisSourceBundle) throws -> AnalysisPipelineJobPlan {
     let request = try ModelRouteRequest(
         capability: .analysis,
         dataClassification: .internal,
@@ -920,7 +938,7 @@ private func rejects(_ operation: () throws -> Void) -> Bool {
     }
 }
 
-private func waitForAnalysisJob(
+func waitForAnalysisJob(
     _ manager: LocalTaskManager,
     _ jobID: JobID,
     state: JobState

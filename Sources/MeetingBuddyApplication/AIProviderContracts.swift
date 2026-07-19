@@ -832,6 +832,152 @@ public protocol AnalysisProvider: Sendable {
     func analyze(_ request: AnalysisRequest) async throws -> AnalysisOutputCandidate
 }
 
+/// One bounded, typed input available to a single briefing section. The key is
+/// opaque to the provider; application code resolves exact revisions/evidence.
+public struct BriefingSourceClaim: Codable, Hashable, Sendable, Comparable {
+    public let sourceKey: String
+    public let sourceRevision: SemanticRevisionReference
+    public let claim: EvidenceLinkedClaim
+
+    public init(
+        sourceKey: String,
+        sourceRevision: SemanticRevisionReference,
+        claim: EvidenceLinkedClaim
+    ) throws {
+        guard Self.validKey(sourceKey),
+              [.interventionCard, .issue, .position, .commitment, .decision,
+               .delegationPositionCard, .issuePositionGraph].contains(sourceRevision.objectType),
+              claim.isPublishable
+        else {
+            throw AIProviderContractError.invalidRequest(
+                "A briefing source claim must be bounded, typed, and evidence-linked."
+            )
+        }
+        self.sourceKey = sourceKey
+        self.sourceRevision = sourceRevision
+        self.claim = claim
+    }
+
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+        lhs.sourceKey < rhs.sourceKey
+    }
+
+    private static func validKey(_ value: String) -> Bool {
+        !value.isEmpty
+            && value.utf8.count <= 128
+            && value.unicodeScalars.allSatisfy { scalar in
+                CharacterSet.alphanumerics.contains(scalar) || scalar == "_" || scalar == "-"
+            }
+    }
+}
+
+public struct BriefingSectionRequest: Codable, Hashable, Sendable {
+    public let packageIdentifier: String
+    public let templateRevision: SemanticRevisionReference
+    public let graphRevision: SemanticRevisionReference
+    public let sectionDefinition: TemplateSectionDefinition
+    public let outputLanguage: LanguageTag
+    public let sourceClaims: [BriefingSourceClaim]
+    public let dataClassification: DataClassification
+    public let localeIdentifier: String
+
+    public init(
+        packageIdentifier: String,
+        templateRevision: SemanticRevisionReference,
+        graphRevision: SemanticRevisionReference,
+        sectionDefinition: TemplateSectionDefinition,
+        outputLanguage: LanguageTag,
+        sourceClaims: [BriefingSourceClaim],
+        dataClassification: DataClassification,
+        localeIdentifier: String
+    ) throws {
+        let claims = sourceClaims.sorted()
+        guard !packageIdentifier.isEmpty,
+              packageIdentifier.utf8.count <= 128,
+              templateRevision.objectType == .meetingTemplate,
+              graphRevision.objectType == .issuePositionGraph,
+              !claims.isEmpty,
+              claims.count <= 128,
+              Set(claims.map(\.sourceKey)).count == claims.count,
+              dataClassification.isKnown,
+              !localeIdentifier.isEmpty,
+              localeIdentifier.utf8.count <= 128
+        else {
+            throw AIProviderContractError.invalidRequest(
+                "The bounded structured briefing section request is malformed."
+            )
+        }
+        self.packageIdentifier = packageIdentifier
+        self.templateRevision = templateRevision
+        self.graphRevision = graphRevision
+        self.sectionDefinition = sectionDefinition
+        self.outputLanguage = outputLanguage
+        self.sourceClaims = claims
+        self.dataClassification = dataClassification
+        self.localeIdentifier = localeIdentifier
+    }
+}
+
+public struct BriefingGeneratedItemCandidate: Codable, Hashable, Sendable {
+    public let sourceKeys: [String]
+    public let text: String
+    public let confidence: ConfidenceScore
+
+    public init(
+        sourceKeys: [String],
+        text: String,
+        confidence: ConfidenceScore
+    ) throws {
+        let keys = sourceKeys.sorted()
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keys.isEmpty,
+              keys.count <= 16,
+              Set(keys).count == keys.count,
+              keys.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 128 }),
+              trimmed == text,
+              !text.isEmpty,
+              text.utf8.count <= 16_384,
+              !text.contains("\0")
+        else {
+            throw AIProviderContractError.invalidResponse(
+                "A generated briefing item is empty, unbounded, or lacks source keys."
+            )
+        }
+        self.sourceKeys = keys
+        self.text = text
+        self.confidence = confidence
+    }
+}
+
+public struct BriefingSectionCandidate: Codable, Hashable, Sendable {
+    public let sectionType: BriefingSectionType
+    public let items: [BriefingGeneratedItemCandidate]
+
+    public init(
+        sectionType: BriefingSectionType,
+        items: [BriefingGeneratedItemCandidate]
+    ) throws {
+        guard sectionType.isKnown,
+              !items.isEmpty,
+              items.count <= 128
+        else {
+            throw AIProviderContractError.invalidResponse(
+                "A briefing section candidate must contain bounded typed items."
+            )
+        }
+        self.sectionType = sectionType
+        self.items = items
+    }
+}
+
+public protocol BriefingSectionProvider: Sendable {
+    var metadata: ProviderMetadata { get }
+    var route: ModelExecutionRoute { get }
+    func isModelAvailable(localeIdentifier: String) async -> Bool
+    func generateSection(_ request: BriefingSectionRequest) async throws
+        -> BriefingSectionCandidate
+}
+
 public struct SecretIdentifier: Hashable, Sendable {
     public let service: String
     public let account: String

@@ -133,6 +133,31 @@ enum SQLiteReferenceCodec {
                 logicalID: DelegationPositionCardID(validating: logicalIDValue),
                 revisionID: revisionID
             )
+        case .meetingTemplate:
+            return try SemanticRevisionReference(
+                logicalID: BriefingTemplateID(validating: logicalIDValue),
+                revisionID: revisionID
+            )
+        case .issuePositionGraph:
+            return try SemanticRevisionReference(
+                logicalID: IssuePositionGraphID(validating: logicalIDValue),
+                revisionID: revisionID
+            )
+        case .briefingSection:
+            return try SemanticRevisionReference(
+                logicalID: BriefingSectionID(validating: logicalIDValue),
+                revisionID: revisionID
+            )
+        case .validationReport:
+            return try SemanticRevisionReference(
+                logicalID: ValidationReportID(validating: logicalIDValue),
+                revisionID: revisionID
+            )
+        case .finalBriefing:
+            return try SemanticRevisionReference(
+                logicalID: FinalBriefingID(validating: logicalIDValue),
+                revisionID: revisionID
+            )
         case .userConfirmedNote:
             return try SemanticRevisionReference(
                 logicalID: UserConfirmedNoteID(validating: logicalIDValue),

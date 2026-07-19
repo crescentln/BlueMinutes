@@ -36,6 +36,11 @@ public enum SemanticObjectType: StableStringValue {
     case decision
     case interventionCard
     case delegationPositionCard
+    case meetingTemplate
+    case issuePositionGraph
+    case briefingSection
+    case validationReport
+    case finalBriefing
     case userConfirmedNote
     case unrecognized(String)
 
@@ -57,6 +62,11 @@ public enum SemanticObjectType: StableStringValue {
         case "decision": self = .decision
         case "intervention_card": self = .interventionCard
         case "delegation_position_card": self = .delegationPositionCard
+        case "meeting_template": self = .meetingTemplate
+        case "issue_position_graph": self = .issuePositionGraph
+        case "briefing_section": self = .briefingSection
+        case "validation_report": self = .validationReport
+        case "final_briefing": self = .finalBriefing
         case "user_confirmed_note": self = .userConfirmedNote
         default: self = .unrecognized(encodedValue)
         }
@@ -80,6 +90,11 @@ public enum SemanticObjectType: StableStringValue {
         case .decision: "decision"
         case .interventionCard: "intervention_card"
         case .delegationPositionCard: "delegation_position_card"
+        case .meetingTemplate: "meeting_template"
+        case .issuePositionGraph: "issue_position_graph"
+        case .briefingSection: "briefing_section"
+        case .validationReport: "validation_report"
+        case .finalBriefing: "final_briefing"
         case .userConfirmedNote: "user_confirmed_note"
         case let .unrecognized(value): value
         }

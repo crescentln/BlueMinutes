@@ -134,6 +134,28 @@ public struct AnalysisRouteReview: Hashable, Sendable {
     }
 }
 
+public struct BriefingRouteReview: Hashable, Sendable {
+    public let briefing: ModelRouteDecision
+    public let runtimeEvidence: AnalysisRuntimeEvidence
+
+    public init(
+        briefing: ModelRouteDecision,
+        runtimeEvidence: AnalysisRuntimeEvidence
+    ) {
+        self.briefing = briefing
+        self.runtimeEvidence = runtimeEvidence
+    }
+
+    public var isOnDeviceReady: Bool {
+        briefing.route == .appleOnDevice
+            && briefing.providerIdentifier == "apple-foundation-models"
+            && briefing.request.dataCategories
+                == [.evidenceIdentifiers, .validatedIntelligenceClaims]
+            && runtimeEvidence.modelAvailable
+            && runtimeEvidence.noOutboundMode
+    }
+}
+
 public enum TranscriptWorkflowError: Error, Sendable {
     case unavailable
 }
@@ -213,6 +235,24 @@ public protocol MediaReviewWorkflow: AnyObject {
         reservations: [String],
         conditions: [String]
     ) async throws -> AnalysisReviewBundle
+    func briefingRoute(canonicalJobID: JobID) async throws -> BriefingRouteReview
+    func startBriefing(canonicalJobID: JobID) async throws -> MediaJobReview
+    func briefingReview(canonicalJobID: JobID) async throws -> BriefingReviewBundle?
+    func regenerateBriefingSection(
+        canonicalJobID: JobID,
+        sectionType: BriefingSectionType
+    ) async throws -> MediaJobReview
+    func updateBriefingSection(
+        canonicalJobID: JobID,
+        sectionType: BriefingSectionType,
+        editedTextByItemID: [BriefingItemID: String],
+        locked: Bool
+    ) async throws -> BriefingReviewBundle
+    func exportBriefingMarkdown(
+        canonicalJobID: JobID,
+        fileName: String,
+        expectedClassification: DataClassification
+    ) async throws -> BriefingExportRecord
 }
 
 public extension MediaReviewWorkflow {
@@ -288,6 +328,42 @@ public extension MediaReviewWorkflow {
         reservations: [String],
         conditions: [String]
     ) async throws -> AnalysisReviewBundle {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func briefingRoute(canonicalJobID: JobID) async throws -> BriefingRouteReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func startBriefing(canonicalJobID: JobID) async throws -> MediaJobReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func briefingReview(canonicalJobID: JobID) async throws -> BriefingReviewBundle? {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func regenerateBriefingSection(
+        canonicalJobID: JobID,
+        sectionType: BriefingSectionType
+    ) async throws -> MediaJobReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func updateBriefingSection(
+        canonicalJobID: JobID,
+        sectionType: BriefingSectionType,
+        editedTextByItemID: [BriefingItemID: String],
+        locked: Bool
+    ) async throws -> BriefingReviewBundle {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func exportBriefingMarkdown(
+        canonicalJobID: JobID,
+        fileName: String,
+        expectedClassification: DataClassification
+    ) async throws -> BriefingExportRecord {
         throw TranscriptWorkflowError.unavailable
     }
 }

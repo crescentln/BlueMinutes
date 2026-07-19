@@ -34,6 +34,9 @@ public struct MeetingBuddyRootView: View {
                     Label("Analysis Review", systemImage: "checklist.checked")
                         .tag(MediaReviewSection.analysis)
                         .disabled(store.transcriptReview == nil)
+                    Label("Briefing", systemImage: "doc.text.magnifyingglass")
+                        .tag(MediaReviewSection.briefing)
+                        .disabled(store.analysisReview == nil)
                 }
             }
             .navigationTitle("MeetingBuddy")
@@ -50,6 +53,8 @@ public struct MeetingBuddyRootView: View {
                         TranscriptReviewView(store: store)
                     case .analysis:
                         AnalysisReviewView(store: store)
+                    case .briefing:
+                        BriefingReviewView(store: store)
                     }
                 }
             }
@@ -76,6 +81,9 @@ public struct MeetingBuddyRootView: View {
                 case .analysis:
                     await store.loadAnalysisReview()
                     await store.refreshAnalysisRoute()
+                case .briefing:
+                    await store.loadBriefingReview()
+                    await store.refreshBriefingRoute()
                 case .intake, nil:
                     break
                 }
@@ -127,6 +135,7 @@ public struct MeetingBuddyRootView: View {
         switch store.selectedSection {
         case .transcript: "Transcript Review"
         case .analysis: "Analysis Review"
+        case .briefing: "Briefing"
         case .intake, nil: "Local Media Intake"
         }
     }

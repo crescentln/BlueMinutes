@@ -2,6 +2,62 @@ import Foundation
 import MeetingBuddyApplication
 import MeetingBuddyDomain
 
+struct ManualTranscriptPublicationIdentifiers: Sendable {
+    let transcriptID: TranscriptSegmentID
+    let transcriptRevisionID: RevisionID
+    let translationID: TranslationSegmentID
+    let translationRevisionID: RevisionID
+    let transcriptSetID: TranscriptSetID
+    let manifestID: TranscriptCoverageManifestID
+
+    init(
+        transcriptID: TranscriptSegmentID = TranscriptSegmentID(UUID()),
+        transcriptRevisionID: RevisionID = RevisionID(UUID()),
+        translationID: TranslationSegmentID = TranslationSegmentID(UUID()),
+        translationRevisionID: RevisionID = RevisionID(UUID()),
+        transcriptSetID: TranscriptSetID = TranscriptSetID(UUID()),
+        manifestID: TranscriptCoverageManifestID = TranscriptCoverageManifestID(UUID())
+    ) {
+        self.transcriptID = transcriptID
+        self.transcriptRevisionID = transcriptRevisionID
+        self.translationID = translationID
+        self.translationRevisionID = translationRevisionID
+        self.transcriptSetID = transcriptSetID
+        self.manifestID = manifestID
+    }
+}
+
+struct SpeakerConfirmationIdentifiers: Sendable {
+    let actorID: ActorID
+    let actorRevisionID: RevisionID
+    let capacityID: SpeakingCapacityID
+    let capacityRevisionID: RevisionID
+    let evidenceID: EvidenceID
+    let evidenceRevisionID: RevisionID
+    let assignmentID: SpeakerAssignmentID
+    let assignmentRevisionID: RevisionID
+
+    init(
+        actorID: ActorID = ActorID(UUID()),
+        actorRevisionID: RevisionID = RevisionID(UUID()),
+        capacityID: SpeakingCapacityID = SpeakingCapacityID(UUID()),
+        capacityRevisionID: RevisionID = RevisionID(UUID()),
+        evidenceID: EvidenceID = EvidenceID(UUID()),
+        evidenceRevisionID: RevisionID = RevisionID(UUID()),
+        assignmentID: SpeakerAssignmentID = SpeakerAssignmentID(UUID()),
+        assignmentRevisionID: RevisionID = RevisionID(UUID())
+    ) {
+        self.actorID = actorID
+        self.actorRevisionID = actorRevisionID
+        self.capacityID = capacityID
+        self.capacityRevisionID = capacityRevisionID
+        self.evidenceID = evidenceID
+        self.evidenceRevisionID = evidenceRevisionID
+        self.assignmentID = assignmentID
+        self.assignmentRevisionID = assignmentRevisionID
+    }
+}
+
 public enum TranscriptSemanticFactory {
     public static func manualPublication(
         meetingID: MeetingID,
@@ -18,6 +74,40 @@ public enum TranscriptSemanticFactory {
         translationRoute: ModelRouteDecision?,
         createdAt: UTCInstant
     ) throws -> TranscriptPublication {
+        try manualPublication(
+            meetingID: meetingID,
+            canonicalSource: canonicalSource,
+            canonicalFrameCount: canonicalFrameCount,
+            speechSourceKind: speechSourceKind,
+            sourceLanguage: sourceLanguage,
+            transcriptText: transcriptText,
+            targetLanguage: targetLanguage,
+            translatedText: translatedText,
+            confirmsCompleteCoverage: confirmsCompleteCoverage,
+            classification: classification,
+            transcriptionRoute: transcriptionRoute,
+            translationRoute: translationRoute,
+            createdAt: createdAt,
+            identifiers: ManualTranscriptPublicationIdentifiers()
+        )
+    }
+
+    static func manualPublication(
+        meetingID: MeetingID,
+        canonicalSource: SemanticRevisionReference,
+        canonicalFrameCount: UInt64,
+        speechSourceKind: SpeechSourceKind,
+        sourceLanguage: LanguageTag,
+        transcriptText: String,
+        targetLanguage: LanguageTag?,
+        translatedText: String?,
+        confirmsCompleteCoverage: Bool,
+        classification: DataClassification,
+        transcriptionRoute: ModelRouteDecision,
+        translationRoute: ModelRouteDecision?,
+        createdAt: UTCInstant,
+        identifiers: ManualTranscriptPublicationIdentifiers
+    ) throws -> TranscriptPublication {
         guard confirmsCompleteCoverage,
               transcriptionRoute.route == .manualFallback,
               transcriptionRoute.request.capability == .transcription,
@@ -30,8 +120,8 @@ public enum TranscriptSemanticFactory {
         else { throw TranscriptCoverageError.publicationConflict }
         let fullRange = try MediaFrameRange(startFrame: 0, endFrame: canonicalFrameCount)
         let transcript = try manualTranscript(
-            logicalID: TranscriptSegmentID(UUID()),
-            revisionID: RevisionID(UUID()),
+            logicalID: identifiers.transcriptID,
+            revisionID: identifiers.transcriptRevisionID,
             meetingID: meetingID,
             canonicalSource: canonicalSource,
             speechSourceKind: speechSourceKind,
@@ -48,8 +138,8 @@ public enum TranscriptSemanticFactory {
         let translation: TranslationSegmentV1? = try {
             guard let targetLanguage, let translatedText else { return nil }
             return try manualTranslation(
-                logicalID: TranslationSegmentID(UUID()),
-                revisionID: RevisionID(UUID()),
+                logicalID: identifiers.translationID,
+                revisionID: identifiers.translationRevisionID,
                 transcript: transcript,
                 canonicalSource: canonicalSource,
                 sourceLanguage: sourceLanguage,
@@ -77,7 +167,8 @@ public enum TranscriptSemanticFactory {
             )
         }
         let manifest = try TranscriptCoverageManifest(
-            transcriptSetID: TranscriptSetID(UUID()),
+            manifestID: identifiers.manifestID,
+            transcriptSetID: identifiers.transcriptSetID,
             meetingID: meetingID,
             canonicalSourceRevision: canonicalSource,
             canonicalFrameCount: canonicalFrameCount,
@@ -582,12 +673,26 @@ public enum TranscriptSemanticFactory {
         displayName: String,
         changedAt: UTCInstant
     ) throws -> (ActorV1, SpeakingCapacityV1, EvidenceRefV1, SpeakerAssignmentV1) {
+        try speakerConfirmation(
+            transcript: transcript,
+            displayName: displayName,
+            changedAt: changedAt,
+            identifiers: SpeakerConfirmationIdentifiers()
+        )
+    }
+
+    static func speakerConfirmation(
+        transcript: TranscriptSegmentV1,
+        displayName: String,
+        changedAt: UTCInstant,
+        identifiers: SpeakerConfirmationIdentifiers
+    ) throws -> (ActorV1, SpeakingCapacityV1, EvidenceRefV1, SpeakerAssignmentV1) {
         let transcriptReference = try SemanticRevisionReference(
             logicalID: transcript.segmentID,
             revisionID: transcript.revision.revisionID
         )
-        let actorID = ActorID(UUID())
-        let actorRevisionID = RevisionID(UUID())
+        let actorID = identifiers.actorID
+        let actorRevisionID = identifiers.actorRevisionID
         let actorDraft = try actor(
             logicalID: actorID,
             revisionID: actorRevisionID,
@@ -615,8 +720,8 @@ public enum TranscriptSemanticFactory {
             revisionID: actor.revision.revisionID
         )
 
-        let capacityID = SpeakingCapacityID(UUID())
-        let capacityRevisionID = RevisionID(UUID())
+        let capacityID = identifiers.capacityID
+        let capacityRevisionID = identifiers.capacityRevisionID
         let capacityDraft = try capacity(
             logicalID: capacityID,
             revisionID: capacityRevisionID,
@@ -648,8 +753,8 @@ public enum TranscriptSemanticFactory {
             revisionID: capacity.revision.revisionID
         )
 
-        let evidenceID = EvidenceID(UUID())
-        let evidenceRevisionID = RevisionID(UUID())
+        let evidenceID = identifiers.evidenceID
+        let evidenceRevisionID = identifiers.evidenceRevisionID
         let evidenceDraft = try evidence(
             logicalID: evidenceID,
             revisionID: evidenceRevisionID,
@@ -677,8 +782,8 @@ public enum TranscriptSemanticFactory {
             revisionID: evidence.revision.revisionID
         )
 
-        let assignmentID = SpeakerAssignmentID(UUID())
-        let assignmentRevisionID = RevisionID(UUID())
+        let assignmentID = identifiers.assignmentID
+        let assignmentRevisionID = identifiers.assignmentRevisionID
         let assignmentDraft = try assignment(
             logicalID: assignmentID,
             revisionID: assignmentRevisionID,

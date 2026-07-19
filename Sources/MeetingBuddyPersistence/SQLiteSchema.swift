@@ -5,11 +5,12 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 enum SQLiteSchema {
-    static let currentVersion: UInt32 = 4
+    static let currentVersion: UInt32 = 5
     static let initialMigrationIdentifier = "001_initial_persistence"
     static let taskRuntimeMigrationIdentifier = "002_task_runtime"
     static let transcriptCoverageMigrationIdentifier = "003_transcript_coverage"
     static let analysisMigrationIdentifier = "004_analysis_intelligence"
+    static let briefingMigrationIdentifier = "005_briefing_foundation"
     static let maximumSemanticPayloadBytes = 16 * 1_024 * 1_024
     static let maximumJobPayloadBytes = 1 * 1_024 * 1_024
 
@@ -1241,6 +1242,357 @@ enum SQLiteSchema {
     END;
     """
 
+    /// Schema v5 adds the closed Task 006B semantic vocabulary plus immutable,
+    /// normalized briefing coverage and explicit local export history. Existing
+    /// v4 semantic and coverage payload bytes are copied without re-encoding.
+    static let briefingSchemaSQL = """
+    DROP TRIGGER semantic_revisions_no_update;
+    DROP TRIGGER semantic_revisions_no_delete;
+
+    CREATE TABLE semantic_revisions_v5 (
+        object_type TEXT NOT NULL,
+        logical_id TEXT NOT NULL CHECK (
+            length(logical_id) = 36 AND lower(logical_id) = logical_id
+        ),
+        revision_id TEXT NOT NULL CHECK (
+            length(revision_id) = 36 AND lower(revision_id) = revision_id
+        ),
+        schema_major INTEGER NOT NULL CHECK (schema_major > 0 AND schema_major <= 65535),
+        schema_minor INTEGER NOT NULL CHECK (schema_minor >= 0 AND schema_minor <= 65535),
+        lifecycle_status TEXT NOT NULL CHECK (lifecycle_status IN ('draft', 'published')),
+        validation_state TEXT NOT NULL CHECK (
+            validation_state IN ('not_validated', 'valid', 'invalid', 'needs_review')
+        ),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        published_at_ms INTEGER CHECK (published_at_ms >= created_at_ms),
+        supersedes_revision_id TEXT,
+        data_classification TEXT NOT NULL CHECK (
+            data_classification IN ('public', 'internal', 'sensitive', 'restricted')
+        ),
+        semantic_hash_algorithm TEXT,
+        semantic_hash_hex TEXT,
+        canonical_payload BLOB NOT NULL,
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size > 0 AND payload_byte_size <= 16777216
+        ),
+        PRIMARY KEY (object_type, logical_id, revision_id),
+        UNIQUE (revision_id),
+        FOREIGN KEY (object_type, logical_id, supersedes_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id),
+        CHECK (
+            (semantic_hash_algorithm IS NULL AND semantic_hash_hex IS NULL)
+            OR
+            (semantic_hash_algorithm = 'sha256'
+                AND length(semantic_hash_hex) = 64
+                AND lower(semantic_hash_hex) = semantic_hash_hex)
+        ),
+        CHECK (
+            lifecycle_status != 'published'
+            OR (validation_state = 'valid'
+                AND published_at_ms IS NOT NULL
+                AND semantic_hash_hex IS NOT NULL)
+        ),
+        CHECK (object_type IN (
+            'source_asset',
+            'evidence_ref',
+            'meeting_profile',
+            'transcript_segment',
+            'translation_segment',
+            'actor',
+            'speaking_capacity',
+            'speaker_assignment',
+            'participant',
+            'organization',
+            'issue',
+            'position',
+            'commitment',
+            'decision',
+            'intervention_card',
+            'delegation_position_card',
+            'meeting_template',
+            'issue_position_graph',
+            'briefing_section',
+            'validation_report',
+            'final_briefing'
+        ))
+    );
+
+    INSERT INTO semantic_revisions_v5(
+        object_type,
+        logical_id,
+        revision_id,
+        schema_major,
+        schema_minor,
+        lifecycle_status,
+        validation_state,
+        created_at_ms,
+        published_at_ms,
+        supersedes_revision_id,
+        data_classification,
+        semantic_hash_algorithm,
+        semantic_hash_hex,
+        canonical_payload,
+        payload_sha256,
+        payload_byte_size
+    )
+    SELECT
+        object_type,
+        logical_id,
+        revision_id,
+        schema_major,
+        schema_minor,
+        lifecycle_status,
+        validation_state,
+        created_at_ms,
+        published_at_ms,
+        supersedes_revision_id,
+        data_classification,
+        semantic_hash_algorithm,
+        semantic_hash_hex,
+        canonical_payload,
+        payload_sha256,
+        payload_byte_size
+    FROM semantic_revisions;
+
+    DROP TABLE semantic_revisions;
+    ALTER TABLE semantic_revisions_v5 RENAME TO semantic_revisions;
+
+    CREATE TRIGGER semantic_revisions_no_update
+    BEFORE UPDATE ON semantic_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'semantic revisions are immutable');
+    END;
+
+    CREATE TRIGGER semantic_revisions_no_delete
+    BEFORE DELETE ON semantic_revisions
+    BEGIN
+        SELECT RAISE(ABORT, 'semantic revisions are immutable');
+    END;
+
+    CREATE TABLE briefing_coverage_ledgers (
+        ledger_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(ledger_id) = 36 AND lower(ledger_id) = ledger_id
+        ),
+        supersedes_ledger_id TEXT,
+        meeting_id TEXT NOT NULL CHECK (
+            length(meeting_id) = 36 AND lower(meeting_id) = meeting_id
+        ),
+        transcript_manifest_id TEXT NOT NULL,
+        analysis_ledger_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('incomplete', 'published')),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        content_hash_algorithm TEXT NOT NULL CHECK (content_hash_algorithm = 'sha256'),
+        content_hash_hex TEXT NOT NULL CHECK (
+            length(content_hash_hex) = 64 AND lower(content_hash_hex) = content_hash_hex
+        ),
+        canonical_payload BLOB NOT NULL,
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size > 0 AND payload_byte_size <= 16777216
+        ),
+        FOREIGN KEY (supersedes_ledger_id)
+            REFERENCES briefing_coverage_ledgers(ledger_id),
+        FOREIGN KEY (transcript_manifest_id)
+            REFERENCES transcript_coverage_manifests(manifest_id),
+        FOREIGN KEY (analysis_ledger_id)
+            REFERENCES analysis_coverage_ledgers(ledger_id),
+        CHECK (supersedes_ledger_id IS NULL OR supersedes_ledger_id != ledger_id)
+    );
+
+    CREATE INDEX briefing_coverage_by_meeting
+        ON briefing_coverage_ledgers(meeting_id, created_at_ms, ledger_id);
+
+    CREATE TABLE briefing_coverage_entries (
+        ledger_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        segment_object_type TEXT NOT NULL CHECK (segment_object_type = 'transcript_segment'),
+        segment_logical_id TEXT NOT NULL,
+        segment_revision_id TEXT NOT NULL,
+        disposition TEXT NOT NULL CHECK (
+            disposition IN (
+                'represented', 'reviewed_not_rendered', 'non_substantive', 'failed', 'missing'
+            )
+        ),
+        safe_reason_code TEXT,
+        PRIMARY KEY (ledger_id, segment_revision_id),
+        UNIQUE (ledger_id, ordinal),
+        FOREIGN KEY (ledger_id) REFERENCES briefing_coverage_ledgers(ledger_id),
+        FOREIGN KEY (segment_object_type, segment_logical_id, segment_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE briefing_coverage_evidence (
+        ledger_id TEXT NOT NULL,
+        segment_revision_id TEXT NOT NULL,
+        evidence_object_type TEXT NOT NULL CHECK (evidence_object_type = 'evidence_ref'),
+        evidence_logical_id TEXT NOT NULL,
+        evidence_revision_id TEXT NOT NULL,
+        PRIMARY KEY (ledger_id, segment_revision_id, evidence_revision_id),
+        FOREIGN KEY (ledger_id, segment_revision_id)
+            REFERENCES briefing_coverage_entries(ledger_id, segment_revision_id),
+        FOREIGN KEY (evidence_object_type, evidence_logical_id, evidence_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE briefing_coverage_analysis_outputs (
+        ledger_id TEXT NOT NULL,
+        segment_revision_id TEXT NOT NULL,
+        output_object_type TEXT NOT NULL CHECK (output_object_type IN (
+            'participant', 'organization', 'issue', 'position', 'commitment',
+            'decision', 'intervention_card', 'delegation_position_card'
+        )),
+        output_logical_id TEXT NOT NULL,
+        output_revision_id TEXT NOT NULL,
+        PRIMARY KEY (ledger_id, segment_revision_id, output_revision_id),
+        FOREIGN KEY (ledger_id, segment_revision_id)
+            REFERENCES briefing_coverage_entries(ledger_id, segment_revision_id),
+        FOREIGN KEY (output_object_type, output_logical_id, output_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE briefing_coverage_conclusions (
+        ledger_id TEXT NOT NULL,
+        segment_revision_id TEXT NOT NULL,
+        output_object_type TEXT NOT NULL CHECK (
+            output_object_type IN ('issue_position_graph', 'briefing_section')
+        ),
+        output_logical_id TEXT NOT NULL,
+        output_revision_id TEXT NOT NULL,
+        item_id TEXT NOT NULL CHECK (length(item_id) = 36 AND lower(item_id) = item_id),
+        PRIMARY KEY (ledger_id, segment_revision_id, output_revision_id, item_id),
+        FOREIGN KEY (ledger_id, segment_revision_id)
+            REFERENCES briefing_coverage_entries(ledger_id, segment_revision_id),
+        FOREIGN KEY (output_object_type, output_logical_id, output_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE active_briefing_ledgers (
+        meeting_id TEXT PRIMARY KEY NOT NULL,
+        ledger_id TEXT NOT NULL UNIQUE,
+        pointer_version INTEGER NOT NULL CHECK (pointer_version > 0),
+        changed_at_ms INTEGER NOT NULL CHECK (changed_at_ms >= 0),
+        FOREIGN KEY (ledger_id) REFERENCES briefing_coverage_ledgers(ledger_id)
+    );
+
+    CREATE TABLE briefing_ledger_events (
+        event_id TEXT PRIMARY KEY NOT NULL,
+        meeting_id TEXT NOT NULL,
+        previous_ledger_id TEXT,
+        replacement_ledger_id TEXT NOT NULL,
+        pointer_version INTEGER NOT NULL CHECK (pointer_version > 0),
+        changed_at_ms INTEGER NOT NULL CHECK (changed_at_ms >= 0),
+        FOREIGN KEY (previous_ledger_id) REFERENCES briefing_coverage_ledgers(ledger_id),
+        FOREIGN KEY (replacement_ledger_id) REFERENCES briefing_coverage_ledgers(ledger_id)
+    );
+
+    CREATE TABLE briefing_export_records (
+        export_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(export_id) = 36 AND lower(export_id) = export_id
+        ),
+        meeting_id TEXT NOT NULL CHECK (
+            length(meeting_id) = 36 AND lower(meeting_id) = meeting_id
+        ),
+        final_revision_id TEXT NOT NULL,
+        relative_path TEXT NOT NULL UNIQUE,
+        data_classification TEXT NOT NULL CHECK (
+            data_classification IN ('public', 'internal', 'sensitive', 'restricted')
+        ),
+        exported_at_ms INTEGER NOT NULL CHECK (exported_at_ms >= 0),
+        canonical_payload BLOB NOT NULL,
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size > 0 AND payload_byte_size <= 1048576
+        ),
+        FOREIGN KEY (final_revision_id) REFERENCES semantic_revisions(revision_id)
+    );
+
+    CREATE INDEX briefing_exports_by_meeting
+        ON briefing_export_records(meeting_id, exported_at_ms, export_id);
+
+    CREATE TRIGGER briefing_coverage_ledgers_no_update
+    BEFORE UPDATE ON briefing_coverage_ledgers
+    BEGIN SELECT RAISE(ABORT, 'briefing coverage ledgers are immutable'); END;
+
+    CREATE TRIGGER briefing_coverage_ledgers_no_delete
+    BEFORE DELETE ON briefing_coverage_ledgers
+    BEGIN SELECT RAISE(ABORT, 'briefing coverage ledgers are immutable'); END;
+
+    CREATE TRIGGER briefing_coverage_entries_no_update
+    BEFORE UPDATE ON briefing_coverage_entries
+    BEGIN SELECT RAISE(ABORT, 'briefing coverage entries are immutable'); END;
+
+    CREATE TRIGGER briefing_coverage_entries_no_delete
+    BEFORE DELETE ON briefing_coverage_entries
+    BEGIN SELECT RAISE(ABORT, 'briefing coverage entries are immutable'); END;
+
+    CREATE TRIGGER briefing_coverage_evidence_no_update
+    BEFORE UPDATE ON briefing_coverage_evidence
+    BEGIN SELECT RAISE(ABORT, 'briefing coverage evidence is immutable'); END;
+
+    CREATE TRIGGER briefing_coverage_evidence_no_delete
+    BEFORE DELETE ON briefing_coverage_evidence
+    BEGIN SELECT RAISE(ABORT, 'briefing coverage evidence is immutable'); END;
+
+    CREATE TRIGGER briefing_coverage_analysis_outputs_no_update
+    BEFORE UPDATE ON briefing_coverage_analysis_outputs
+    BEGIN SELECT RAISE(ABORT, 'briefing coverage outputs are immutable'); END;
+
+    CREATE TRIGGER briefing_coverage_analysis_outputs_no_delete
+    BEFORE DELETE ON briefing_coverage_analysis_outputs
+    BEGIN SELECT RAISE(ABORT, 'briefing coverage outputs are immutable'); END;
+
+    CREATE TRIGGER briefing_coverage_conclusions_no_update
+    BEFORE UPDATE ON briefing_coverage_conclusions
+    BEGIN SELECT RAISE(ABORT, 'briefing conclusions are immutable'); END;
+
+    CREATE TRIGGER briefing_coverage_conclusions_no_delete
+    BEFORE DELETE ON briefing_coverage_conclusions
+    BEGIN SELECT RAISE(ABORT, 'briefing conclusions are immutable'); END;
+
+    CREATE TRIGGER briefing_ledger_events_no_update
+    BEFORE UPDATE ON briefing_ledger_events
+    BEGIN SELECT RAISE(ABORT, 'briefing ledger events are immutable'); END;
+
+    CREATE TRIGGER briefing_ledger_events_no_delete
+    BEFORE DELETE ON briefing_ledger_events
+    BEGIN SELECT RAISE(ABORT, 'briefing ledger events are immutable'); END;
+
+    CREATE TRIGGER briefing_export_records_no_update
+    BEFORE UPDATE ON briefing_export_records
+    BEGIN SELECT RAISE(ABORT, 'briefing export records are immutable'); END;
+
+    CREATE TRIGGER briefing_export_records_no_delete
+    BEFORE DELETE ON briefing_export_records
+    BEGIN SELECT RAISE(ABORT, 'briefing export records are immutable'); END;
+
+    CREATE TRIGGER active_briefing_ledger_validate_insert
+    BEFORE INSERT ON active_briefing_ledgers
+    WHEN NOT EXISTS (
+        SELECT 1 FROM briefing_coverage_ledgers
+        WHERE ledger_id = NEW.ledger_id
+          AND meeting_id = NEW.meeting_id
+          AND status = 'published'
+    )
+    BEGIN SELECT RAISE(ABORT, 'active briefing ledger target is not publishable'); END;
+
+    CREATE TRIGGER active_briefing_ledger_validate_update
+    BEFORE UPDATE OF ledger_id ON active_briefing_ledgers
+    WHEN NOT EXISTS (
+        SELECT 1 FROM briefing_coverage_ledgers
+        WHERE ledger_id = NEW.ledger_id
+          AND meeting_id = NEW.meeting_id
+          AND status = 'published'
+    )
+    BEGIN SELECT RAISE(ABORT, 'active briefing ledger target is not publishable'); END;
+    """
+
     static var taskRuntimeChecksum: String {
         SHA256.hash(data: Data(taskRuntimeSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
@@ -1255,6 +1607,12 @@ enum SQLiteSchema {
 
     static var analysisChecksum: String {
         SHA256.hash(data: Data(analysisSchemaSQL.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static var briefingChecksum: String {
+        SHA256.hash(data: Data(briefingSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
     }
@@ -1475,7 +1833,34 @@ enum SQLiteDatabaseBootstrap {
                 WHERE singleton = 1
                 """,
                 arguments: [
-                    SQLiteSchema.currentVersion,
+                    4,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+        }
+        migrator.registerMigration(SQLiteSchema.briefingMigrationIdentifier) { db in
+            try db.execute(sql: SQLiteSchema.briefingSchemaSQL)
+            try db.execute(
+                sql: """
+                INSERT INTO schema_migrations(
+                    identifier, ordinal, checksum_sha256, applied_at_ms
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    SQLiteSchema.briefingMigrationIdentifier,
+                    5,
+                    SQLiteSchema.briefingChecksum,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+            try db.execute(
+                sql: """
+                UPDATE workspace_metadata
+                SET database_schema_version = ?, updated_at_ms = ?
+                WHERE singleton = 1
+                """,
+                arguments: [
+                    5,
                     migrationTimestamp.millisecondsSinceUnixEpoch
                 ]
             )
@@ -1591,6 +1976,16 @@ enum SQLiteDatabaseBootstrap {
             guard analysisChecksum == SQLiteSchema.analysisChecksum else {
                 throw PersistenceContractError.migrationFailed(
                     "The analysis-intelligence migration checksum does not match the accepted schema."
+                )
+            }
+            let briefingChecksum = try String.fetchOne(
+                db,
+                sql: "SELECT checksum_sha256 FROM schema_migrations WHERE identifier = ?",
+                arguments: [SQLiteSchema.briefingMigrationIdentifier]
+            )
+            guard briefingChecksum == SQLiteSchema.briefingChecksum else {
+                throw PersistenceContractError.migrationFailed(
+                    "The briefing-foundation migration checksum does not match the accepted schema."
                 )
             }
         }

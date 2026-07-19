@@ -107,16 +107,34 @@ public enum InterventionCardIDTag: LogicalObjectIDScope {
 public enum DelegationPositionCardIDTag: LogicalObjectIDScope {
     public static var semanticObjectType: SemanticObjectType { .delegationPositionCard }
 }
+public enum BriefingTemplateIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .meetingTemplate }
+}
+public enum IssuePositionGraphIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .issuePositionGraph }
+}
+public enum BriefingSectionIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .briefingSection }
+}
+public enum ValidationReportIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .validationReport }
+}
+public enum FinalBriefingIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .finalBriefing }
+}
 public enum UserConfirmedNoteIDTag: LogicalObjectIDScope {
     public static var semanticObjectType: SemanticObjectType { .userConfirmedNote }
 }
 public enum StorageObjectIDTag: Sendable {}
 public enum AgendaItemIDTag: Sendable {}
-public enum BriefingTemplateIDTag: Sendable {}
 public enum WorkspaceIDTag: Sendable {}
 public enum TranscriptSetIDTag: Sendable {}
 public enum TranscriptCoverageManifestIDTag: Sendable {}
 public enum AnalysisCoverageLedgerIDTag: Sendable {}
+public enum BriefingCoverageLedgerIDTag: Sendable {}
+public enum BriefingItemIDTag: Sendable {}
+public enum ValidationFindingIDTag: Sendable {}
+public enum BriefingExportIDTag: Sendable {}
 
 public typealias LogicalObjectID = StableID<LogicalObjectIDTag>
 public typealias RevisionID = StableID<RevisionIDTag>
@@ -136,6 +154,10 @@ public typealias CommitmentID = StableID<CommitmentIDTag>
 public typealias DecisionID = StableID<DecisionIDTag>
 public typealias InterventionCardID = StableID<InterventionCardIDTag>
 public typealias DelegationPositionCardID = StableID<DelegationPositionCardIDTag>
+public typealias IssuePositionGraphID = StableID<IssuePositionGraphIDTag>
+public typealias BriefingSectionID = StableID<BriefingSectionIDTag>
+public typealias ValidationReportID = StableID<ValidationReportIDTag>
+public typealias FinalBriefingID = StableID<FinalBriefingIDTag>
 public typealias UserConfirmedNoteID = StableID<UserConfirmedNoteIDTag>
 public typealias StorageObjectID = StableID<StorageObjectIDTag>
 public typealias AgendaItemID = StableID<AgendaItemIDTag>
@@ -144,6 +166,10 @@ public typealias WorkspaceID = StableID<WorkspaceIDTag>
 public typealias TranscriptSetID = StableID<TranscriptSetIDTag>
 public typealias TranscriptCoverageManifestID = StableID<TranscriptCoverageManifestIDTag>
 public typealias AnalysisCoverageLedgerID = StableID<AnalysisCoverageLedgerIDTag>
+public typealias BriefingCoverageLedgerID = StableID<BriefingCoverageLedgerIDTag>
+public typealias BriefingItemID = StableID<BriefingItemIDTag>
+public typealias ValidationFindingID = StableID<ValidationFindingIDTag>
+public typealias BriefingExportID = StableID<BriefingExportIDTag>
 
 /// An exact semantic revision reference, never a bare logical identifier.
 public struct SemanticRevisionReference: Codable, Hashable, Sendable, Comparable, DomainValidatable {

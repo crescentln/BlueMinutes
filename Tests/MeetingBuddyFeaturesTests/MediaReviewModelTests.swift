@@ -27,9 +27,12 @@ struct MediaReviewModelTests {
     }
 
     @Test
-    func analysisReviewIsAnIndependentNavigationSection() {
-        #expect(Set<MediaReviewSection>([.intake, .transcript, .analysis]).count == 3)
+    func analysisAndBriefingAreIndependentNavigationSections() {
+        #expect(
+            Set<MediaReviewSection>([.intake, .transcript, .analysis, .briefing]).count == 4
+        )
         #expect(MediaReviewSection.analysis != .transcript)
+        #expect(MediaReviewSection.briefing != .analysis)
     }
 
     @Test @MainActor
