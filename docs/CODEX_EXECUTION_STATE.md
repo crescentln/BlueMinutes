@@ -5,7 +5,7 @@ project: MeetingBuddy
 controller_version: "1.1"
 master_spec_version: "1.1"
 current_task: "009A"
-current_status: completed_pending_user_acceptance
+current_status: accepted
 accepted_tasks:
   - "001"
   - "002"
@@ -20,11 +20,11 @@ accepted_tasks:
   - "007"
   - "008A"
   - "008B"
-completed_pending_acceptance:
   - "009A"
+completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "2a38a74aedf42d0e69f2375bd21365132e340cf4 (accepted Task 008B and the pre-Task-009A rollback anchor; no Task 009A commit exists)"
-working_tree_status_summary: "Task 009A implementation, tests, ADR, and completion evidence are present and uncommitted; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved, with narrow Task 009A additions only where required; Package.resolved is unchanged; no user-workspace migration/write, real meeting content, provider/network/credential/export/recording/MCP/HTTP route, push, deployment, commit, or Task 009B work exists"
+last_known_git_head: "31661a352a5ecf64f8ef3bf8ae9069e6ab16a1d0 (Task 009A implementation and completion-evidence commit; accepted Task 008B commit 2a38a74aedf42d0e69f2375bd21365132e340cf4 remains the pre-Task-009A rollback anchor; the Task 009A acceptance update follows as a separate local commit)"
+working_tree_status_summary: "Task 009A core implementation, tests, dedicated ADR/report, completion evidence, and acceptance are committed locally; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved and uncommitted, with narrow Task 009A cross-reference/state updates retained only in those mixed working-tree files; Package.resolved is unchanged; no uncommitted Task 009A code/test/schema/dedicated report change, user-workspace migration/write, real meeting content, provider/network/credential/export/recording/MCP/HTTP route, push, deployment, or Task 009B work exists"
 last_verification_commands:
   - "swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors"
   - "focused AutomationCommandIntegrationTests and WorkspaceAndMigrationTests plus targeted schema-version and storage-growth regressions with warnings as errors"
@@ -59,6 +59,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain Task 011"
-next_eligible_task: "none until Task 009A is accepted; Task 009B then remains separately user-gated"
-last_updated_at: "2026-07-21T18:46:41Z"
+next_eligible_task: "009B (eligible but not started; requires a separate explicit PROCEED TO TASK 009B command)"
+last_updated_at: "2026-07-21T18:52:32Z"
 ```

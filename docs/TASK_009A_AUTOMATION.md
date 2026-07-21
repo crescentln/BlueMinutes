@@ -1,8 +1,9 @@
 # Task 009A Automation Command Layer and CLI
 
-Status: `completed_pending_user_acceptance`
+Status: Accepted by the user on 2026-07-21
 Date: 2026-07-21
 Rollback Git anchor: `2a38a74aedf42d0e69f2375bd21365132e340cf4`
+Implementation commit: `31661a352a5ecf64f8ef3bf8ae9069e6ab16a1d0`
 Architecture decision: [ADR-0014](adr/ADR-0014-task-009a-automation-command-boundary.md)
 
 ## Implemented boundary
@@ -119,4 +120,9 @@ credential, export, recording, MCP, or remote system is used.
 - Xcode GUI/manual release, assistive-technology, and signed/notarized CLI
   checks remain unverified release work.
 - Task 009B and every other later task remain unauthorized until the user
-  accepts Task 009A and separately authorizes the next task.
+  separately authorizes the next task.
+
+The Task 009A implementation and completion evidence were committed locally as
+`31661a352a5ecf64f8ef3bf8ae9069e6ab16a1d0` and accepted by the user on
+2026-07-21. No branch, tag, push, release, deployment, or next-task work was
+performed.

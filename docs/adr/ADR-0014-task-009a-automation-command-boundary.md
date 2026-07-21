@@ -1,6 +1,6 @@
 # ADR-0014: Task 009A Automation Command and CLI Boundary
 
-Status: Accepted for implementation
+Status: Accepted
 Date: 2026-07-21
 Decision owners: User and Codex
 Applies from: Task 009A
