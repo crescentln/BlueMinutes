@@ -5,7 +5,7 @@ project: MeetingBuddy
 controller_version: "1.1"
 master_spec_version: "1.1"
 current_task: "009B"
-current_status: completed_pending_user_acceptance
+current_status: accepted
 accepted_tasks:
   - "001"
   - "002"
@@ -21,11 +21,11 @@ accepted_tasks:
   - "008A"
   - "008B"
   - "009A"
-completed_pending_acceptance:
   - "009B"
+completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "b32c7b414af7d12547acf37b1fec0243cfa3e464 (accepted Task 009A HEAD and pre-Task-009B rollback anchor; Task 009B remains uncommitted pending user acceptance)"
-working_tree_status_summary: "Task 009B adds an uncommitted local stdio MCP executable and adapter, catalog-origin update, ordered schema-v9 MCP audit-origin migration, repository integrity checks, tests, ADR/report, and narrow current-architecture/ADR-index/state updates; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved and distinguishable in the mixed working tree; Package.resolved is unchanged; no user workspace, real meeting content, account, credential, new provider/model, outbound network, HTTP, export, recording, remote control, branch, commit, push, deployment, or Task 010 work is included"
+last_known_git_head: "b7abf01eec02313bfe2e9ae58bccaf5d8d0db636 (Task 009B implementation and completion-evidence commit; accepted Task 009A commit b32c7b414af7d12547acf37b1fec0243cfa3e464 remains the pre-Task-009B rollback anchor; the Task 009B acceptance update follows as a separate local commit)"
+working_tree_status_summary: "Task 009B core implementation, tests, schema migration, dedicated ADR/report, completion evidence, and acceptance are committed locally; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved and uncommitted, with narrow Task 009B current-architecture/ADR-index status updates retained only in those mixed working-tree files; Package.resolved is unchanged; no uncommitted Task 009B code/test/schema/dedicated report change, user-workspace migration/write, real meeting content, account, credential, new provider/model, outbound network, HTTP, export, recording, remote control, push, deployment, or Task 010 work exists"
 last_verification_commands:
   - "swift test --scratch-path /tmp/meetingbuddy-task009b-final-019f8609 --enable-swift-testing --parallel -Xswiftc -warnings-as-errors"
   - "swift test --scratch-path /tmp/meetingbuddy-task009b-jsonrpc-019f8609 --enable-swift-testing --filter AutomationMCPAdapterTests -Xswiftc -warnings-as-errors"
@@ -63,6 +63,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain Task 011"
-next_eligible_task: "010 (eligible only after Task 009B acceptance; not authorized)"
-last_updated_at: "2026-07-21T20:02:11Z"
+next_eligible_task: "010 (eligible but not started; requires a separate explicit PROCEED TO TASK 010 command)"
+last_updated_at: "2026-07-21T20:11:43Z"
 ```

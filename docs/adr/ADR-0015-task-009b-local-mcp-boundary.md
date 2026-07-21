@@ -1,6 +1,6 @@
 # ADR-0015: Task 009B Local Read-Only MCP Boundary
 
-Status: Proposed, implemented pending Task 009B user acceptance
+Status: Accepted
 Date: 2026-07-21
 Decision owners: User and Codex
 Applies from: Task 009B

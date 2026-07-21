@@ -1,6 +1,6 @@
 # Task 009B Local MCP Adapter
 
-Status: Completed, pending user acceptance
+Status: Accepted
 Date: 2026-07-21
 Rollback Git anchor: `b32c7b414af7d12547acf37b1fec0243cfa3e464`
 Architecture decision: [ADR-0015](adr/ADR-0015-task-009b-local-mcp-boundary.md)
@@ -140,5 +140,6 @@ network, credential, meeting content, or user workspace is exercised.
 - HTTP, remote access, providers, accounts, credentials, exports, recording,
   arbitrary files/databases, remote control, and Task 010 remain absent.
 
-No branch, commit, tag, push, release, deployment, user-workspace migration, or
-next-task work is included in Task 009B pending explicit user direction.
+Task 009B implementation and acceptance are committed locally. No branch, tag,
+push, release, deployment, user-workspace migration, or next-task work is
+included.
