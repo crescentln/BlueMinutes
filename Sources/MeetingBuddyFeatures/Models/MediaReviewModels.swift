@@ -8,6 +8,7 @@ public enum MediaReviewSection: Hashable, Sendable {
     case transcript
     case analysis
     case briefing
+    case history
     case storage
 }
 

@@ -20,6 +20,11 @@ public final class MediaReviewStore {
     public private(set) var briefingRouteReview: BriefingRouteReview?
     public private(set) var briefingReview: BriefingReviewBundle?
     public private(set) var lastBriefingExport: BriefingExportRecord?
+    public private(set) var historicalIndex: HistoricalIndexStatus?
+    public private(set) var historicalIndexJob: MediaJobReview?
+    public private(set) var historicalSearchPage: HistoricalSearchPage?
+    public private(set) var historicalComparison: HistoricalComparisonV1?
+    public private(set) var learnedPreferences: LearnedPreferenceState?
     public private(set) var storageReport: WorkspaceStorageReport?
     public private(set) var recordingSetup: RecordingSetupReview?
     public private(set) var recordingSession: RecordingSessionReview?
@@ -50,6 +55,18 @@ public final class MediaReviewStore {
     public var reviewedUNDescription = ""
     public var reviewedUNProductionDate = ""
     public var reviewedUNLanguageAvailability = ""
+    public var historyActorOrCountry = ""
+    public var historyTopic = ""
+    public var historyBody = ""
+    public var historyMeetingType = ""
+    public var historyStartDate = ""
+    public var historyEndDate = ""
+    public var selectedCurrentHistoryRevisionID: RevisionID?
+    public var selectedPriorHistoryRevisionID: RevisionID?
+    public var learnedPreferenceKind: LearnedPreferenceKind = .briefingLength
+    public var learnedPreferenceValue = ""
+    public var editingLearnedPreferenceID: LearnedPreferenceID?
+    public var editingLearnedPreferenceVersion: UInt64?
 
     @ObservationIgnored
     private let workflow: any MediaReviewWorkflow
@@ -612,6 +629,153 @@ public final class MediaReviewStore {
         }
     }
 
+    public func loadHistoricalReview() async {
+        guard workspace != nil else { return }
+        await perform {
+            historicalIndex = try await workflow.historicalIndexStatus()
+            learnedPreferences = try await workflow.learnedPreferenceState()
+            if historicalIndex?.availability == .ready {
+                historicalSearchPage = try await workflow.searchMeetingHistory(
+                    try historicalQuery()
+                )
+            }
+        }
+    }
+
+    public func rebuildHistoricalIndex() async {
+        guard workspace != nil else { return }
+        await perform {
+            historicalIndexJob = try await workflow.rebuildHistoricalIndex()
+            if let historicalIndexJob {
+                beginHistoricalIndexPolling(jobID: historicalIndexJob.jobID)
+            }
+        }
+    }
+
+    public func searchMeetingHistory() async {
+        await perform {
+            historicalSearchPage = try await workflow.searchMeetingHistory(
+                try historicalQuery()
+            )
+            historicalComparison = nil
+        }
+    }
+
+    public func compareSelectedHistoricalPositions() async {
+        guard let results = historicalSearchPage?.results,
+              let currentID = selectedCurrentHistoryRevisionID,
+              let priorID = selectedPriorHistoryRevisionID,
+              currentID != priorID,
+              let current = results.first(where: {
+                  $0.position.revision.revisionID == currentID
+              }),
+              let prior = results.first(where: {
+                  $0.position.revision.revisionID == priorID
+              })
+        else {
+            safeErrorMessage = "Select two different evidence-linked history results."
+            return
+        }
+        await perform {
+            historicalComparison = try await workflow.compareHistoricalPositions(
+                current: current,
+                historical: prior
+            )
+        }
+    }
+
+    public func confirmHistoricalChange() async {
+        guard let comparison = historicalComparison,
+              comparison.differenceState == .possibleDifference
+        else {
+            safeErrorMessage = "Only a possible evidence-linked difference can be confirmed."
+            return
+        }
+        await perform {
+            historicalComparison = try await workflow.confirmHistoricalChange(
+                candidateRevisionID: comparison.revision.revisionID
+            )
+        }
+    }
+
+    public func editLearnedPreference(_ record: LearnedPreferenceRecord) {
+        editingLearnedPreferenceID = record.preferenceID
+        editingLearnedPreferenceVersion = record.version
+        learnedPreferenceKind = record.kind
+        learnedPreferenceValue = editablePreferenceValue(record.value)
+    }
+
+    public func saveLearnedPreference() async {
+        do {
+            let value = try parsedPreferenceValue()
+            let preferenceID = editingLearnedPreferenceID ?? LearnedPreferenceID(UUID())
+            await perform {
+                _ = try await workflow.saveLearnedPreference(
+                    preferenceID: preferenceID,
+                    value: value,
+                    enabled: true,
+                    sourceAction: "explicit-history-preferences-form",
+                    expectedVersion: editingLearnedPreferenceVersion
+                )
+                learnedPreferences = try await workflow.learnedPreferenceState()
+                clearLearnedPreferenceEditor()
+            }
+        } catch {
+            safeErrorMessage = "Enter a valid value for the selected learned-preference type."
+        }
+    }
+
+    public func toggleLearnedPreference(_ record: LearnedPreferenceRecord) async {
+        await perform {
+            _ = try await workflow.setLearnedPreferenceEnabled(
+                preferenceID: record.preferenceID,
+                enabled: !record.enabled,
+                sourceAction: "explicit-preference-toggle",
+                expectedVersion: record.version
+            )
+            learnedPreferences = try await workflow.learnedPreferenceState()
+        }
+    }
+
+    public func removeLearnedPreference(_ record: LearnedPreferenceRecord) async {
+        await perform {
+            try await workflow.removeLearnedPreference(
+                preferenceID: record.preferenceID,
+                sourceAction: "explicit-preference-remove",
+                expectedVersion: record.version
+            )
+            learnedPreferences = try await workflow.learnedPreferenceState()
+            if editingLearnedPreferenceID == record.preferenceID {
+                clearLearnedPreferenceEditor()
+            }
+        }
+    }
+
+    public func setLearnedPreferencesGloballyEnabled(_ enabled: Bool) async {
+        guard let state = learnedPreferences else { return }
+        await perform {
+            learnedPreferences = try await workflow.setLearnedPreferencesGloballyEnabled(
+                enabled,
+                sourceAction: "explicit-preference-global-toggle",
+                expectedVersion: state.settingsVersion
+            )
+        }
+    }
+
+    public func resetLearnedPreferences(confirmedByVisibleDialog: Bool) async {
+        guard confirmedByVisibleDialog, let state = learnedPreferences else {
+            safeErrorMessage = "Reset All requires visible confirmation."
+            return
+        }
+        await perform {
+            learnedPreferences = try await workflow.resetLearnedPreferences(
+                sourceAction: "explicit-preference-reset-all",
+                expectedSettingsVersion: state.settingsVersion
+            )
+            clearLearnedPreferenceEditor()
+        }
+    }
+
     public func restoreTrashItem(_ storageObjectID: StorageObjectID) async {
         await perform {
             storageReport = try await workflow.restoreTrashItem(
@@ -674,6 +838,11 @@ public final class MediaReviewStore {
         briefingRouteReview = nil
         briefingReview = nil
         lastBriefingExport = nil
+        historicalIndex = nil
+        historicalIndexJob = nil
+        historicalSearchPage = nil
+        historicalComparison = nil
+        learnedPreferences = nil
         storageReport = nil
         recordingSetup = nil
         recordingSession = nil
@@ -685,6 +854,15 @@ public final class MediaReviewStore {
         reviewedUNProductionDate = ""
         reviewedUNLanguageAvailability = ""
         manualCoverageConfirmed = false
+        historyActorOrCountry = ""
+        historyTopic = ""
+        historyBody = ""
+        historyMeetingType = ""
+        historyStartDate = ""
+        historyEndDate = ""
+        selectedCurrentHistoryRevisionID = nil
+        selectedPriorHistoryRevisionID = nil
+        clearLearnedPreferenceEditor()
         selectedTrack = nil
         safeErrorMessage = nil
     }
@@ -798,6 +976,122 @@ public final class MediaReviewStore {
                 try? await Task.sleep(for: .milliseconds(400))
             }
         }
+    }
+
+    private func beginHistoricalIndexPolling(jobID: JobID) {
+        pollingTask?.cancel()
+        pollingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                do {
+                    let current = try await workflow.jobReview(jobID: jobID)
+                    historicalIndexJob = current
+                    if current.state.isTerminal {
+                        historicalIndex = try await workflow.historicalIndexStatus()
+                        if current.state == .succeeded {
+                            historicalSearchPage = try await workflow.searchMeetingHistory(
+                                try historicalQuery()
+                            )
+                        }
+                        return
+                    }
+                } catch {
+                    safeErrorMessage = "Meeting History index status is temporarily unavailable."
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(400))
+            }
+        }
+    }
+
+    private func historicalQuery() throws -> HistoricalSearchQuery {
+        try HistoricalSearchQuery(
+            actorOrCountry: optionalText(historyActorOrCountry),
+            topic: optionalText(historyTopic),
+            meetingBody: optionalText(historyBody),
+            meetingType: optionalText(historyMeetingType),
+            startDate: try optionalDate(historyStartDate),
+            endDate: try optionalDate(historyEndDate),
+            reviewStatus: .confirmed,
+            maximumClassification: .restricted,
+            pageSize: 100
+        )
+    }
+
+    private func optionalText(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func optionalDate(_ value: String) throws -> CalendarDate? {
+        guard let text = optionalText(value) else { return nil }
+        let components = text.split(separator: "-", omittingEmptySubsequences: false)
+        guard components.count == 3,
+              let year = UInt16(components[0]),
+              let month = UInt8(components[1]),
+              let day = UInt8(components[2])
+        else { throw HistoricalReviewError.invalidQuery("Dates must use YYYY-MM-DD.") }
+        return try CalendarDate(year: year, month: month, day: day)
+    }
+
+    private func parsedPreferenceValue() throws -> LearnedPreferenceValue {
+        let text = learnedPreferenceValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let commaValues = text.split(separator: ",").map {
+            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+        switch learnedPreferenceKind {
+        case .actorCountryOrder:
+            return .actorCountryOrder(commaValues)
+        case .briefingLength:
+            guard let value = UInt32(text) else {
+                throw HistoricalReviewError.invalidPreference("A numeric word limit is required.")
+            }
+            return .briefingLength(value)
+        case .sectionOrder:
+            let sections = commaValues.map(BriefingSectionType.init(encodedValue:))
+            guard sections.allSatisfy(\.isKnown) else {
+                throw HistoricalReviewError.invalidPreference("A section type is unsupported.")
+            }
+            return .sectionOrder(sections)
+        case .quotationPolicy:
+            guard let value = LearnedQuotationPolicy(rawValue: text) else {
+                throw HistoricalReviewError.invalidPreference("A quotation policy is unsupported.")
+            }
+            return .quotationPolicy(value)
+        case .grouping:
+            guard let value = LearnedGrouping(rawValue: text) else {
+                throw HistoricalReviewError.invalidPreference("A grouping is unsupported.")
+            }
+            return .grouping(value)
+        case .terminology:
+            return .terminology(try commaValues.map { pair in
+                let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else {
+                    throw HistoricalReviewError.invalidPreference("Terminology uses source=display.")
+                }
+                return try TerminologyPreference(sourceTerm: parts[0], displayTerm: parts[1])
+            })
+        case .frequentTemplates:
+            return .frequentTemplates(try commaValues.map(BriefingTemplateID.init(validating:)))
+        }
+    }
+
+    private func editablePreferenceValue(_ value: LearnedPreferenceValue) -> String {
+        switch value {
+        case let .actorCountryOrder(values): values.joined(separator: ", ")
+        case let .briefingLength(value): String(value)
+        case let .sectionOrder(values): values.map(\.encodedValue).joined(separator: ", ")
+        case let .quotationPolicy(value): value.rawValue
+        case let .grouping(value): value.rawValue
+        case let .terminology(values): values.map { "\($0.sourceTerm)=\($0.displayTerm)" }.joined(separator: ", ")
+        case let .frequentTemplates(values): values.map(\.canonicalString).joined(separator: ", ")
+        }
+    }
+
+    private func clearLearnedPreferenceEditor() {
+        editingLearnedPreferenceID = nil
+        editingLearnedPreferenceVersion = nil
+        learnedPreferenceValue = ""
     }
 
     private static func cleanClaims(_ values: [String]) -> [String] {

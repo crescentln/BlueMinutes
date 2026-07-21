@@ -5,7 +5,7 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 enum SQLiteSchema {
-    static let currentVersion: UInt32 = 9
+    static let currentVersion: UInt32 = 10
     static let initialMigrationIdentifier = "001_initial_persistence"
     static let taskRuntimeMigrationIdentifier = "002_task_runtime"
     static let transcriptCoverageMigrationIdentifier = "003_transcript_coverage"
@@ -15,6 +15,7 @@ enum SQLiteSchema {
     static let recordingCaptureMigrationIdentifier = "007_recording_capture_foundation"
     static let automationMigrationIdentifier = "008_automation_command_audit_settings"
     static let mcpAuditOriginMigrationIdentifier = "009_mcp_audit_origin"
+    static let historicalReviewMigrationIdentifier = "010_historical_review_preferences"
     static let maximumSemanticPayloadBytes = 16 * 1_024 * 1_024
     static let maximumJobPayloadBytes = 1 * 1_024 * 1_024
 
@@ -2386,6 +2387,281 @@ enum SQLiteSchema {
     BEGIN SELECT RAISE(ABORT, 'automation command records are immutable'); END;
     """
 
+    /// Schema v10 preserves all accepted v9 payload bytes while adding the
+    /// HistoricalComparison.v1 vocabulary, disposable generation-based search
+    /// projections, and user-visible preference state whose audit log contains
+    /// digests rather than recoverable preference values.
+    static let historicalReviewSchemaSQL = """
+    DROP TRIGGER semantic_revisions_no_update;
+    DROP TRIGGER semantic_revisions_no_delete;
+
+    CREATE TABLE semantic_revisions_v10 (
+        object_type TEXT NOT NULL,
+        logical_id TEXT NOT NULL CHECK (
+            length(logical_id) = 36 AND lower(logical_id) = logical_id
+        ),
+        revision_id TEXT NOT NULL CHECK (
+            length(revision_id) = 36 AND lower(revision_id) = revision_id
+        ),
+        schema_major INTEGER NOT NULL CHECK (schema_major > 0 AND schema_major <= 65535),
+        schema_minor INTEGER NOT NULL CHECK (schema_minor >= 0 AND schema_minor <= 65535),
+        lifecycle_status TEXT NOT NULL CHECK (lifecycle_status IN ('draft', 'published')),
+        validation_state TEXT NOT NULL CHECK (
+            validation_state IN ('not_validated', 'valid', 'invalid', 'needs_review')
+        ),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        published_at_ms INTEGER CHECK (published_at_ms >= created_at_ms),
+        supersedes_revision_id TEXT,
+        data_classification TEXT NOT NULL CHECK (
+            data_classification IN ('public', 'internal', 'sensitive', 'restricted')
+        ),
+        semantic_hash_algorithm TEXT,
+        semantic_hash_hex TEXT,
+        canonical_payload BLOB NOT NULL,
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size > 0 AND payload_byte_size <= 16777216
+        ),
+        PRIMARY KEY (object_type, logical_id, revision_id),
+        UNIQUE (revision_id),
+        FOREIGN KEY (object_type, logical_id, supersedes_revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id),
+        CHECK (
+            (semantic_hash_algorithm IS NULL AND semantic_hash_hex IS NULL)
+            OR
+            (semantic_hash_algorithm = 'sha256'
+                AND length(semantic_hash_hex) = 64
+                AND lower(semantic_hash_hex) = semantic_hash_hex)
+        ),
+        CHECK (
+            lifecycle_status != 'published'
+            OR (validation_state = 'valid'
+                AND published_at_ms IS NOT NULL
+                AND semantic_hash_hex IS NOT NULL)
+        ),
+        CHECK (object_type IN (
+            'source_asset',
+            'evidence_ref',
+            'meeting_profile',
+            'transcript_segment',
+            'translation_segment',
+            'actor',
+            'speaking_capacity',
+            'speaker_assignment',
+            'participant',
+            'organization',
+            'issue',
+            'position',
+            'commitment',
+            'decision',
+            'intervention_card',
+            'delegation_position_card',
+            'meeting_template',
+            'issue_position_graph',
+            'briefing_section',
+            'validation_report',
+            'final_briefing',
+            'sensitivity_label',
+            'access_policy',
+            'historical_comparison'
+        ))
+    );
+
+    INSERT INTO semantic_revisions_v10(
+        object_type, logical_id, revision_id, schema_major, schema_minor,
+        lifecycle_status, validation_state, created_at_ms, published_at_ms,
+        supersedes_revision_id, data_classification, semantic_hash_algorithm,
+        semantic_hash_hex, canonical_payload, payload_sha256, payload_byte_size
+    )
+    SELECT
+        object_type, logical_id, revision_id, schema_major, schema_minor,
+        lifecycle_status, validation_state, created_at_ms, published_at_ms,
+        supersedes_revision_id, data_classification, semantic_hash_algorithm,
+        semantic_hash_hex, canonical_payload, payload_sha256, payload_byte_size
+    FROM semantic_revisions;
+
+    DROP TABLE semantic_revisions;
+    ALTER TABLE semantic_revisions_v10 RENAME TO semantic_revisions;
+
+    CREATE TRIGGER semantic_revisions_no_update
+    BEFORE UPDATE ON semantic_revisions
+    BEGIN SELECT RAISE(ABORT, 'semantic revisions are immutable'); END;
+    CREATE TRIGGER semantic_revisions_no_delete
+    BEFORE DELETE ON semantic_revisions
+    BEGIN SELECT RAISE(ABORT, 'semantic revisions are immutable'); END;
+
+    CREATE TABLE historical_index_state (
+        singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        is_current INTEGER NOT NULL CHECK (is_current IN (0, 1)),
+        generation INTEGER NOT NULL CHECK (generation >= 0),
+        normalizer_version INTEGER NOT NULL CHECK (normalizer_version > 0),
+        rebuilt_at_ms INTEGER CHECK (rebuilt_at_ms >= 0),
+        source_fingerprint_sha256 TEXT CHECK (
+            source_fingerprint_sha256 IS NULL OR (
+                length(source_fingerprint_sha256) = 64
+                AND lower(source_fingerprint_sha256) = source_fingerprint_sha256
+            )
+        ),
+        row_count INTEGER NOT NULL CHECK (row_count >= 0)
+    );
+    INSERT INTO historical_index_state(
+        singleton, enabled, is_current, generation, normalizer_version,
+        rebuilt_at_ms, source_fingerprint_sha256, row_count
+    ) VALUES (1, 1, 0, 0, 1, NULL, NULL, 0);
+
+    CREATE TABLE historical_position_index (
+        generation INTEGER NOT NULL CHECK (generation > 0),
+        position_logical_id TEXT NOT NULL,
+        position_revision_id TEXT NOT NULL,
+        meeting_logical_id TEXT NOT NULL,
+        meeting_revision_id TEXT NOT NULL,
+        actor_logical_id TEXT NOT NULL,
+        actor_revision_id TEXT NOT NULL,
+        issue_logical_id TEXT NOT NULL,
+        issue_revision_id TEXT NOT NULL,
+        sensitivity_label_logical_id TEXT NOT NULL,
+        sensitivity_label_revision_id TEXT NOT NULL,
+        access_policy_logical_id TEXT NOT NULL,
+        access_policy_revision_id TEXT NOT NULL,
+        effective_date_key TEXT,
+        media_start_ms INTEGER,
+        actor_normalized TEXT NOT NULL,
+        country_normalized TEXT,
+        topic_normalized TEXT NOT NULL,
+        organization_normalized TEXT,
+        body_normalized TEXT,
+        meeting_type TEXT,
+        review_status TEXT NOT NULL CHECK (
+            review_status IN ('unreviewed', 'needs_review', 'confirmed', 'rejected')
+        ),
+        data_classification TEXT NOT NULL CHECK (
+            data_classification IN ('public', 'internal', 'sensitive', 'restricted')
+        ),
+        evidence_count INTEGER NOT NULL CHECK (evidence_count > 0),
+        PRIMARY KEY (generation, position_revision_id),
+        CHECK (effective_date_key IS NULL OR length(effective_date_key) = 10)
+    );
+    CREATE INDEX historical_position_filter
+        ON historical_position_index(
+            generation, review_status, effective_date_key DESC,
+            media_start_ms DESC, position_revision_id DESC
+        );
+    CREATE INDEX historical_position_actor
+        ON historical_position_index(generation, actor_normalized, country_normalized);
+    CREATE INDEX historical_position_topic
+        ON historical_position_index(generation, topic_normalized);
+    CREATE INDEX historical_position_body
+        ON historical_position_index(generation, body_normalized, meeting_type);
+
+    CREATE TABLE historical_topic_terms (
+        generation INTEGER NOT NULL,
+        position_revision_id TEXT NOT NULL,
+        term_kind TEXT NOT NULL CHECK (term_kind IN ('topic', 'issue')),
+        normalized_term TEXT NOT NULL,
+        PRIMARY KEY (generation, position_revision_id, term_kind, normalized_term),
+        FOREIGN KEY (generation, position_revision_id)
+            REFERENCES historical_position_index(generation, position_revision_id)
+            ON DELETE CASCADE
+    );
+    CREATE INDEX historical_topic_terms_lookup
+        ON historical_topic_terms(generation, term_kind, normalized_term);
+
+    CREATE TABLE historical_evidence_index (
+        generation INTEGER NOT NULL,
+        position_revision_id TEXT NOT NULL,
+        evidence_logical_id TEXT NOT NULL,
+        evidence_revision_id TEXT NOT NULL,
+        PRIMARY KEY (generation, position_revision_id, evidence_revision_id),
+        FOREIGN KEY (generation, position_revision_id)
+            REFERENCES historical_position_index(generation, position_revision_id)
+            ON DELETE CASCADE
+    );
+
+    CREATE TABLE learned_preference_settings (
+        singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+        globally_enabled INTEGER NOT NULL CHECK (globally_enabled IN (0, 1)),
+        version INTEGER NOT NULL CHECK (version > 0),
+        updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= 0)
+    );
+    INSERT INTO learned_preference_settings(
+        singleton, globally_enabled, version, updated_at_ms
+    ) VALUES (1, 1, 1, 0);
+
+    CREATE TABLE learned_preferences (
+        preference_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(preference_id) = 36 AND lower(preference_id) = preference_id
+        ),
+        kind TEXT NOT NULL CHECK (kind IN (
+            'actor_country_order', 'briefing_length', 'section_order',
+            'quotation_policy', 'grouping', 'terminology', 'frequent_templates'
+        )),
+        version INTEGER NOT NULL CHECK (version > 0),
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        source_action TEXT NOT NULL CHECK (length(source_action) BETWEEN 1 AND 128),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= created_at_ms),
+        canonical_value BLOB NOT NULL CHECK (length(canonical_value) BETWEEN 1 AND 1048576),
+        value_sha256 TEXT NOT NULL CHECK (
+            length(value_sha256) = 64 AND lower(value_sha256) = value_sha256
+        )
+    );
+    CREATE INDEX learned_preferences_kind ON learned_preferences(kind, preference_id);
+
+    CREATE TABLE learned_preference_events (
+        event_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(event_id) = 36 AND lower(event_id) = event_id
+        ),
+        action TEXT NOT NULL CHECK (action IN (
+            'created', 'edited', 'enabled', 'disabled', 'removed', 'reset_all',
+            'globally_enabled', 'globally_disabled'
+        )),
+        preference_id TEXT,
+        kind TEXT,
+        prior_value_sha256 TEXT,
+        replacement_value_sha256 TEXT,
+        source_action TEXT NOT NULL CHECK (length(source_action) BETWEEN 1 AND 128),
+        recorded_at_ms INTEGER NOT NULL CHECK (recorded_at_ms >= 0),
+        CHECK (preference_id IS NULL OR length(preference_id) = 36),
+        CHECK (kind IS NULL OR kind IN (
+            'actor_country_order', 'briefing_length', 'section_order',
+            'quotation_policy', 'grouping', 'terminology', 'frequent_templates'
+        )),
+        CHECK (prior_value_sha256 IS NULL OR length(prior_value_sha256) = 64),
+        CHECK (replacement_value_sha256 IS NULL OR length(replacement_value_sha256) = 64)
+    );
+    CREATE INDEX learned_preference_events_activity
+        ON learned_preference_events(recorded_at_ms DESC, event_id DESC);
+    CREATE TRIGGER learned_preference_events_no_update
+    BEFORE UPDATE ON learned_preference_events
+    BEGIN SELECT RAISE(ABORT, 'learned preference events are immutable'); END;
+    CREATE TRIGGER learned_preference_events_no_delete
+    BEFORE DELETE ON learned_preference_events
+    BEGIN SELECT RAISE(ABORT, 'learned preference events are immutable'); END;
+
+    CREATE TRIGGER historical_index_dirty_after_semantic_insert
+    AFTER INSERT ON semantic_revisions
+    WHEN NEW.object_type IN (
+        'meeting_profile', 'evidence_ref', 'actor', 'issue', 'position',
+        'meeting_template', 'sensitivity_label', 'access_policy'
+    )
+    BEGIN UPDATE historical_index_state SET is_current = 0 WHERE singleton = 1; END;
+    CREATE TRIGGER historical_index_dirty_after_pointer_insert
+    AFTER INSERT ON active_published_revisions
+    BEGIN UPDATE historical_index_state SET is_current = 0 WHERE singleton = 1; END;
+    CREATE TRIGGER historical_index_dirty_after_pointer_update
+    AFTER UPDATE ON active_published_revisions
+    BEGIN UPDATE historical_index_state SET is_current = 0 WHERE singleton = 1; END;
+    CREATE TRIGGER historical_index_dirty_after_pointer_delete
+    AFTER DELETE ON active_published_revisions
+    BEGIN UPDATE historical_index_state SET is_current = 0 WHERE singleton = 1; END;
+    CREATE TRIGGER historical_index_dirty_after_stale_insert
+    AFTER INSERT ON stale_events
+    BEGIN UPDATE historical_index_state SET is_current = 0 WHERE singleton = 1; END;
+    """
+
     static var taskRuntimeChecksum: String {
         SHA256.hash(data: Data(taskRuntimeSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
@@ -2430,6 +2706,12 @@ enum SQLiteSchema {
 
     static var mcpAuditOriginChecksum: String {
         SHA256.hash(data: Data(mcpAuditOriginSchemaSQL.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static var historicalReviewChecksum: String {
+        SHA256.hash(data: Data(historicalReviewSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
     }
@@ -2790,6 +3072,33 @@ enum SQLiteDatabaseBootstrap {
                 ]
             )
         }
+        migrator.registerMigration(SQLiteSchema.historicalReviewMigrationIdentifier) { db in
+            try db.execute(sql: SQLiteSchema.historicalReviewSchemaSQL)
+            try db.execute(
+                sql: """
+                INSERT INTO schema_migrations(
+                    identifier, ordinal, checksum_sha256, applied_at_ms
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    SQLiteSchema.historicalReviewMigrationIdentifier,
+                    10,
+                    SQLiteSchema.historicalReviewChecksum,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+            try db.execute(
+                sql: """
+                UPDATE workspace_metadata
+                SET database_schema_version = ?, updated_at_ms = ?
+                WHERE singleton = 1
+                """,
+                arguments: [
+                    10,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+        }
         for migration in additionalMigrations {
             migrator.registerMigration(migration.identifier, migrate: migration.apply)
         }
@@ -2951,6 +3260,16 @@ enum SQLiteDatabaseBootstrap {
             guard mcpAuditOriginChecksum == SQLiteSchema.mcpAuditOriginChecksum else {
                 throw PersistenceContractError.migrationFailed(
                     "The MCP audit-origin migration checksum does not match the accepted schema."
+                )
+            }
+            let historicalReviewChecksum = try String.fetchOne(
+                db,
+                sql: "SELECT checksum_sha256 FROM schema_migrations WHERE identifier = ?",
+                arguments: [SQLiteSchema.historicalReviewMigrationIdentifier]
+            )
+            guard historicalReviewChecksum == SQLiteSchema.historicalReviewChecksum else {
+                throw PersistenceContractError.migrationFailed(
+                    "The historical-review migration checksum does not match the accepted schema."
                 )
             }
         }

@@ -143,7 +143,8 @@ let package = Package(
         ),
         .testTarget(
             name: "MeetingBuddyDomainTests",
-            dependencies: ["MeetingBuddyDomain"]
+            dependencies: ["MeetingBuddyDomain"],
+            resources: [.process("Fixtures")]
         ),
         .testTarget(
             name: "MeetingBuddyPersistenceTests",

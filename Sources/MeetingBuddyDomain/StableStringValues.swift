@@ -44,6 +44,7 @@ public enum SemanticObjectType: StableStringValue {
     case userConfirmedNote
     case sensitivityLabel
     case accessPolicy
+    case historicalComparison
     case unrecognized(String)
 
     public init(encodedValue: String) {
@@ -72,6 +73,7 @@ public enum SemanticObjectType: StableStringValue {
         case "user_confirmed_note": self = .userConfirmedNote
         case "sensitivity_label": self = .sensitivityLabel
         case "access_policy": self = .accessPolicy
+        case "historical_comparison": self = .historicalComparison
         default: self = .unrecognized(encodedValue)
         }
     }
@@ -102,6 +104,7 @@ public enum SemanticObjectType: StableStringValue {
         case .userConfirmedNote: "user_confirmed_note"
         case .sensitivityLabel: "sensitivity_label"
         case .accessPolicy: "access_policy"
+        case .historicalComparison: "historical_comparison"
         case let .unrecognized(value): value
         }
     }

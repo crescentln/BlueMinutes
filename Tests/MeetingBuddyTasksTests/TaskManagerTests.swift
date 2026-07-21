@@ -1,6 +1,7 @@
 import Foundation
 import MeetingBuddyApplication
 import MeetingBuddyDomain
+import MeetingBuddyPersistence
 import MeetingBuddyTasks
 import Testing
 
@@ -39,7 +40,7 @@ struct TaskManagerTests {
         let executor = ClosureTaskExecutor(jobType: jobType) { _ in
             await probe.enter()
             do {
-                try await Task.sleep(nanoseconds: 30_000_000)
+                try await Task.sleep(nanoseconds: 1_000_000_000)
                 await probe.leave()
                 let usage = try ProviderUsageMetadata(
                     provider: ProviderMetadata(
@@ -572,6 +573,46 @@ struct TaskManagerTests {
         #expect(
             try await workspace.temporaryStorage.usage(of: retryableLease).byteSize > 0
         )
+    }
+
+    @Test
+    func historicalIndexRebuildRunsOnlyThroughTheLocalTaskManagerRoute() async throws {
+        let workspace = try TaskTestWorkspace(suffix: "historical-index")
+        defer { workspace.cleanup() }
+        let manager = try LocalTaskManager(
+            repository: workspace.repository,
+            temporaryStorage: workspace.temporaryStorage,
+            logStore: workspace.logStore,
+            clock: SteppingTaskClock(start: 1_800_000_800_000),
+            maximumConcurrentJobs: 1,
+            executors: [HistoricalIndexRebuildJobExecutor(repository: workspace.store)]
+        )
+        let plan = try HistoricalIndexRebuildJobPlan(
+            requestedAt: testInstant(1_800_000_800_100)
+        )
+        let request = try HistoricalIndexRebuildJobFactory().request(
+            plan: plan,
+            jobID: testJobID(810),
+            requestedBy: JobRequester("task010-test")
+        )
+        #expect(request.jobType == HistoricalReviewJobTypes.indexRebuild)
+        #expect(request.privacyRoute == .localOnly)
+        #expect(request.dataClassification == .restricted)
+        #expect(request.inputRevisionIDs.isEmpty)
+        #expect(request.meetingID == nil)
+
+        _ = try await manager.enqueue(request)
+        let succeeded = try await waitForJob(
+            manager,
+            jobID: request.jobID,
+            state: .succeeded
+        )
+        #expect(succeeded.progress.completedUnitCount == 1)
+        #expect(succeeded.progress.currentNode == "historical-index-ready")
+        let index = try workspace.store.historicalIndexStatus()
+        #expect(index.availability == .ready)
+        #expect(index.generation == 1)
+        #expect(index.indexedPositionCount == 0)
     }
 }
 

@@ -173,6 +173,11 @@ enum SQLiteReferenceCodec {
                 logicalID: AccessPolicyID(validating: logicalIDValue),
                 revisionID: revisionID
             )
+        case .historicalComparison:
+            return try SemanticRevisionReference(
+                logicalID: HistoricalComparisonID(validating: logicalIDValue),
+                revisionID: revisionID
+            )
         case .unrecognized:
             throw PersistenceContractError.unsupportedStoredObjectType(objectTypeValue)
         }

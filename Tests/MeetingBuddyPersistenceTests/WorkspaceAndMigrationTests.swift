@@ -24,7 +24,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.hardeningMigrationIdentifier,
                 SQLiteSchema.recordingCaptureMigrationIdentifier,
                 SQLiteSchema.automationMigrationIdentifier,
-                SQLiteSchema.mcpAuditOriginMigrationIdentifier
+                SQLiteSchema.mcpAuditOriginMigrationIdentifier,
+                SQLiteSchema.historicalReviewMigrationIdentifier
             ]
         )
         #expect(store.migrationOutcome.rollbackAnchor == nil)
@@ -104,7 +105,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.hardeningMigrationIdentifier,
                 SQLiteSchema.recordingCaptureMigrationIdentifier,
                 SQLiteSchema.automationMigrationIdentifier,
-                SQLiteSchema.mcpAuditOriginMigrationIdentifier
+                SQLiteSchema.mcpAuditOriginMigrationIdentifier,
+                SQLiteSchema.historicalReviewMigrationIdentifier
             ]
         )
         #expect(reopened.migrationOutcome.rollbackAnchor == nil)
@@ -133,7 +135,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.hardeningMigrationIdentifier,
                 SQLiteSchema.recordingCaptureMigrationIdentifier,
                 SQLiteSchema.automationMigrationIdentifier,
-                SQLiteSchema.mcpAuditOriginMigrationIdentifier
+                SQLiteSchema.mcpAuditOriginMigrationIdentifier,
+                SQLiteSchema.historicalReviewMigrationIdentifier
             ]
         )
         try migrated.close()
@@ -207,7 +210,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.hardeningMigrationIdentifier,
                 SQLiteSchema.recordingCaptureMigrationIdentifier,
                 SQLiteSchema.automationMigrationIdentifier,
-                SQLiteSchema.mcpAuditOriginMigrationIdentifier
+                SQLiteSchema.mcpAuditOriginMigrationIdentifier,
+                SQLiteSchema.historicalReviewMigrationIdentifier
             ]
         )
         let rollbackAnchor = try #require(migrated.migrationOutcome.rollbackAnchor)
@@ -682,7 +686,7 @@ struct WorkspaceAndMigrationTests {
             workspace: workspace.descriptor,
             migrationTimestamp: PersistenceFixtures.publishedAt
         )
-        #expect(migrated.migrationOutcome.schemaVersion == 9)
+        #expect(migrated.migrationOutcome.schemaVersion == SQLiteSchema.currentVersion)
         let anchor = try #require(migrated.migrationOutcome.rollbackAnchor)
         #expect(anchor.sourceSchemaVersion == 6)
         #expect(
@@ -793,7 +797,7 @@ struct WorkspaceAndMigrationTests {
             workspace: workspace.descriptor,
             migrationTimestamp: PersistenceFixtures.publishedAt
         )
-        #expect(migrated.migrationOutcome.schemaVersion == 9)
+        #expect(migrated.migrationOutcome.schemaVersion == SQLiteSchema.currentVersion)
         let anchor = try #require(migrated.migrationOutcome.rollbackAnchor)
         #expect(anchor.sourceSchemaVersion == 7)
         let currentFacts = try migrated.databasePool.read { db in
@@ -980,7 +984,129 @@ struct WorkspaceAndMigrationTests {
     }
 
     @Test
-    func failedPostMCPMigrationKeepsValidV9AndExactVersionEightBackup() throws {
+    func migratesAcceptedVersionNineWithoutChangingSemanticBytesOrFabricatingHistory() throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "accepted-v9")
+        defer { workspace.cleanup() }
+        let queue = try DatabaseQueue(path: workspace.descriptor.layout.databaseFile.path)
+        let migrator = SQLiteDatabaseBootstrap.makeMigrator(
+            workspaceID: workspace.descriptor.manifest.workspaceID,
+            migrationTimestamp: PersistenceFixtures.createdAt,
+            additionalMigrations: []
+        )
+        try migrator.migrate(queue, upTo: SQLiteSchema.mcpAuditOriginMigrationIdentifier)
+        let meeting = try PersistenceFixtures.meetingProfile()
+        let payload = try CanonicalJSON.encodeValidated(meeting)
+        let digest = SQLitePayloadCodec.sha256(payload)
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO semantic_revisions(
+                    object_type, logical_id, revision_id, schema_major, schema_minor,
+                    lifecycle_status, validation_state, created_at_ms, published_at_ms,
+                    supersedes_revision_id, data_classification, semantic_hash_algorithm,
+                    semantic_hash_hex, canonical_payload, payload_sha256, payload_byte_size
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, ?, ?, ?)
+                """,
+                arguments: [
+                    meeting.revision.objectType.encodedValue,
+                    meeting.meetingID.canonicalString,
+                    meeting.revision.revisionID.canonicalString,
+                    Int64(meeting.revision.schemaVersion.major),
+                    Int64(meeting.revision.schemaVersion.minor),
+                    meeting.revision.lifecycleStatus.encodedValue,
+                    meeting.revision.validationState.encodedValue,
+                    meeting.revision.createdAt.millisecondsSinceUnixEpoch,
+                    meeting.revision.dataClassification.encodedValue,
+                    payload,
+                    digest,
+                    payload.count
+                ]
+            )
+            try db.execute(
+                sql: """
+                INSERT INTO revision_current_state(
+                    object_type, logical_id, revision_id, currency_state, last_stale_at_ms
+                ) VALUES ('meeting_profile', ?, ?, 'current', NULL)
+                """,
+                arguments: [
+                    meeting.meetingID.canonicalString,
+                    meeting.revision.revisionID.canonicalString
+                ]
+            )
+        }
+        try queue.close()
+
+        let migrated = try SQLitePersistenceStore(
+            workspace: workspace.descriptor,
+            migrationTimestamp: PersistenceFixtures.publishedAt
+        )
+        #expect(migrated.migrationOutcome.schemaVersion == 10)
+        let anchor = try #require(migrated.migrationOutcome.rollbackAnchor)
+        #expect(anchor.sourceSchemaVersion == 9)
+        let currentFacts = try migrated.databasePool.read { db in
+            (
+                payload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM semantic_revisions WHERE revision_id = ?",
+                    arguments: [meeting.revision.revisionID.canonicalString]
+                ),
+                digest: try String.fetchOne(
+                    db,
+                    sql: "SELECT payload_sha256 FROM semantic_revisions WHERE revision_id = ?",
+                    arguments: [meeting.revision.revisionID.canonicalString]
+                ),
+                comparisonRows: try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM semantic_revisions WHERE object_type = 'historical_comparison'"
+                ),
+                indexRows: try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM historical_position_index"),
+                preferenceRows: try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM learned_preferences"),
+                indexCurrent: try Int.fetchOne(
+                    db,
+                    sql: "SELECT is_current FROM historical_index_state WHERE singleton = 1"
+                ),
+                quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check"),
+                foreignKeyFailures: try Row.fetchAll(db, sql: "PRAGMA foreign_key_check").count
+            )
+        }
+        #expect(currentFacts.payload == payload)
+        #expect(currentFacts.digest == digest)
+        #expect(currentFacts.comparisonRows == 0)
+        #expect(currentFacts.indexRows == 0)
+        #expect(currentFacts.preferenceRows == 0)
+        #expect(currentFacts.indexCurrent == 0)
+        #expect(currentFacts.quickCheck == "ok")
+        #expect(currentFacts.foreignKeyFailures == 0)
+        try migrated.close()
+
+        let backupURL = workspace.root.appendingPathComponent(
+            anchor.artifact.relativePath.rawValue
+        )
+        let backup = try DatabaseQueue(path: backupURL.path)
+        let backupFacts = try backup.read { db in
+            (
+                version: try UInt32.fetchOne(
+                    db,
+                    sql: "SELECT database_schema_version FROM workspace_metadata WHERE singleton = 1"
+                ),
+                payload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM semantic_revisions WHERE revision_id = ?",
+                    arguments: [meeting.revision.revisionID.canonicalString]
+                ),
+                hasHistoricalIndex: try db.tableExists("historical_position_index"),
+                quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check")
+            )
+        }
+        #expect(backupFacts.version == 9)
+        #expect(backupFacts.payload == payload)
+        #expect(!backupFacts.hasHistoricalIndex)
+        #expect(backupFacts.quickCheck == "ok")
+        try backup.close()
+    }
+
+    @Test
+    func failedPostHistoricalMigrationKeepsValidV10AndExactVersionEightBackup() throws {
         let workspace = try DisposableMeetingBuddyWorkspace(suffix: "failed-v9")
         defer { workspace.cleanup() }
         let queue = try DatabaseQueue(path: workspace.descriptor.layout.databaseFile.path)
@@ -996,8 +1122,8 @@ struct WorkspaceAndMigrationTests {
         try insertVersionEightAutomationCanary(canary, in: queue)
         try queue.close()
 
-        let failing = SQLiteMigrationDefinition(identifier: "010_test_mcp_rollback") { db in
-            try db.execute(sql: "CREATE TABLE must_rollback_after_mcp(id INTEGER PRIMARY KEY)")
+        let failing = SQLiteMigrationDefinition(identifier: "011_test_historical_rollback") { db in
+            try db.execute(sql: "CREATE TABLE must_rollback_after_historical(id INTEGER PRIMARY KEY)")
             throw MigrationProbeError.intentional
         }
         var failureDescription = ""
@@ -1034,7 +1160,9 @@ struct WorkspaceAndMigrationTests {
                     sql: "SELECT canonical_payload FROM automation_command_result_events WHERE command_id = ?",
                     arguments: [canary.record.commandID.canonicalString]
                 ),
-                hasFailureTable: try db.tableExists("must_rollback_after_mcp"),
+                hasFailureTable: try db.tableExists("must_rollback_after_historical"),
+                hasHistoricalIndex: try db.tableExists("historical_position_index"),
+                hasLearnedPreferences: try db.tableExists("learned_preferences"),
                 quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check"),
                 foreignKeyFailures: try Row.fetchAll(
                     db,
@@ -1042,11 +1170,13 @@ struct WorkspaceAndMigrationTests {
                 ).count
             )
         }
-        #expect(restoredFacts.version == 9)
+        #expect(restoredFacts.version == 10)
         #expect(restoredFacts.tableSQL?.contains("'mcp'") == true)
         #expect(restoredFacts.commandPayload == canary.recordPayload)
         #expect(restoredFacts.resultPayload == canary.resultPayload)
         #expect(!restoredFacts.hasFailureTable)
+        #expect(restoredFacts.hasHistoricalIndex)
+        #expect(restoredFacts.hasLearnedPreferences)
         #expect(restoredFacts.quickCheck == "ok")
         #expect(restoredFacts.foreignKeyFailures == 0)
         try restored.close()

@@ -131,6 +131,9 @@ public enum SensitivityLabelIDTag: LogicalObjectIDScope {
 public enum AccessPolicyIDTag: LogicalObjectIDScope {
     public static var semanticObjectType: SemanticObjectType { .accessPolicy }
 }
+public enum HistoricalComparisonIDTag: LogicalObjectIDScope {
+    public static var semanticObjectType: SemanticObjectType { .historicalComparison }
+}
 public enum StorageObjectIDTag: Sendable {}
 public enum AgendaItemIDTag: Sendable {}
 public enum WorkspaceIDTag: Sendable {}
@@ -141,6 +144,8 @@ public enum BriefingCoverageLedgerIDTag: Sendable {}
 public enum BriefingItemIDTag: Sendable {}
 public enum ValidationFindingIDTag: Sendable {}
 public enum BriefingExportIDTag: Sendable {}
+public enum LearnedPreferenceIDTag: Sendable {}
+public enum LearnedPreferenceEventIDTag: Sendable {}
 
 public typealias LogicalObjectID = StableID<LogicalObjectIDTag>
 public typealias RevisionID = StableID<RevisionIDTag>
@@ -167,6 +172,7 @@ public typealias FinalBriefingID = StableID<FinalBriefingIDTag>
 public typealias UserConfirmedNoteID = StableID<UserConfirmedNoteIDTag>
 public typealias SensitivityLabelID = StableID<SensitivityLabelIDTag>
 public typealias AccessPolicyID = StableID<AccessPolicyIDTag>
+public typealias HistoricalComparisonID = StableID<HistoricalComparisonIDTag>
 public typealias StorageObjectID = StableID<StorageObjectIDTag>
 public typealias AgendaItemID = StableID<AgendaItemIDTag>
 public typealias BriefingTemplateID = StableID<BriefingTemplateIDTag>
@@ -178,6 +184,8 @@ public typealias BriefingCoverageLedgerID = StableID<BriefingCoverageLedgerIDTag
 public typealias BriefingItemID = StableID<BriefingItemIDTag>
 public typealias ValidationFindingID = StableID<ValidationFindingIDTag>
 public typealias BriefingExportID = StableID<BriefingExportIDTag>
+public typealias LearnedPreferenceID = StableID<LearnedPreferenceIDTag>
+public typealias LearnedPreferenceEventID = StableID<LearnedPreferenceEventIDTag>
 
 /// An exact semantic revision reference, never a bare logical identifier.
 public struct SemanticRevisionReference: Codable, Hashable, Sendable, Comparable, DomainValidatable {

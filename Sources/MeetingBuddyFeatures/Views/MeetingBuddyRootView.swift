@@ -44,6 +44,8 @@ public struct MeetingBuddyRootView: View {
                     Label("Briefing", systemImage: "doc.text.magnifyingglass")
                         .tag(MediaReviewSection.briefing)
                         .disabled(store.analysisReview == nil)
+                    Label("Meeting History", systemImage: "clock.arrow.circlepath")
+                        .tag(MediaReviewSection.history)
                     Label("Storage", systemImage: "externaldrive")
                         .tag(MediaReviewSection.storage)
                 }
@@ -86,6 +88,8 @@ public struct MeetingBuddyRootView: View {
                 case .briefing:
                     await store.loadBriefingReview()
                     await store.refreshBriefingRoute()
+                case .history:
+                    await store.loadHistoricalReview()
                 case .storage:
                     await store.loadStorageReport()
                 case .intake, .webMetadata, nil:
@@ -186,6 +190,8 @@ public struct MeetingBuddyRootView: View {
                 AnalysisReviewView(store: store)
             case .briefing:
                 BriefingReviewView(store: store)
+            case .history:
+                HistoricalReviewView(store: store)
             case .storage:
                 StorageDashboardView(store: store) { item in
                     pendingPermanentDeletion = item
@@ -217,6 +223,7 @@ public struct MeetingBuddyRootView: View {
         case .transcript: "Transcript Review"
         case .analysis: "Analysis Review"
         case .briefing: "Briefing"
+        case .history: "Meeting History"
         case .storage: "Storage"
         case .intake, nil: "Local Media Intake"
         }

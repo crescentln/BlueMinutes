@@ -26,6 +26,7 @@ enum AppWorkflowError: LocalizedError {
     case recordingUnavailable
     case recordingAuthorizationRequired
     case webMetadataUnavailable
+    case historicalReviewUnavailable
     case reviewFailed
 
     var errorDescription: String? {
@@ -66,6 +67,8 @@ enum AppWorkflowError: LocalizedError {
             "Recording requires a direct visible acknowledgement and explicit source selection."
         case .webMetadataUnavailable:
             "The official UN Web TV page metadata could not be read safely. Open the page and enter metadata manually."
+        case .historicalReviewUnavailable:
+            "Meeting History is unavailable until its local index and exact policy graph are current."
         case .reviewFailed:
             "The review change failed without replacing accepted content."
         }
@@ -144,7 +147,8 @@ private final class WorkspaceRuntime: @unchecked Sendable {
         var executors: [any TaskJobExecutor] = [
             intakeExecutor,
             canonicalExecutor,
-            recordingExecutor
+            recordingExecutor,
+            HistoricalIndexRebuildJobExecutor(repository: store)
         ]
         if #available(macOS 26.0, *) {
             let speech = AppleOnDeviceTranscriptionProvider()
@@ -973,6 +977,156 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         return try runtime.storageReporter.storageReport(
             calculatedAt: currentInstant(),
             maximumEntries: 100_000
+        )
+    }
+
+    func historicalIndexStatus() async throws -> HistoricalIndexStatus {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        return try runtime.store.historicalIndexStatus()
+    }
+
+    func rebuildHistoricalIndex() async throws -> MediaJobReview {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let plan = try HistoricalIndexRebuildJobPlan(requestedAt: currentInstant())
+        let record = try await runtime.manager.enqueue(
+            HistoricalIndexRebuildJobFactory().request(
+                plan: plan,
+                requestedBy: JobRequester("meetingbuddy-app")
+            )
+        )
+        return MediaJobReview(record: record)
+    }
+
+    func searchMeetingHistory(
+        _ query: HistoricalSearchQuery
+    ) async throws -> HistoricalSearchPage {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        do {
+            return try runtime.store.searchHistory(query)
+        } catch let error as HistoricalReviewError {
+            throw error
+        } catch {
+            throw AppWorkflowError.historicalReviewUnavailable
+        }
+    }
+
+    func compareHistoricalPositions(
+        current: HistoricalPositionResult,
+        historical: HistoricalPositionResult
+    ) async throws -> HistoricalComparisonV1 {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let evaluation = HistoricalComparisonEvaluator.evaluate(
+            current: current,
+            historical: historical
+        )
+        let candidate = try HistoricalComparisonFactory.candidate(
+            evaluation: evaluation,
+            createdAt: currentInstant()
+        )
+        try runtime.store.publishHistoricalComparison(
+            candidate,
+            expectedCurrentRevisionID: nil,
+            changedAt: candidate.revision.createdAt
+        )
+        return candidate
+    }
+
+    func confirmHistoricalChange(
+        candidateRevisionID: RevisionID
+    ) async throws -> HistoricalComparisonV1 {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        guard let candidate = try runtime.store.fetch(
+            HistoricalComparisonV1.self,
+            revisionID: candidateRevisionID
+        ) else { throw HistoricalReviewError.sourceUnavailable(candidateRevisionID) }
+        let confirmed = try HistoricalComparisonFactory.confirmedChange(
+            candidate: candidate,
+            confirmedAt: currentInstant()
+        )
+        try runtime.store.publishHistoricalComparison(
+            confirmed,
+            expectedCurrentRevisionID: candidate.revision.revisionID,
+            changedAt: confirmed.revision.createdAt
+        )
+        return confirmed
+    }
+
+    func learnedPreferenceState() async throws -> LearnedPreferenceState {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        return try runtime.store.learnedPreferenceState(maximumEvents: 100)
+    }
+
+    func saveLearnedPreference(
+        preferenceID: LearnedPreferenceID,
+        value: LearnedPreferenceValue,
+        enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64?
+    ) async throws -> LearnedPreferenceRecord {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        return try runtime.store.saveLearnedPreference(
+            preferenceID: preferenceID,
+            value: value,
+            enabled: enabled,
+            sourceAction: sourceAction,
+            expectedVersion: expectedVersion,
+            changedAt: currentInstant()
+        )
+    }
+
+    func setLearnedPreferenceEnabled(
+        preferenceID: LearnedPreferenceID,
+        enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64
+    ) async throws -> LearnedPreferenceRecord {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        return try runtime.store.setLearnedPreferenceEnabled(
+            preferenceID: preferenceID,
+            enabled: enabled,
+            sourceAction: sourceAction,
+            expectedVersion: expectedVersion,
+            changedAt: currentInstant()
+        )
+    }
+
+    func removeLearnedPreference(
+        preferenceID: LearnedPreferenceID,
+        sourceAction: String,
+        expectedVersion: UInt64
+    ) async throws {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        try runtime.store.removeLearnedPreference(
+            preferenceID: preferenceID,
+            sourceAction: sourceAction,
+            expectedVersion: expectedVersion,
+            changedAt: currentInstant()
+        )
+    }
+
+    func setLearnedPreferencesGloballyEnabled(
+        _ enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64
+    ) async throws -> LearnedPreferenceState {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        return try runtime.store.setLearnedPreferencesGloballyEnabled(
+            enabled,
+            sourceAction: sourceAction,
+            expectedVersion: expectedVersion,
+            changedAt: currentInstant()
+        )
+    }
+
+    func resetLearnedPreferences(
+        sourceAction: String,
+        expectedSettingsVersion: UInt64
+    ) async throws -> LearnedPreferenceState {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        return try runtime.store.resetLearnedPreferences(
+            sourceAction: sourceAction,
+            expectedSettingsVersion: expectedSettingsVersion,
+            changedAt: currentInstant()
         )
     }
 

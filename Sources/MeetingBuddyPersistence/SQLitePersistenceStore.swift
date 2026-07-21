@@ -1295,6 +1295,7 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             || type is FinalBriefingV1.Type
             || type is SensitivityLabelV1.Type
             || type is AccessPolicyV1.Type
+            || type is HistoricalComparisonV1.Type
         guard supported else {
             throw PersistenceContractError.unsupportedStoredObjectType(
                 Object.ObjectIDTag.semanticObjectType.encodedValue
@@ -1302,7 +1303,7 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         }
     }
 
-    private func insertPublicationObject<Object: SemanticRevisionContract>(
+    func insertPublicationObject<Object: SemanticRevisionContract>(
         _ object: Object,
         in db: Database
     ) throws {
@@ -1332,7 +1333,7 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         )
     }
 
-    private func initializeActivePointer<Object: SemanticRevisionContract>(
+    func initializeActivePointer<Object: SemanticRevisionContract>(
         for object: Object,
         at changedAt: UTCInstant,
         in db: Database
@@ -1391,7 +1392,7 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         )
     }
 
-    private func moveActivePointer<Object: SemanticRevisionContract>(
+    func moveActivePointer<Object: SemanticRevisionContract>(
         for replacement: Object,
         expectedCurrentRevisionID: RevisionID?,
         handlingPolicies: [RevisionHandlingPolicy],
@@ -2297,6 +2298,25 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             }
             return
         }
+        if let comparison = object as? HistoricalComparisonV1 {
+            let meetingIDs = [
+                comparison.currentMeetingRevision.logicalID.canonicalString,
+                comparison.historicalMeetingRevision.logicalID.canonicalString
+            ]
+            let ownedCount = try Int.fetchOne(
+                db,
+                sql: """
+                SELECT COUNT(DISTINCT logical_id)
+                FROM semantic_revisions
+                WHERE object_type = 'meeting_profile' AND logical_id IN (?, ?)
+                """,
+                arguments: StatementArguments(meetingIDs)
+            ) ?? 0
+            guard ownedCount == Set(meetingIDs).count else {
+                throw PersistenceContractError.logicalObjectMismatch
+            }
+            return
+        }
 
         let meetingID: MeetingID?
         switch object {
@@ -2555,6 +2575,8 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             _ = try decode(SensitivityLabelV1.self, row: row)
         case .accessPolicy:
             _ = try decode(AccessPolicyV1.self, row: row)
+        case .historicalComparison:
+            _ = try decode(HistoricalComparisonV1.self, row: row)
         case .userConfirmedNote, .unrecognized:
             throw PersistenceContractError.unsupportedStoredObjectType(objectTypeValue)
         }

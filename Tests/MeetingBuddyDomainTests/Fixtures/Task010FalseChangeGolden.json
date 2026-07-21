@@ -1,0 +1,27 @@
+[
+  {
+    "difference_state": "insufficient_evidence",
+    "finding": "insufficient_evidence",
+    "summary": "Insufficient exact published evidence to compare these positions."
+  },
+  {
+    "difference_state": "no_confirmed_difference",
+    "finding": "repeated_position",
+    "summary": "The same structured position is repeated; no change is confirmed."
+  },
+  {
+    "difference_state": "no_confirmed_difference",
+    "finding": "wording_only_difference",
+    "summary": "Wording differs; a policy change is not established."
+  },
+  {
+    "difference_state": "possible_difference",
+    "finding": "possible_change",
+    "summary": "The structured positions differ; this is a possible change pending user review."
+  },
+  {
+    "difference_state": "possible_difference",
+    "finding": "possible_new_reservation",
+    "summary": "A reservation may be new; this remains a possible change pending user review."
+  }
+]

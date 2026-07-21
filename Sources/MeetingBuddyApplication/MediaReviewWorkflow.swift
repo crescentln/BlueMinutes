@@ -347,6 +347,45 @@ public protocol MediaReviewWorkflow: AnyObject {
         fileName: String,
         expectedClassification: DataClassification
     ) async throws -> BriefingExportRecord
+    func historicalIndexStatus() async throws -> HistoricalIndexStatus
+    func rebuildHistoricalIndex() async throws -> MediaJobReview
+    func searchMeetingHistory(_ query: HistoricalSearchQuery) async throws
+        -> HistoricalSearchPage
+    func compareHistoricalPositions(
+        current: HistoricalPositionResult,
+        historical: HistoricalPositionResult
+    ) async throws -> HistoricalComparisonV1
+    func confirmHistoricalChange(
+        candidateRevisionID: RevisionID
+    ) async throws -> HistoricalComparisonV1
+    func learnedPreferenceState() async throws -> LearnedPreferenceState
+    func saveLearnedPreference(
+        preferenceID: LearnedPreferenceID,
+        value: LearnedPreferenceValue,
+        enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64?
+    ) async throws -> LearnedPreferenceRecord
+    func setLearnedPreferenceEnabled(
+        preferenceID: LearnedPreferenceID,
+        enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64
+    ) async throws -> LearnedPreferenceRecord
+    func removeLearnedPreference(
+        preferenceID: LearnedPreferenceID,
+        sourceAction: String,
+        expectedVersion: UInt64
+    ) async throws
+    func setLearnedPreferencesGloballyEnabled(
+        _ enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64
+    ) async throws -> LearnedPreferenceState
+    func resetLearnedPreferences(
+        sourceAction: String,
+        expectedSettingsVersion: UInt64
+    ) async throws -> LearnedPreferenceState
     func storageReport() async throws -> WorkspaceStorageReport
     func restoreTrashItem(storageObjectID: StorageObjectID) async throws
         -> WorkspaceStorageReport
@@ -371,6 +410,79 @@ public protocol MediaReviewWorkflow: AnyObject {
 }
 
 public extension MediaReviewWorkflow {
+    func historicalIndexStatus() async throws -> HistoricalIndexStatus {
+        throw HistoricalReviewError.indexRebuildRequired
+    }
+
+    func rebuildHistoricalIndex() async throws -> MediaJobReview {
+        throw HistoricalReviewError.indexRebuildRequired
+    }
+
+    func searchMeetingHistory(
+        _ query: HistoricalSearchQuery
+    ) async throws -> HistoricalSearchPage {
+        throw HistoricalReviewError.indexRebuildRequired
+    }
+
+    func compareHistoricalPositions(
+        current: HistoricalPositionResult,
+        historical: HistoricalPositionResult
+    ) async throws -> HistoricalComparisonV1 {
+        throw HistoricalReviewError.comparisonNotAllowed("Historical comparison is unavailable.")
+    }
+
+    func confirmHistoricalChange(
+        candidateRevisionID: RevisionID
+    ) async throws -> HistoricalComparisonV1 {
+        throw HistoricalReviewError.sourceUnavailable(candidateRevisionID)
+    }
+
+    func learnedPreferenceState() async throws -> LearnedPreferenceState {
+        throw HistoricalReviewError.invalidPreference("Learned preferences are unavailable.")
+    }
+
+    func saveLearnedPreference(
+        preferenceID: LearnedPreferenceID,
+        value: LearnedPreferenceValue,
+        enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64?
+    ) async throws -> LearnedPreferenceRecord {
+        throw HistoricalReviewError.invalidPreference("Learned preferences are unavailable.")
+    }
+
+    func setLearnedPreferenceEnabled(
+        preferenceID: LearnedPreferenceID,
+        enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64
+    ) async throws -> LearnedPreferenceRecord {
+        throw HistoricalReviewError.preferenceNotFound(preferenceID)
+    }
+
+    func removeLearnedPreference(
+        preferenceID: LearnedPreferenceID,
+        sourceAction: String,
+        expectedVersion: UInt64
+    ) async throws {
+        throw HistoricalReviewError.preferenceNotFound(preferenceID)
+    }
+
+    func setLearnedPreferencesGloballyEnabled(
+        _ enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64
+    ) async throws -> LearnedPreferenceState {
+        throw HistoricalReviewError.invalidPreference("Learned preferences are unavailable.")
+    }
+
+    func resetLearnedPreferences(
+        sourceAction: String,
+        expectedSettingsVersion: UInt64
+    ) async throws -> LearnedPreferenceState {
+        throw HistoricalReviewError.invalidPreference("Learned preferences are unavailable.")
+    }
+
     func recordingSetup() async throws -> RecordingSetupReview {
         throw TranscriptWorkflowError.unavailable
     }
