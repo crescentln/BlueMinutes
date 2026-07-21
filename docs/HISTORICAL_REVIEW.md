@@ -1,7 +1,7 @@
 # Historical Review and Learned Preferences
 
-Status: Task 010 implemented, pending user acceptance
-Owner: Codex
+Status: Accepted
+Owner: User and Codex
 Last updated: 2026-07-21
 
 ## Boundary

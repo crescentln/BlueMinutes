@@ -1,8 +1,8 @@
 # ADR-0016: Task 010 Historical Review and Preference Boundary
 
-Status: Accepted for implementation
+Status: Accepted
 Date: 2026-07-21
-Owner: Codex under Task 010 authorization
+Decision owners: User and Codex
 
 ## Context
 
