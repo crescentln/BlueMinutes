@@ -5,7 +5,7 @@ project: MeetingBuddy
 controller_version: "1.1"
 master_spec_version: "1.1"
 current_task: "008B"
-current_status: completed_pending_user_acceptance
+current_status: accepted
 accepted_tasks:
   - "001"
   - "002"
@@ -19,11 +19,11 @@ accepted_tasks:
   - "006B"
   - "007"
   - "008A"
-completed_pending_acceptance:
   - "008B"
+completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "e03d05bbf635ebf0af2c668d24e14f1bd73e3255 (accepted Task 008A boundary; unchanged pre-Task-008B code rollback anchor)"
-working_tree_status_summary: "Task 008B implementation, tests, configuration, script, report, and this ledger update are uncommitted; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved and uncommitted; Package.swift and Package.resolved are unchanged; no real capture, real UN request, user-workspace migration/write, media acquisition/download, credential, commit, push, deployment, or Task 009A work occurred"
+last_known_git_head: "a0bc473f67f70767f2debc5d5dc09e31d489425a (Task 008B implementation and completion-evidence commit; accepted Task 008A commit e03d05bbf635ebf0af2c668d24e14f1bd73e3255 remains the pre-Task-008B rollback anchor; the Task 008B acceptance update follows as a separate local commit)"
+working_tree_status_summary: "Task 008B implementation, completion evidence, and acceptance are committed locally; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved and uncommitted; Package.swift and Package.resolved are unchanged; no uncommitted Task 008B code/test/configuration/schema/report change, real capture, real UN request, user-workspace migration/write, media acquisition/download, credential, push, deployment, or Task 009A work exists"
 last_verification_commands:
   - "swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors"
   - "focused RecordingContractAndMetadataTests, RecordingPersistenceIntegrationTests, WorkspaceAndMigrationTests, Task008BViewAccessibilityTests, TaskManager cancellation, and recovery tests with warnings as errors"
@@ -33,7 +33,7 @@ last_verification_commands:
   - "MEETINGBUDDY_SIGN_IDENTITY=- ./script/build_and_run.sh --stage-only; codesign --verify --deep --strict --verbose=2 dist/MeetingBuddy.app; staged-app entitlement and bundled-Info inspection"
   - "exact-host/forbidden media-route, no-screen/no-persistent-capture, URLSession ownership, dependency-surface, relative Markdown-link, ledger-YAML, Git status/HEAD, and git diff --check inspections"
 last_verification_results:
-  - "212 tests in 37 suites pass with warnings as errors; three opt-in Apple installed-model routes remain skipped rather than inferred"
+  - "the 2026-07-21 acceptance rerun passes 212 tests in 37 suites with warnings as errors; three opt-in Apple installed-model routes remain skipped rather than inferred"
   - "normal capture, source loss, disk-budget failure, restart, corrupt checkpoint rebuild, tamper detection, finalization crash/restart, zero-byte stop, Task Manager cancellation, explicit new-epoch resume, and native microphone interruption notification fixtures pass"
   - "schema 007 is additive; fresh schema and accepted-v6 migration tests preserve exact semantic payload bytes and a readable verified v6 backup with no v7 recording tables"
   - "recording intent/epochs precede native start; five-second nominal/six-second hard CAF segmentation, two-second per-track queue, one-second checkpoint deadline, manifest binding, and non-auto-active incomplete state are enforced"
@@ -55,6 +55,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain Task 011"
-next_eligible_task: "009A (only after explicit user acceptance of Task 008B)"
-last_updated_at: "2026-07-19T15:20:53Z"
+next_eligible_task: "009A (eligible but not started; requires a separate explicit PROCEED TO TASK 009A command)"
+last_updated_at: "2026-07-21T17:27:08Z"
 ```

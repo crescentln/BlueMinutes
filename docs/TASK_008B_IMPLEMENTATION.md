@@ -1,6 +1,6 @@
 # Task 008B UN Web TV and Live-Capture Implementation
 
-Status: Completed pending user acceptance; interactive native-device/TCC proof remains a documented release-validation gap
+Status: Accepted by the user on 2026-07-21; interactive native-device/TCC proof remains a documented release-validation gap
 Date: 2026-07-19
 Scope: Only the D1-D5 capability boundary accepted in Task 008A
 Pre-task rollback anchor: Git HEAD `e03d05bbf635ebf0af2c668d24e14f1bd73e3255`
@@ -326,5 +326,7 @@ not part of this implementation and remain preserved. `Package.swift` and
   all-system, multi-app, hidden/background/persistent capture, cloud processing,
   real-time coaching, or response recommendation is claimed or implemented.
 
-No branch, commit, tag, push, release, deployment, or next-task work was
+The Task 008B implementation and completion evidence were committed locally as
+`a0bc473f67f70767f2debc5d5dc09e31d489425a` and accepted by the user on
+2026-07-21. No branch, tag, push, release, deployment, or next-task work was
 performed.
