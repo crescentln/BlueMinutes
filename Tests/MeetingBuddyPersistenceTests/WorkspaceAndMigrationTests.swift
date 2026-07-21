@@ -23,7 +23,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.briefingMigrationIdentifier,
                 SQLiteSchema.hardeningMigrationIdentifier,
                 SQLiteSchema.recordingCaptureMigrationIdentifier,
-                SQLiteSchema.automationMigrationIdentifier
+                SQLiteSchema.automationMigrationIdentifier,
+                SQLiteSchema.mcpAuditOriginMigrationIdentifier
             ]
         )
         #expect(store.migrationOutcome.rollbackAnchor == nil)
@@ -102,7 +103,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.briefingMigrationIdentifier,
                 SQLiteSchema.hardeningMigrationIdentifier,
                 SQLiteSchema.recordingCaptureMigrationIdentifier,
-                SQLiteSchema.automationMigrationIdentifier
+                SQLiteSchema.automationMigrationIdentifier,
+                SQLiteSchema.mcpAuditOriginMigrationIdentifier
             ]
         )
         #expect(reopened.migrationOutcome.rollbackAnchor == nil)
@@ -130,7 +132,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.briefingMigrationIdentifier,
                 SQLiteSchema.hardeningMigrationIdentifier,
                 SQLiteSchema.recordingCaptureMigrationIdentifier,
-                SQLiteSchema.automationMigrationIdentifier
+                SQLiteSchema.automationMigrationIdentifier,
+                SQLiteSchema.mcpAuditOriginMigrationIdentifier
             ]
         )
         try migrated.close()
@@ -203,7 +206,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.briefingMigrationIdentifier,
                 SQLiteSchema.hardeningMigrationIdentifier,
                 SQLiteSchema.recordingCaptureMigrationIdentifier,
-                SQLiteSchema.automationMigrationIdentifier
+                SQLiteSchema.automationMigrationIdentifier,
+                SQLiteSchema.mcpAuditOriginMigrationIdentifier
             ]
         )
         let rollbackAnchor = try #require(migrated.migrationOutcome.rollbackAnchor)
@@ -678,7 +682,7 @@ struct WorkspaceAndMigrationTests {
             workspace: workspace.descriptor,
             migrationTimestamp: PersistenceFixtures.publishedAt
         )
-        #expect(migrated.migrationOutcome.schemaVersion == 8)
+        #expect(migrated.migrationOutcome.schemaVersion == 9)
         let anchor = try #require(migrated.migrationOutcome.rollbackAnchor)
         #expect(anchor.sourceSchemaVersion == 6)
         #expect(
@@ -789,7 +793,7 @@ struct WorkspaceAndMigrationTests {
             workspace: workspace.descriptor,
             migrationTimestamp: PersistenceFixtures.publishedAt
         )
-        #expect(migrated.migrationOutcome.schemaVersion == 8)
+        #expect(migrated.migrationOutcome.schemaVersion == 9)
         let anchor = try #require(migrated.migrationOutcome.rollbackAnchor)
         #expect(anchor.sourceSchemaVersion == 7)
         let currentFacts = try migrated.databasePool.read { db in
@@ -847,6 +851,258 @@ struct WorkspaceAndMigrationTests {
         #expect(backupFacts.quickCheck == "ok")
         #expect(backupFacts.foreignKeyFailures == 0)
         try backup.close()
+    }
+
+    @Test
+    func migratesAcceptedVersionEightAuditBytesAndKeepsVerifiedRollbackAnchor() throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "accepted-v8")
+        defer { workspace.cleanup() }
+        let queue = try DatabaseQueue(path: workspace.descriptor.layout.databaseFile.path)
+        let migrator = SQLiteDatabaseBootstrap.makeMigrator(
+            workspaceID: workspace.descriptor.manifest.workspaceID,
+            migrationTimestamp: PersistenceFixtures.createdAt,
+            additionalMigrations: []
+        )
+        try migrator.migrate(queue, upTo: SQLiteSchema.automationMigrationIdentifier)
+        let canary = try makeVersionEightAutomationCanary(
+            workspaceID: workspace.descriptor.manifest.workspaceID
+        )
+        try insertVersionEightAutomationCanary(canary, in: queue)
+        let priorTableSQL = try queue.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'automation_command_records'"
+            )
+        }
+        #expect(priorTableSQL?.contains("'application', 'cli'") == true)
+        #expect(priorTableSQL?.contains("'mcp'") == false)
+        try queue.close()
+
+        let migrated = try SQLitePersistenceStore(
+            workspace: workspace.descriptor,
+            migrationTimestamp: PersistenceFixtures.publishedAt
+        )
+        #expect(migrated.migrationOutcome.schemaVersion == SQLiteSchema.currentVersion)
+        let anchor = try #require(migrated.migrationOutcome.rollbackAnchor)
+        #expect(anchor.sourceSchemaVersion == 8)
+        let currentFacts = try migrated.databasePool.read { db in
+            (
+                tableSQL: try String.fetchOne(
+                    db,
+                    sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'automation_command_records'"
+                ),
+                commandPayload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM automation_command_records WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                commandDigest: try String.fetchOne(
+                    db,
+                    sql: "SELECT payload_sha256 FROM automation_command_records WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                resultPayload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM automation_command_result_events WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                resultDigest: try String.fetchOne(
+                    db,
+                    sql: "SELECT payload_sha256 FROM automation_command_result_events WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                settingsRows: try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM automation_settings_state"
+                ),
+                quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check"),
+                foreignKeyFailures: try Row.fetchAll(
+                    db,
+                    sql: "PRAGMA foreign_key_check"
+                ).count
+            )
+        }
+        #expect(currentFacts.tableSQL?.contains("'mcp'") == true)
+        #expect(currentFacts.commandPayload == canary.recordPayload)
+        #expect(currentFacts.commandDigest == SQLitePayloadCodec.sha256(canary.recordPayload))
+        #expect(currentFacts.resultPayload == canary.resultPayload)
+        #expect(currentFacts.resultDigest == SQLitePayloadCodec.sha256(canary.resultPayload))
+        #expect(currentFacts.settingsRows == 0)
+        #expect(currentFacts.quickCheck == "ok")
+        #expect(currentFacts.foreignKeyFailures == 0)
+
+        let repository = SQLiteAutomationRepository(store: migrated)
+        let restoredTrail = try #require(
+            repository.automationActivity(limit: 5, excludingCommandID: nil).first
+        )
+        #expect(restoredTrail.record == canary.record)
+        #expect(restoredTrail.resultEvents == [canary.result])
+        try migrated.close()
+
+        let backupURL = workspace.root.appendingPathComponent(
+            anchor.artifact.relativePath.rawValue
+        )
+        let backup = try DatabaseQueue(path: backupURL.path)
+        let backupFacts = try backup.read { db in
+            (
+                version: try UInt32.fetchOne(
+                    db,
+                    sql: "SELECT database_schema_version FROM workspace_metadata WHERE singleton = 1"
+                ),
+                tableSQL: try String.fetchOne(
+                    db,
+                    sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'automation_command_records'"
+                ),
+                commandPayload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM automation_command_records WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                resultPayload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM automation_command_result_events WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check"),
+                foreignKeyFailures: try Row.fetchAll(
+                    db,
+                    sql: "PRAGMA foreign_key_check"
+                ).count
+            )
+        }
+        #expect(backupFacts.version == 8)
+        #expect(backupFacts.tableSQL?.contains("'mcp'") == false)
+        #expect(backupFacts.commandPayload == canary.recordPayload)
+        #expect(backupFacts.resultPayload == canary.resultPayload)
+        #expect(backupFacts.quickCheck == "ok")
+        #expect(backupFacts.foreignKeyFailures == 0)
+        try backup.close()
+    }
+
+    @Test
+    func failedPostMCPMigrationKeepsValidV9AndExactVersionEightBackup() throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "failed-v9")
+        defer { workspace.cleanup() }
+        let queue = try DatabaseQueue(path: workspace.descriptor.layout.databaseFile.path)
+        let migrator = SQLiteDatabaseBootstrap.makeMigrator(
+            workspaceID: workspace.descriptor.manifest.workspaceID,
+            migrationTimestamp: PersistenceFixtures.createdAt,
+            additionalMigrations: []
+        )
+        try migrator.migrate(queue, upTo: SQLiteSchema.automationMigrationIdentifier)
+        let canary = try makeVersionEightAutomationCanary(
+            workspaceID: workspace.descriptor.manifest.workspaceID
+        )
+        try insertVersionEightAutomationCanary(canary, in: queue)
+        try queue.close()
+
+        let failing = SQLiteMigrationDefinition(identifier: "010_test_mcp_rollback") { db in
+            try db.execute(sql: "CREATE TABLE must_rollback_after_mcp(id INTEGER PRIMARY KEY)")
+            throw MigrationProbeError.intentional
+        }
+        var failureDescription = ""
+        do {
+            _ = try SQLitePersistenceStore(
+                workspace: workspace.descriptor,
+                migrationTimestamp: PersistenceFixtures.publishedAt,
+                additionalMigrations: [failing]
+            )
+            Issue.record("The post-MCP failure probe unexpectedly committed.")
+        } catch {
+            failureDescription = String(describing: error)
+        }
+        #expect(failureDescription.contains("rolled back"))
+
+        let restored = try DatabaseQueue(path: workspace.descriptor.layout.databaseFile.path)
+        let restoredFacts = try restored.read { db in
+            (
+                version: try UInt32.fetchOne(
+                    db,
+                    sql: "SELECT database_schema_version FROM workspace_metadata WHERE singleton = 1"
+                ),
+                tableSQL: try String.fetchOne(
+                    db,
+                    sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'automation_command_records'"
+                ),
+                commandPayload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM automation_command_records WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                resultPayload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM automation_command_result_events WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                hasFailureTable: try db.tableExists("must_rollback_after_mcp"),
+                quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check"),
+                foreignKeyFailures: try Row.fetchAll(
+                    db,
+                    sql: "PRAGMA foreign_key_check"
+                ).count
+            )
+        }
+        #expect(restoredFacts.version == 9)
+        #expect(restoredFacts.tableSQL?.contains("'mcp'") == true)
+        #expect(restoredFacts.commandPayload == canary.recordPayload)
+        #expect(restoredFacts.resultPayload == canary.resultPayload)
+        #expect(!restoredFacts.hasFailureTable)
+        #expect(restoredFacts.quickCheck == "ok")
+        #expect(restoredFacts.foreignKeyFailures == 0)
+        try restored.close()
+
+        let backupDirectory = workspace.descriptor.layout.backups
+            .appendingPathComponent("Migrations", isDirectory: true)
+        let backupURL = try #require(
+            FileManager.default.contentsOfDirectory(
+                at: backupDirectory,
+                includingPropertiesForKeys: nil
+            ).filter { $0.pathExtension == "sqlite" }.first
+        )
+        let backup = try DatabaseQueue(path: backupURL.path)
+        let backupFacts = try backup.read { db in
+            (
+                version: try UInt32.fetchOne(
+                    db,
+                    sql: "SELECT database_schema_version FROM workspace_metadata WHERE singleton = 1"
+                ),
+                tableSQL: try String.fetchOne(
+                    db,
+                    sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'automation_command_records'"
+                ),
+                commandPayload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM automation_command_records WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                resultPayload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM automation_command_result_events WHERE command_id = ?",
+                    arguments: [canary.record.commandID.canonicalString]
+                ),
+                quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check"),
+                foreignKeyFailures: try Row.fetchAll(
+                    db,
+                    sql: "PRAGMA foreign_key_check"
+                ).count
+            )
+        }
+        #expect(backupFacts.version == 8)
+        #expect(backupFacts.tableSQL?.contains("'mcp'") == false)
+        #expect(backupFacts.commandPayload == canary.recordPayload)
+        #expect(backupFacts.resultPayload == canary.resultPayload)
+        #expect(backupFacts.quickCheck == "ok")
+        #expect(backupFacts.foreignKeyFailures == 0)
+        try backup.close()
+
+        let reopened = try workspace.makeStore()
+        #expect(reopened.migrationOutcome.schemaVersion == SQLiteSchema.currentVersion)
+        #expect(
+            try SQLiteAutomationRepository(store: reopened)
+                .automationActivity(limit: 5, excludingCommandID: nil)
+                .first?.record == canary.record
+        )
+        try reopened.close()
     }
 
     @Test
@@ -1029,4 +1285,133 @@ struct WorkspaceAndMigrationTests {
 
 private enum MigrationProbeError: Error, Sendable {
     case intentional
+}
+
+private struct VersionEightAutomationCanary {
+    let record: AutomationCommandRecord
+    let result: AutomationCommandResultEvent
+    let recordPayload: Data
+    let resultPayload: Data
+}
+
+private func makeVersionEightAutomationCanary(
+    workspaceID: WorkspaceID
+) throws -> VersionEightAutomationCanary {
+    let commandID = AutomationCommandID(
+        UUID(uuidString: "88888888-1111-4222-8333-444444444444")!
+    )
+    let caller = try AutomationCallerContext(
+        workspaceID: workspaceID,
+        actorID: AutomationActorID("accepted_v8"),
+        origin: .application,
+        maximumPermission: .read,
+        adapterVersion: "accepted_v8"
+    )
+    let record = try AutomationCommandRecord(
+        commandID: commandID,
+        replayNonce: AutomationReplayNonce(
+            UUID(uuidString: "88888888-5555-4666-8777-888888888888")!
+        ),
+        claimsReplayNonce: true,
+        replayOfCommandID: nil,
+        commandName: .getSettings,
+        requestDigest: ContentDigest.sha256(ofUTF8Text: "accepted-v8-request"),
+        caller: caller,
+        meetingID: nil,
+        requiredPermission: .read,
+        decision: .authorized,
+        safeReasonCode: "authorized",
+        policyEvidence: .workspace,
+        recordedAt: PersistenceFixtures.createdAt
+    )
+    let result = try AutomationCommandResultEvent(
+        eventID: AutomationAuditEventID(
+            UUID(uuidString: "88888888-9999-4aaa-8bbb-cccccccccccc")!
+        ),
+        commandID: commandID,
+        outcome: .completed,
+        safeCode: "completed",
+        resultDigest: ContentDigest.sha256(ofUTF8Text: "accepted-v8-result"),
+        occurredAt: PersistenceFixtures.createdAt
+    )
+    return VersionEightAutomationCanary(
+        record: record,
+        result: result,
+        recordPayload: try SQLitePayloadCodec.canonicalData(record),
+        resultPayload: try SQLitePayloadCodec.canonicalData(result)
+    )
+}
+
+private func insertVersionEightAutomationCanary(
+    _ canary: VersionEightAutomationCanary,
+    in queue: DatabaseQueue
+) throws {
+    try queue.write { db in
+        let record = canary.record
+        try db.execute(
+            sql: """
+            INSERT INTO automation_command_records(
+                command_id, replay_nonce, claims_replay_nonce, replay_of_command_id,
+                command_name, request_sha256, workspace_id, meeting_id, actor_id,
+                origin, adapter_version, granted_permission, required_permission,
+                decision, safe_reason_code, confirmation_requirement, root_command_id,
+                parent_command_id, hop_count, recorded_at_ms, canonical_payload,
+                payload_sha256, payload_byte_size
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                record.commandID.canonicalString,
+                record.replayNonce.canonicalString,
+                1,
+                nil,
+                record.commandName.rawValue,
+                record.requestDigest.lowercaseHex,
+                record.workspaceID.canonicalString,
+                nil,
+                record.actorID.rawValue,
+                record.origin.rawValue,
+                record.adapterVersion,
+                record.grantedPermission.rawValue,
+                record.requiredPermission.rawValue,
+                record.decision.rawValue,
+                record.safeReasonCode,
+                record.confirmationRequirement.rawValue,
+                nil,
+                nil,
+                0,
+                record.recordedAt.millisecondsSinceUnixEpoch,
+                canary.recordPayload,
+                SQLitePayloadCodec.sha256(canary.recordPayload),
+                canary.recordPayload.count
+            ]
+        )
+
+        let result = canary.result
+        try db.execute(
+            sql: """
+            INSERT INTO automation_command_result_events(
+                event_id, command_id, sequence, outcome, safe_code, result_sha256,
+                prior_settings_version, replacement_settings_version,
+                rollback_of_command_id, used_restricted_task_directory, occurred_at_ms,
+                canonical_payload, payload_sha256, payload_byte_size
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                result.eventID.canonicalString,
+                result.commandID.canonicalString,
+                result.sequence,
+                result.outcome.rawValue,
+                result.safeCode,
+                result.resultDigest?.lowercaseHex,
+                nil,
+                nil,
+                nil,
+                0,
+                result.occurredAt.millisecondsSinceUnixEpoch,
+                canary.resultPayload,
+                SQLitePayloadCodec.sha256(canary.resultPayload),
+                canary.resultPayload.count
+            ]
+        )
+    }
 }

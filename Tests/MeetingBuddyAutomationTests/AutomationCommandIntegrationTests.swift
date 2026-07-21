@@ -13,6 +13,10 @@ struct AutomationCommandIntegrationTests {
         let catalog = AutomationCommandCatalog()
         #expect(catalog.commands.map(\.name) == AutomationCommandName.allCases)
         #expect(catalog.commands.allSatisfy { $0.confirmation == .none })
+        #expect(
+            Set(catalog.unavailableCapabilities.map(\.capability))
+                == Set(AutomationUnavailableCapability.allCases.filter { $0 != .mcp })
+        )
         let confirmationRequired: Set<AutomationUnavailableCapability> = [
             .export,
             .recording,
@@ -441,7 +445,7 @@ private actor CountingExecutor: AutomationCommandExecuting {
     }
 }
 
-private final class TestAutomationFixture {
+final class TestAutomationFixture {
     static let timestamp = try! UTCInstant(millisecondsSinceUnixEpoch: 1_800_000_000_000)
 
     let root: URL
@@ -451,7 +455,7 @@ private final class TestAutomationFixture {
 
     init() throws {
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MeetingBuddyAutomationTests-(UUID().uuidString)")
+            .appendingPathComponent("MeetingBuddyAutomationTests-\(UUID().uuidString)")
         workspace = try LocalWorkspaceService().createWorkspace(
             at: root,
             workspaceID: WorkspaceID(UUID()),

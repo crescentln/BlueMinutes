@@ -564,11 +564,26 @@ public final class SQLiteAutomationRepository: AutomationCommandRepository,
         let record: AutomationCommandRecord = try decodePayload(row)
         guard record.commandID.canonicalString == (row["command_id"] as String),
               record.replayNonce.canonicalString == (row["replay_nonce"] as String),
+              record.claimsReplayNonce == ((row["claims_replay_nonce"] as Int64) == 1),
+              record.replayOfCommandID?.canonicalString
+                == (row["replay_of_command_id"] as String?),
               record.commandName.rawValue == (row["command_name"] as String),
               record.requestDigest.lowercaseHex == (row["request_sha256"] as String),
               record.workspaceID.canonicalString == (row["workspace_id"] as String),
+              record.meetingID?.canonicalString == (row["meeting_id"] as String?),
               record.actorID.rawValue == (row["actor_id"] as String),
+              record.origin.rawValue == (row["origin"] as String),
+              record.adapterVersion == (row["adapter_version"] as String),
+              record.grantedPermission.rawValue == (row["granted_permission"] as String),
+              record.requiredPermission.rawValue == (row["required_permission"] as String),
               record.decision.rawValue == (row["decision"] as String),
+              record.safeReasonCode == (row["safe_reason_code"] as String),
+              record.confirmationRequirement.rawValue
+                == (row["confirmation_requirement"] as String),
+              record.rootCommandID?.canonicalString == (row["root_command_id"] as String?),
+              record.parentCommandID?.canonicalString
+                == (row["parent_command_id"] as String?),
+              Int64(record.hopCount) == (row["hop_count"] as Int64),
               record.recordedAt.millisecondsSinceUnixEpoch == (row["recorded_at_ms"] as Int64)
         else {
             throw AutomationContractError.persistenceFailure(

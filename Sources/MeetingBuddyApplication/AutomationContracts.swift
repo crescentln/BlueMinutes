@@ -68,6 +68,7 @@ public enum AutomationPermission: String, Codable, CaseIterable, Hashable, Senda
 public enum AutomationCallerOrigin: String, Codable, Hashable, Sendable {
     case application
     case cli
+    case mcp
 }
 
 public enum AutomationCallBoundary: String, Codable, Hashable, Sendable {
@@ -227,7 +228,7 @@ public struct AutomationUnavailableCapabilityRule: Codable, Hashable, Sendable {
 }
 
 public struct AutomationCommandCatalog: Codable, Hashable, Sendable {
-    public static let currentVersion = "meetingbuddy-automation-catalog-v1"
+    public static let currentVersion = "meetingbuddy-automation-catalog-v2"
     public static let currentPolicyVersion = "meetingbuddy-automation-policy-v1"
 
     public let version: String
@@ -272,21 +273,23 @@ public struct AutomationCommandCatalog: Codable, Hashable, Sendable {
                 )
             }
         }
-        unavailableCapabilities = AutomationUnavailableCapability.allCases.map { capability in
-            let confirmation: AutomationConfirmationRequirement
-            switch capability {
-            case .export, .recording, .destructiveFilesystem, .credentials,
-                 .accessPolicyMutation, .remoteNetworkControl:
-                confirmation = .trustedApplicationOneTime
-            default:
-                confirmation = .none
+        unavailableCapabilities = AutomationUnavailableCapability.allCases
+            .filter { $0 != .mcp }
+            .map { capability in
+                let confirmation: AutomationConfirmationRequirement
+                switch capability {
+                case .export, .recording, .destructiveFilesystem, .credentials,
+                     .accessPolicyMutation, .remoteNetworkControl:
+                    confirmation = .trustedApplicationOneTime
+                default:
+                    confirmation = .none
+                }
+                return try! AutomationUnavailableCapabilityRule(
+                    capability: capability,
+                    safeReasonCode: "capability_unavailable_task_009b",
+                    futureConfirmationRequirement: confirmation
+                )
             }
-            return try! AutomationUnavailableCapabilityRule(
-                capability: capability,
-                safeReasonCode: "capability_unavailable_task_009a",
-                futureConfirmationRequirement: confirmation
-            )
-        }
         recursiveCallsAllowed = false
     }
 

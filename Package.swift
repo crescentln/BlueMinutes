@@ -47,6 +47,10 @@ let package = Package(
         .executable(
             name: "meetingbuddy-cli",
             targets: ["MeetingBuddyCLI"]
+        ),
+        .executable(
+            name: "meetingbuddy-mcp",
+            targets: ["MeetingBuddyMCP"]
         )
     ],
     dependencies: [
@@ -121,6 +125,15 @@ let package = Package(
         ),
         .executableTarget(
             name: "MeetingBuddyCLI",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyAutomation",
+                "MeetingBuddyDomain",
+                "MeetingBuddyPersistence"
+            ]
+        ),
+        .executableTarget(
+            name: "MeetingBuddyMCP",
             dependencies: [
                 "MeetingBuddyApplication",
                 "MeetingBuddyAutomation",
