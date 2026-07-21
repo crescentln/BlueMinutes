@@ -449,6 +449,14 @@ struct RecoveryAndTrashTests {
         defer { workspace.cleanup() }
         let store = try workspace.makeStore()
         defer { try? store.close() }
+        let reporter = LocalWorkspaceStorageReporter(
+            workspace: workspace.descriptor,
+            store: store
+        )
+        let baseline = try reporter.storageReport(
+            calculatedAt: PersistenceFixtures.createdAt,
+            maximumEntries: 1_000
+        )
         let cache = workspace.root.appendingPathComponent("Cache", isDirectory: true)
         try FileManager.default.createDirectory(
             at: cache,
@@ -463,17 +471,13 @@ struct RecoveryAndTrashTests {
                 attributes: [.posixPermissions: 0o600]
             ))
         }
-        let reporter = LocalWorkspaceStorageReporter(
-            workspace: workspace.descriptor,
-            store: store
-        )
         let bounded = try reporter.storageReport(
             calculatedAt: PersistenceFixtures.publishedAt,
             maximumEntries: 32
         )
         #expect(bounded.scanTruncated)
         #expect(bounded.categories.reduce(0) { $0 + $1.fileCount } <= 32)
-        #expect(bounded.totalByteCount <= 32 * 128 + 1_048_576)
+        #expect(bounded.totalByteCount <= baseline.totalByteCount + 32 * 128)
 
         let exposed = cache.appendingPathComponent("entry-000.bin")
         try FileManager.default.setAttributes(

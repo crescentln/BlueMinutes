@@ -4,8 +4,8 @@
 project: MeetingBuddy
 controller_version: "1.1"
 master_spec_version: "1.1"
-current_task: "008B"
-current_status: accepted
+current_task: "009A"
+current_status: completed_pending_user_acceptance
 accepted_tasks:
   - "001"
   - "002"
@@ -20,30 +20,34 @@ accepted_tasks:
   - "007"
   - "008A"
   - "008B"
-completed_pending_acceptance: []
+completed_pending_acceptance:
+  - "009A"
 blocked_tasks: []
-last_known_git_head: "a0bc473f67f70767f2debc5d5dc09e31d489425a (Task 008B implementation and completion-evidence commit; accepted Task 008A commit e03d05bbf635ebf0af2c668d24e14f1bd73e3255 remains the pre-Task-008B rollback anchor; the Task 008B acceptance update follows as a separate local commit)"
-working_tree_status_summary: "Task 008B implementation, completion evidence, and acceptance are committed locally; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved and uncommitted; Package.swift and Package.resolved are unchanged; no uncommitted Task 008B code/test/configuration/schema/report change, real capture, real UN request, user-workspace migration/write, media acquisition/download, credential, push, deployment, or Task 009A work exists"
+last_known_git_head: "2a38a74aedf42d0e69f2375bd21365132e340cf4 (accepted Task 008B and the pre-Task-009A rollback anchor; no Task 009A commit exists)"
+working_tree_status_summary: "Task 009A implementation, tests, ADR, and completion evidence are present and uncommitted; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved, with narrow Task 009A additions only where required; Package.resolved is unchanged; no user-workspace migration/write, real meeting content, provider/network/credential/export/recording/MCP/HTTP route, push, deployment, commit, or Task 009B work exists"
 last_verification_commands:
   - "swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors"
-  - "focused RecordingContractAndMetadataTests, RecordingPersistenceIntegrationTests, WorkspaceAndMigrationTests, Task008BViewAccessibilityTests, TaskManager cancellation, and recovery tests with warnings as errors"
-  - "swift build -Xswiftc -warnings-as-errors; swift build -c release -Xswiftc -warnings-as-errors"
+  - "focused AutomationCommandIntegrationTests and WorkspaceAndMigrationTests plus targeted schema-version and storage-growth regressions with warnings as errors"
+  - "swift build -c release -Xswiftc -warnings-as-errors"
   - "swift package dump-package; swift package show-dependencies"
   - "plutil -lint Configuration/MeetingBuddy-Info.plist Configuration/MeetingBuddy.entitlements"
   - "MEETINGBUDDY_SIGN_IDENTITY=- ./script/build_and_run.sh --stage-only; codesign --verify --deep --strict --verbose=2 dist/MeetingBuddy.app; staged-app entitlement and bundled-Info inspection"
-  - "exact-host/forbidden media-route, no-screen/no-persistent-capture, URLSession ownership, dependency-surface, relative Markdown-link, ledger-YAML, Git status/HEAD, and git diff --check inspections"
+  - "release meetingbuddy-cli linkage inspection and synthetic disposable-workspace CLI catalog/status/settings patch/rollback/replay/path-denial smoke tests"
+  - "forbidden import/API, authority-flag, secret/content, dependency-surface, relative Markdown-link, ledger-YAML, Git status/HEAD, Package.resolved, and git diff --check inspections"
 last_verification_results:
-  - "the 2026-07-21 acceptance rerun passes 212 tests in 37 suites with warnings as errors; three opt-in Apple installed-model routes remain skipped rather than inferred"
-  - "normal capture, source loss, disk-budget failure, restart, corrupt checkpoint rebuild, tamper detection, finalization crash/restart, zero-byte stop, Task Manager cancellation, explicit new-epoch resume, and native microphone interruption notification fixtures pass"
-  - "schema 007 is additive; fresh schema and accepted-v6 migration tests preserve exact semantic payload bytes and a readable verified v6 backup with no v7 recording tables"
-  - "recording intent/epochs precede native start; five-second nominal/six-second hard CAF segmentation, two-second per-track queue, one-second checkpoint deadline, manifest binding, and non-auto-active incomplete state are enforced"
-  - "the metadata adapter accepts one exact-host HTTPS asset request only, retains bounded field provenance, honors no-outbound before network, and exposes no UN media/player/download/credential route"
-  - "the staged ad-hoc app verifies and exposes only sandbox, microphone input, outbound client, app bookmark, and user-selected read/write entitlements plus truthful microphone/system-audio purpose strings; no persistent content-capture entitlement exists"
-  - "debug/release builds, package inspection, Plist lint, staged packaging/signature, static forbidden-surface scans, diff whitespace, relative links, and ledger YAML pass; no dependency was added"
-  - "interactive TCC grant/deny/revoke, physical/virtual device loss, system-picker capture, application exit, sleep, live two-track capture, long native capture/process kill, and sudden power loss were not run because they require explicit user source/TCC participation; this remains release-validation evidence, not a silently claimed result"
+  - "the final 2026-07-21 rerun passes 218 tests in 38 suites with warnings as errors; three opt-in Apple installed-model routes remain skipped rather than inferred"
+  - "the five Task 009A integration tests pass catalog closure, CLI/application parity, path confinement, permission/policy/recursion denial, durable replay attribution, immutable audit, typed settings compare-and-swap and rollback, injected whole-transaction rollback, restricted-directory cleanup, recovery, and safe output gates"
+  - "schema 008 is additive; fresh schema and accepted-v7 migration tests preserve exact prior semantic payload bytes, create a readable verified source-version-7 backup with no v8 automation tables, and fabricate no settings row"
+  - "the synthetic CLI smoke proves canonical snake_case catalog/status output, schema version 8, zero self-counted incomplete commands, settings version 0-to-1 patch and 1-to-2 server-side rollback, replay exit 77, and relative-workspace exit 64; its disposable temporary workspace was verified and removed"
+  - "the shared dispatcher owns durable nonce claims, permission and recursion gates, exact current meeting-policy graph validation, bounded audit/result events, settings transactions, and diagnostics-owned temporary directories; the CLI cannot supply authority or confirmation"
+  - "release/debug compilation, package inspection, Plist lint, staged ad-hoc app packaging/signature, CLI linkage, static forbidden-surface scans, diff whitespace, relative links, ledger YAML, and Package.resolved checks pass; GRDB remains the only exact dependency at 7.11.1"
+  - "no sensitive/destructive command is exposed; future confirmation requirements are catalog metadata and CLI confirmation flags are rejected; no user data, real meeting, network/provider/credential/export/recording/MCP/HTTP operation was exercised"
+  - "Xcode GUI/manual release, Developer ID signing, notarization, clean-machine CLI installation, and live application composition remain unverified release evidence rather than silently claimed results"
 open_P0_decisions: []
 open_P1_decisions: []
 known_out_of_scope_findings:
+  - "Task 009A adds no SwiftUI automation UI, MCP, HTTP server, remote control, arbitrary database/filesystem command, provider/model execution, recording, export, deletion, credential, access-policy mutation, organization administration, or enterprise synchronization"
+  - "confirmation behavior for sensitive/destructive automation remains a fail-closed future contract because Task 009A intentionally exposes no such command"
   - "only one multilateral template and three briefing sections exist; the broad template catalog remains deferred"
   - "no full stale-briefing refresh action is exposed; upstream correction clearly marks the existing chain stale and blocks regeneration/export"
   - "contradiction validation is conservative deterministic polarity/qualification/phrase checking, not independent truth review; no separate reviewing provider is authorized"
@@ -55,6 +59,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain Task 011"
-next_eligible_task: "009A (eligible but not started; requires a separate explicit PROCEED TO TASK 009A command)"
-last_updated_at: "2026-07-21T17:27:08Z"
+next_eligible_task: "none until Task 009A is accepted; Task 009B then remains separately user-gated"
+last_updated_at: "2026-07-21T18:46:41Z"
 ```

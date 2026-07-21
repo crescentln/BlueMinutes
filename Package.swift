@@ -36,9 +36,17 @@ let package = Package(
             name: "MeetingBuddyFeatures",
             targets: ["MeetingBuddyFeatures"]
         ),
+        .library(
+            name: "MeetingBuddyAutomation",
+            targets: ["MeetingBuddyAutomation"]
+        ),
         .executable(
             name: "MeetingBuddyApp",
             targets: ["MeetingBuddyApp"]
+        ),
+        .executable(
+            name: "meetingbuddy-cli",
+            targets: ["MeetingBuddyCLI"]
         )
     ],
     dependencies: [
@@ -92,6 +100,13 @@ let package = Package(
                 "MeetingBuddyDomain"
             ]
         ),
+        .target(
+            name: "MeetingBuddyAutomation",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyDomain"
+            ]
+        ),
         .executableTarget(
             name: "MeetingBuddyApp",
             dependencies: [
@@ -102,6 +117,15 @@ let package = Package(
                 "MeetingBuddyMedia",
                 "MeetingBuddyPersistence",
                 "MeetingBuddyTasks"
+            ]
+        ),
+        .executableTarget(
+            name: "MeetingBuddyCLI",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyAutomation",
+                "MeetingBuddyDomain",
+                "MeetingBuddyPersistence"
             ]
         ),
         .testTarget(
@@ -156,6 +180,16 @@ let package = Package(
                 "MeetingBuddyApplication",
                 "MeetingBuddyDomain",
                 "MeetingBuddyFeatures"
+            ]
+        ),
+        .testTarget(
+            name: "MeetingBuddyAutomationTests",
+            dependencies: [
+                "MeetingBuddyApplication",
+                "MeetingBuddyAutomation",
+                "MeetingBuddyDomain",
+                "MeetingBuddyPersistence",
+                .product(name: "GRDB", package: "GRDB.swift")
             ]
         )
     ],

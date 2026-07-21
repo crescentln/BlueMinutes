@@ -5,7 +5,7 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 enum SQLiteSchema {
-    static let currentVersion: UInt32 = 7
+    static let currentVersion: UInt32 = 8
     static let initialMigrationIdentifier = "001_initial_persistence"
     static let taskRuntimeMigrationIdentifier = "002_task_runtime"
     static let transcriptCoverageMigrationIdentifier = "003_transcript_coverage"
@@ -13,6 +13,7 @@ enum SQLiteSchema {
     static let briefingMigrationIdentifier = "005_briefing_foundation"
     static let hardeningMigrationIdentifier = "006_security_storage_hardening"
     static let recordingCaptureMigrationIdentifier = "007_recording_capture_foundation"
+    static let automationMigrationIdentifier = "008_automation_command_audit_settings"
     static let maximumSemanticPayloadBytes = 16 * 1_024 * 1_024
     static let maximumJobPayloadBytes = 1 * 1_024 * 1_024
 
@@ -2086,6 +2087,207 @@ enum SQLiteSchema {
     BEGIN SELECT RAISE(ABORT, 'recording checkpoints are immutable'); END;
     """
 
+    /// Schema v8 adds the local automation audit/replay boundary and one
+    /// versioned, reversible safe setting. It neither rewrites semantic rows
+    /// nor materializes the compiled settings default.
+    static let automationSchemaSQL = """
+    CREATE TABLE automation_command_records (
+        command_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(command_id) = 36 AND lower(command_id) = command_id
+        ),
+        replay_nonce TEXT NOT NULL CHECK (
+            length(replay_nonce) = 36 AND lower(replay_nonce) = replay_nonce
+        ),
+        claims_replay_nonce INTEGER NOT NULL CHECK (claims_replay_nonce IN (0, 1)),
+        replay_of_command_id TEXT,
+        command_name TEXT NOT NULL CHECK (command_name IN (
+            'get_command_catalog', 'get_workspace_status', 'get_meeting_policy_status',
+            'get_storage_report', 'get_settings', 'describe_settings',
+            'update_settings', 'rollback_settings', 'list_activity',
+            'run_workspace_diagnostics'
+        )),
+        request_sha256 TEXT NOT NULL CHECK (
+            length(request_sha256) = 64 AND lower(request_sha256) = request_sha256
+        ),
+        workspace_id TEXT NOT NULL CHECK (
+            length(workspace_id) = 36 AND lower(workspace_id) = workspace_id
+        ),
+        meeting_id TEXT,
+        actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+        origin TEXT NOT NULL CHECK (origin IN ('application', 'cli')),
+        adapter_version TEXT NOT NULL CHECK (length(adapter_version) BETWEEN 1 AND 64),
+        granted_permission TEXT NOT NULL CHECK (
+            granted_permission IN ('read', 'safe_configuration', 'operational', 'sensitive')
+        ),
+        required_permission TEXT NOT NULL CHECK (
+            required_permission IN ('read', 'safe_configuration', 'operational', 'sensitive')
+        ),
+        decision TEXT NOT NULL CHECK (decision IN ('authorized', 'denied', 'replayed')),
+        safe_reason_code TEXT NOT NULL CHECK (length(safe_reason_code) BETWEEN 1 AND 96),
+        confirmation_requirement TEXT NOT NULL CHECK (
+            confirmation_requirement IN ('none', 'trusted_application_one_time')
+        ),
+        root_command_id TEXT,
+        parent_command_id TEXT,
+        hop_count INTEGER NOT NULL CHECK (hop_count BETWEEN 0 AND 255),
+        recorded_at_ms INTEGER NOT NULL CHECK (recorded_at_ms >= 0),
+        canonical_payload BLOB NOT NULL CHECK (length(canonical_payload) BETWEEN 1 AND 1048576),
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size = length(canonical_payload)
+                AND payload_byte_size BETWEEN 1 AND 1048576
+        ),
+        FOREIGN KEY (replay_of_command_id) REFERENCES automation_command_records(command_id),
+        CHECK (
+            (claims_replay_nonce = 1 AND replay_of_command_id IS NULL AND decision != 'replayed')
+            OR (claims_replay_nonce = 0 AND replay_of_command_id IS NOT NULL AND decision = 'replayed')
+        ),
+        CHECK (
+            (hop_count = 0 AND root_command_id IS NULL AND parent_command_id IS NULL)
+            OR (hop_count > 0 AND root_command_id IS NOT NULL AND parent_command_id IS NOT NULL)
+        )
+    );
+
+    CREATE UNIQUE INDEX automation_command_records_claimed_nonce
+        ON automation_command_records(replay_nonce)
+        WHERE claims_replay_nonce = 1;
+    CREATE INDEX automation_command_records_activity
+        ON automation_command_records(recorded_at_ms DESC, command_id DESC);
+
+    CREATE TABLE automation_command_input_revisions (
+        command_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0 AND ordinal < 32),
+        object_type TEXT NOT NULL,
+        logical_id TEXT NOT NULL,
+        revision_id TEXT NOT NULL,
+        PRIMARY KEY (command_id, ordinal),
+        UNIQUE (command_id, object_type, logical_id, revision_id),
+        FOREIGN KEY (command_id) REFERENCES automation_command_records(command_id),
+        FOREIGN KEY (object_type, logical_id, revision_id)
+            REFERENCES semantic_revisions(object_type, logical_id, revision_id)
+    );
+
+    CREATE TABLE automation_command_result_events (
+        event_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(event_id) = 36 AND lower(event_id) = event_id
+        ),
+        command_id TEXT NOT NULL UNIQUE,
+        sequence INTEGER NOT NULL CHECK (sequence = 1),
+        outcome TEXT NOT NULL CHECK (
+            outcome IN ('completed', 'failed', 'rejected', 'rolled_back')
+        ),
+        safe_code TEXT NOT NULL CHECK (length(safe_code) BETWEEN 1 AND 96),
+        result_sha256 TEXT,
+        prior_settings_version INTEGER,
+        replacement_settings_version INTEGER,
+        rollback_of_command_id TEXT,
+        used_restricted_task_directory INTEGER NOT NULL CHECK (
+            used_restricted_task_directory IN (0, 1)
+        ),
+        occurred_at_ms INTEGER NOT NULL CHECK (occurred_at_ms >= 0),
+        canonical_payload BLOB NOT NULL CHECK (length(canonical_payload) BETWEEN 1 AND 1048576),
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size = length(canonical_payload)
+                AND payload_byte_size BETWEEN 1 AND 1048576
+        ),
+        FOREIGN KEY (command_id) REFERENCES automation_command_records(command_id),
+        FOREIGN KEY (rollback_of_command_id) REFERENCES automation_command_records(command_id),
+        CHECK (
+            (outcome IN ('completed', 'rolled_back')
+                AND length(result_sha256) = 64 AND lower(result_sha256) = result_sha256)
+            OR (outcome IN ('failed', 'rejected') AND result_sha256 IS NULL)
+        ),
+        CHECK (
+            (prior_settings_version IS NULL AND replacement_settings_version IS NULL)
+            OR (prior_settings_version >= 0
+                AND replacement_settings_version = prior_settings_version + 1)
+        ),
+        CHECK (outcome != 'rolled_back' OR rollback_of_command_id IS NOT NULL)
+    );
+
+    CREATE TABLE automation_settings_state (
+        singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+        version INTEGER NOT NULL CHECK (version > 0),
+        status_list_limit INTEGER NOT NULL CHECK (status_list_limit BETWEEN 1 AND 200),
+        updated_by_command_id TEXT NOT NULL UNIQUE,
+        updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= 0),
+        canonical_payload BLOB NOT NULL CHECK (length(canonical_payload) BETWEEN 1 AND 65536),
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size = length(canonical_payload)
+                AND payload_byte_size BETWEEN 1 AND 65536
+        ),
+        FOREIGN KEY (updated_by_command_id) REFERENCES automation_command_records(command_id)
+    );
+
+    CREATE TABLE automation_settings_events (
+        event_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(event_id) = 36 AND lower(event_id) = event_id
+        ),
+        command_id TEXT NOT NULL UNIQUE,
+        prior_version INTEGER NOT NULL CHECK (prior_version >= 0),
+        replacement_version INTEGER NOT NULL CHECK (replacement_version = prior_version + 1),
+        prior_status_list_limit INTEGER NOT NULL CHECK (prior_status_list_limit BETWEEN 1 AND 200),
+        replacement_status_list_limit INTEGER NOT NULL CHECK (
+            replacement_status_list_limit BETWEEN 1 AND 200
+        ),
+        rollback_of_command_id TEXT,
+        occurred_at_ms INTEGER NOT NULL CHECK (occurred_at_ms >= 0),
+        canonical_payload BLOB NOT NULL CHECK (length(canonical_payload) BETWEEN 1 AND 65536),
+        payload_sha256 TEXT NOT NULL CHECK (
+            length(payload_sha256) = 64 AND lower(payload_sha256) = payload_sha256
+        ),
+        payload_byte_size INTEGER NOT NULL CHECK (
+            payload_byte_size = length(canonical_payload)
+                AND payload_byte_size BETWEEN 1 AND 65536
+        ),
+        FOREIGN KEY (command_id) REFERENCES automation_command_records(command_id),
+        FOREIGN KEY (rollback_of_command_id) REFERENCES automation_command_records(command_id),
+        CHECK (prior_status_list_limit != replacement_status_list_limit)
+    );
+
+    CREATE TRIGGER automation_command_records_no_update
+    BEFORE UPDATE ON automation_command_records
+    BEGIN SELECT RAISE(ABORT, 'automation command records are immutable'); END;
+    CREATE TRIGGER automation_command_records_no_delete
+    BEFORE DELETE ON automation_command_records
+    BEGIN SELECT RAISE(ABORT, 'automation command records are immutable'); END;
+    CREATE TRIGGER automation_command_input_revisions_no_update
+    BEFORE UPDATE ON automation_command_input_revisions
+    BEGIN SELECT RAISE(ABORT, 'automation command inputs are immutable'); END;
+    CREATE TRIGGER automation_command_input_revisions_no_delete
+    BEFORE DELETE ON automation_command_input_revisions
+    BEGIN SELECT RAISE(ABORT, 'automation command inputs are immutable'); END;
+    CREATE TRIGGER automation_command_result_events_no_update
+    BEFORE UPDATE ON automation_command_result_events
+    BEGIN SELECT RAISE(ABORT, 'automation result events are immutable'); END;
+    CREATE TRIGGER automation_command_result_events_no_delete
+    BEFORE DELETE ON automation_command_result_events
+    BEGIN SELECT RAISE(ABORT, 'automation result events are immutable'); END;
+    CREATE TRIGGER automation_settings_events_no_update
+    BEFORE UPDATE ON automation_settings_events
+    BEGIN SELECT RAISE(ABORT, 'automation settings events are immutable'); END;
+    CREATE TRIGGER automation_settings_events_no_delete
+    BEFORE DELETE ON automation_settings_events
+    BEGIN SELECT RAISE(ABORT, 'automation settings events are immutable'); END;
+    CREATE TRIGGER automation_settings_state_first_version
+    BEFORE INSERT ON automation_settings_state WHEN NEW.version != 1
+    BEGIN SELECT RAISE(ABORT, 'automation settings must begin at version one'); END;
+    CREATE TRIGGER automation_settings_state_next_version
+    BEFORE UPDATE ON automation_settings_state WHEN NEW.version != OLD.version + 1
+    BEGIN SELECT RAISE(ABORT, 'automation settings version must advance exactly once'); END;
+    CREATE TRIGGER automation_settings_state_no_delete
+    BEFORE DELETE ON automation_settings_state
+    BEGIN SELECT RAISE(ABORT, 'automation settings state cannot be deleted'); END;
+    """
+
     static var taskRuntimeChecksum: String {
         SHA256.hash(data: Data(taskRuntimeSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
@@ -2118,6 +2320,12 @@ enum SQLiteSchema {
 
     static var recordingCaptureChecksum: String {
         SHA256.hash(data: Data(recordingCaptureSchemaSQL.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static var automationChecksum: String {
+        SHA256.hash(data: Data(automationSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
     }
@@ -2424,6 +2632,33 @@ enum SQLiteDatabaseBootstrap {
                 ]
             )
         }
+        migrator.registerMigration(SQLiteSchema.automationMigrationIdentifier) { db in
+            try db.execute(sql: SQLiteSchema.automationSchemaSQL)
+            try db.execute(
+                sql: """
+                INSERT INTO schema_migrations(
+                    identifier, ordinal, checksum_sha256, applied_at_ms
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    SQLiteSchema.automationMigrationIdentifier,
+                    8,
+                    SQLiteSchema.automationChecksum,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+            try db.execute(
+                sql: """
+                UPDATE workspace_metadata
+                SET database_schema_version = ?, updated_at_ms = ?
+                WHERE singleton = 1
+                """,
+                arguments: [
+                    8,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+        }
         for migration in additionalMigrations {
             migrator.registerMigration(migration.identifier, migrate: migration.apply)
         }
@@ -2565,6 +2800,16 @@ enum SQLiteDatabaseBootstrap {
             guard recordingCaptureChecksum == SQLiteSchema.recordingCaptureChecksum else {
                 throw PersistenceContractError.migrationFailed(
                     "The recording-capture migration checksum does not match the accepted schema."
+                )
+            }
+            let automationChecksum = try String.fetchOne(
+                db,
+                sql: "SELECT checksum_sha256 FROM schema_migrations WHERE identifier = ?",
+                arguments: [SQLiteSchema.automationMigrationIdentifier]
+            )
+            guard automationChecksum == SQLiteSchema.automationChecksum else {
+                throw PersistenceContractError.migrationFailed(
+                    "The automation-command migration checksum does not match the accepted schema."
                 )
             }
         }

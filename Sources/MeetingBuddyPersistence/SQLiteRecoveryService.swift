@@ -346,6 +346,7 @@ public final class SQLiteRecoveryService: RecoveryService, @unchecked Sendable {
                     "The recovery database stale-event projection is inconsistent."
                 )
             }
+            try verifyAutomationState(in: db)
 
             let revisions = try Row.fetchAll(
                 db,
@@ -392,6 +393,176 @@ public final class SQLiteRecoveryService: RecoveryService, @unchecked Sendable {
                 migrations: migrations
             )
         }
+    }
+
+    private func verifyAutomationState(in db: Database) throws {
+        guard try db.tableExists("automation_command_records") else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "The recovery database is missing the automation audit schema."
+            )
+        }
+        let commandRows = try Row.fetchAll(
+            db,
+            sql: "SELECT * FROM automation_command_records ORDER BY recorded_at_ms, command_id"
+        )
+        for row in commandRows {
+            let record: AutomationCommandRecord = try decodeAutomationPayload(row)
+            guard record.commandID.canonicalString == (row["command_id"] as String),
+                  record.replayNonce.canonicalString == (row["replay_nonce"] as String),
+                  record.commandName.rawValue == (row["command_name"] as String),
+                  record.requestDigest.lowercaseHex == (row["request_sha256"] as String),
+                  record.workspaceID.canonicalString == (row["workspace_id"] as String),
+                  record.actorID.rawValue == (row["actor_id"] as String),
+                  record.decision.rawValue == (row["decision"] as String),
+                  record.recordedAt.millisecondsSinceUnixEpoch
+                    == (row["recorded_at_ms"] as Int64)
+            else {
+                throw WorkspaceContractError.recoveryArtifactInvalid(
+                    "An automation command record failed indexed-payload validation."
+                )
+            }
+            let inputs = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT object_type, logical_id, revision_id
+                FROM automation_command_input_revisions
+                WHERE command_id = ? ORDER BY ordinal
+                """,
+                arguments: [record.commandID.canonicalString]
+            ).map { input in
+                try SQLiteReferenceCodec.reference(
+                    objectTypeValue: input["object_type"],
+                    logicalIDValue: input["logical_id"],
+                    revisionIDValue: input["revision_id"]
+                )
+            }
+            let expectedInputs = [
+                record.policyEvidence.meetingRevision,
+                record.policyEvidence.sensitivityLabelRevision,
+                record.policyEvidence.accessPolicyRevision
+            ].compactMap { $0 }.sorted()
+            guard record.claimsReplayNonce ? inputs == expectedInputs : inputs.isEmpty else {
+                throw WorkspaceContractError.recoveryArtifactInvalid(
+                    "An automation command input projection is incomplete."
+                )
+            }
+        }
+
+        let resultRows = try Row.fetchAll(
+            db,
+            sql: "SELECT * FROM automation_command_result_events ORDER BY command_id"
+        )
+        for row in resultRows {
+            let event: AutomationCommandResultEvent = try decodeAutomationPayload(row)
+            guard event.eventID.canonicalString == (row["event_id"] as String),
+                  event.commandID.canonicalString == (row["command_id"] as String),
+                  event.outcome.rawValue == (row["outcome"] as String),
+                  event.safeCode == (row["safe_code"] as String),
+                  event.occurredAt.millisecondsSinceUnixEpoch
+                    == (row["occurred_at_ms"] as Int64)
+            else {
+                throw WorkspaceContractError.recoveryArtifactInvalid(
+                    "An automation result event failed indexed-payload validation."
+                )
+            }
+        }
+
+        let settingsRows = try Row.fetchAll(
+            db,
+            sql: "SELECT * FROM automation_settings_events ORDER BY replacement_version"
+        )
+        var expectedPrior = VersionedAutomationSettings.compiledDefault
+        for row in settingsRows {
+            let event: AutomationSettingsEvent = try decodeAutomationPayload(row)
+            let expectedCommandName = event.rollbackOfCommandID == nil
+                ? AutomationCommandName.updateSettings.rawValue
+                : AutomationCommandName.rollbackSettings.rawValue
+            let expectedOutcome = event.rollbackOfCommandID == nil
+                ? AutomationCommandOutcome.completed.rawValue
+                : AutomationCommandOutcome.rolledBack.rawValue
+            let commandName = try String.fetchOne(
+                db,
+                sql: "SELECT command_name FROM automation_command_records WHERE command_id = ?",
+                arguments: [event.commandID.canonicalString]
+            )
+            let resultRow = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT outcome, prior_settings_version, replacement_settings_version,
+                       rollback_of_command_id
+                FROM automation_command_result_events WHERE command_id = ?
+                """,
+                arguments: [event.commandID.canonicalString]
+            )
+            guard event.eventID.canonicalString == (row["event_id"] as String),
+                  event.commandID.canonicalString == (row["command_id"] as String),
+                  event.prior == expectedPrior,
+                  Int64(event.prior.version) == (row["prior_version"] as Int64),
+                  Int64(event.replacement.version)
+                    == (row["replacement_version"] as Int64),
+                  event.occurredAt.millisecondsSinceUnixEpoch
+                    == (row["occurred_at_ms"] as Int64),
+                  commandName == expectedCommandName,
+                  (resultRow?["outcome"] as String?) == expectedOutcome,
+                  (resultRow?["prior_settings_version"] as Int64?)
+                    == Int64(event.prior.version),
+                  (resultRow?["replacement_settings_version"] as Int64?)
+                    == Int64(event.replacement.version),
+                  (resultRow?["rollback_of_command_id"] as String?)
+                    == event.rollbackOfCommandID?.canonicalString
+            else {
+                throw WorkspaceContractError.recoveryArtifactInvalid(
+                    "The automation settings event chain is inconsistent."
+                )
+            }
+            expectedPrior = event.replacement
+        }
+
+        let stateRow = try Row.fetchOne(
+            db,
+            sql: "SELECT * FROM automation_settings_state WHERE singleton = 1"
+        )
+        if let stateRow {
+            let state: VersionedAutomationSettings = try decodeAutomationPayload(stateRow)
+            guard !settingsRows.isEmpty,
+                  state == expectedPrior,
+                  Int64(state.version) == (stateRow["version"] as Int64),
+                  Int64(state.values.statusListLimit)
+                    == (stateRow["status_list_limit"] as Int64),
+                  state.updatedByCommandID?.canonicalString
+                    == (stateRow["updated_by_command_id"] as String?),
+                  state.updatedAt?.millisecondsSinceUnixEpoch
+                    == (stateRow["updated_at_ms"] as Int64?)
+            else {
+                throw WorkspaceContractError.recoveryArtifactInvalid(
+                    "The current automation settings projection is inconsistent."
+                )
+            }
+        } else if !settingsRows.isEmpty {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "Automation settings history has no current projection."
+            )
+        }
+    }
+
+    private func decodeAutomationPayload<Value: Codable>(_ row: Row) throws -> Value {
+        let payload: Data = row["canonical_payload"]
+        let digest: String = row["payload_sha256"]
+        let byteSize: Int = row["payload_byte_size"]
+        guard payload.count == byteSize,
+              SQLitePayloadCodec.sha256(payload) == digest
+        else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "An automation recovery payload failed its digest."
+            )
+        }
+        let value = try JSONDecoder().decode(Value.self, from: payload)
+        guard try SQLitePayloadCodec.canonicalData(value) == payload else {
+            throw WorkspaceContractError.recoveryArtifactInvalid(
+                "An automation recovery payload is not canonical."
+            )
+        }
+        return value
     }
 
     private func verifySemanticSnapshot(
