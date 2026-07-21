@@ -13,9 +13,9 @@ APP_MACOS="$APP_CONTENTS/MacOS"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST_SOURCE="$ROOT_DIR/Configuration/MeetingBuddy-Info.plist"
 ENTITLEMENTS_SOURCE="$ROOT_DIR/Configuration/MeetingBuddy.entitlements"
+MEETINGBUDDY_SIGN_IDENTITY="${MEETINGBUDDY_SIGN_IDENTITY:--}"
 
 cd "$ROOT_DIR"
-pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
 swift build --configuration debug --product "$APP_NAME" -Xswiftc -warnings-as-errors
 BUILD_DIRECTORY="$(swift build --configuration debug --show-bin-path)"
@@ -26,19 +26,23 @@ BUILD_BINARY="$BUILD_DIRECTORY/$APP_NAME"
 /usr/bin/install -m 0644 "$INFO_PLIST_SOURCE" "$APP_CONTENTS/Info.plist"
 /usr/bin/codesign \
   --force \
-  --sign - \
+  --sign "$MEETINGBUDDY_SIGN_IDENTITY" \
   --entitlements "$ENTITLEMENTS_SOURCE" \
   "$APP_BUNDLE"
 
 open_app() {
+  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
   /usr/bin/open -n "$APP_BUNDLE"
 }
 
 case "$MODE" in
+  --stage-only|stage-only)
+    ;;
   run)
     open_app
     ;;
   --debug|debug)
+    pkill -x "$APP_NAME" >/dev/null 2>&1 || true
     /usr/bin/lldb -- "$APP_BINARY"
     ;;
   --logs|logs)
@@ -56,7 +60,7 @@ case "$MODE" in
     pgrep -x "$APP_NAME" >/dev/null
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
+    echo "usage: $0 [run|--stage-only|--debug|--logs|--telemetry|--verify]" >&2
     exit 2
     ;;
 esac

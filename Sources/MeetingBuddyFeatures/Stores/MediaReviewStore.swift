@@ -21,6 +21,9 @@ public final class MediaReviewStore {
     public private(set) var briefingReview: BriefingReviewBundle?
     public private(set) var lastBriefingExport: BriefingExportRecord?
     public private(set) var storageReport: WorkspaceStorageReport?
+    public private(set) var recordingSetup: RecordingSetupReview?
+    public private(set) var recordingSession: RecordingSessionReview?
+    public private(set) var webMetadataCandidate: UNWebTVMetadataCandidate?
     public private(set) var isWorking = false
     public private(set) var safeErrorMessage: String?
 
@@ -36,11 +39,37 @@ public final class MediaReviewStore {
     public var manualTranslationText = ""
     public var manualCoverageConfirmed = false
     public var briefingExportFileName = "meeting-briefing"
+    public var captureMode: CaptureMode = .microphoneOnly
+    public var selectedMicrophoneDeviceID: String?
+    public var microphoneSpeechSourceKind: SpeechSourceKind = .originalSpeakerAudio
+    public var applicationSpeechSourceKind: SpeechSourceKind = .originalSpeakerAudio
+    public var recordingAcknowledged = false
+    public var unWebTVURL = ""
+    public var unWebTVNetworkAuthorized = false
+    public var reviewedUNTitle = ""
+    public var reviewedUNDescription = ""
+    public var reviewedUNProductionDate = ""
+    public var reviewedUNLanguageAvailability = ""
 
     @ObservationIgnored
     private let workflow: any MediaReviewWorkflow
     @ObservationIgnored
     private var pollingTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var recordingPollingTask: Task<Void, Never>?
+
+    public var blocksWorkspaceSwitch: Bool {
+        recordingSession?.blocksWorkspaceSwitch == true
+    }
+
+    public var recordingIndicatorIsVisible: Bool {
+        guard let recordingSession else { return false }
+        return !recordingSession.state.isTerminal
+    }
+
+    public var validatedUNWebTVURL: URL? {
+        try? ValidatedUNWebTVAssetURL(unWebTVURL).url
+    }
 
     public init(workflow: any MediaReviewWorkflow) {
         self.workflow = workflow
@@ -49,14 +78,30 @@ public final class MediaReviewStore {
     public func restoreWorkspace() async {
         await perform {
             workspace = try await workflow.restoreWorkspace()
+            if workspace != nil {
+                let setup = try await workflow.recordingSetup()
+                recordingSetup = setup
+                recordingSession = setup.recoverableSession
+                if let session = setup.recoverableSession, !session.state.isTerminal {
+                    beginRecordingPolling(jobID: session.jobID)
+                }
+            }
         }
     }
 
     public func openOrCreateWorkspace(at url: URL) async {
+        guard !blocksWorkspaceSwitch else {
+            safeErrorMessage = "Finish or retain the current recording before switching workspaces."
+            return
+        }
         await perform {
             pollingTask?.cancel()
+            recordingPollingTask?.cancel()
             workspace = try await workflow.openOrCreateWorkspace(at: url)
             resetMediaState()
+            let setup = try await workflow.recordingSetup()
+            recordingSetup = setup
+            recordingSession = setup.recoverableSession
         }
     }
 
@@ -133,6 +178,137 @@ public final class MediaReviewStore {
         await perform {
             self.job = try await workflow.retry(jobID: job.jobID)
             beginPolling(jobID: job.jobID)
+        }
+    }
+
+    public func loadRecordingSetup() async {
+        guard workspace != nil else { return }
+        await perform {
+            let setup = try await workflow.recordingSetup()
+            recordingSetup = setup
+            if let recoverable = setup.recoverableSession {
+                recordingSession = recoverable
+                if !recoverable.state.isTerminal {
+                    beginRecordingPolling(jobID: recoverable.jobID)
+                }
+            }
+            if selectedMicrophoneDeviceID == nil {
+                selectedMicrophoneDeviceID = setup.microphones.first?.id
+            }
+        }
+    }
+
+    public func startRecording() async {
+        let title = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.utf8.count <= 2_048 else {
+            safeErrorMessage = "Enter a meeting title before recording."
+            return
+        }
+        guard recordingAcknowledged else {
+            safeErrorMessage = "A visible recording requires the participant, policy, and legal-responsibility acknowledgement."
+            return
+        }
+        guard recordingSession?.blocksWorkspaceSwitch != true else {
+            safeErrorMessage = "Finish the current recording before starting another one."
+            return
+        }
+        let language: LanguageTag?
+        let trimmedLanguage = languageTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedLanguage.isEmpty {
+            language = nil
+        } else {
+            do {
+                language = try LanguageTag(trimmedLanguage)
+            } catch {
+                safeErrorMessage = "Use a valid language tag such as en, fr, or zh-hans."
+                return
+            }
+        }
+        let microphoneID = captureMode.requestedTrackKinds.contains(.microphone)
+            ? selectedMicrophoneDeviceID : nil
+        guard !captureMode.requestedTrackKinds.contains(.microphone) || microphoneID != nil else {
+            safeErrorMessage = "Select one microphone for this recording session."
+            return
+        }
+        await perform {
+            recordingSession = try await workflow.startRecording(
+                RecordingStartSubmission(
+                    meetingTitle: title,
+                    dataClassification: dataClassification,
+                    mode: captureMode,
+                    microphoneDeviceID: microphoneID,
+                    microphoneSpeechSourceKind: microphoneSpeechSourceKind,
+                    applicationSpeechSourceKind: applicationSpeechSourceKind,
+                    language: language,
+                    directUserAcknowledgement: true
+                )
+            )
+            if let recordingSession {
+                beginRecordingPolling(jobID: recordingSession.jobID)
+            }
+        }
+    }
+
+    public func stopRecording() async {
+        guard let recordingSession, recordingSession.canStop else { return }
+        await perform {
+            self.recordingSession = try await workflow.stopRecording(
+                jobID: recordingSession.jobID
+            )
+            recordingPollingTask?.cancel()
+        }
+    }
+
+    public func resumeRecording() async {
+        guard let recordingSession,
+              recordingSession.state == .interrupted || recordingSession.state == .recovering
+        else { return }
+        guard recordingAcknowledged else {
+            safeErrorMessage = "Resuming requires a fresh visible recording acknowledgement and source selection."
+            return
+        }
+        let microphoneID = recordingSession.activeTrackKinds.contains(.microphone)
+            ? selectedMicrophoneDeviceID : nil
+        guard !recordingSession.activeTrackKinds.contains(.microphone) || microphoneID != nil else {
+            safeErrorMessage = "Select one microphone before resuming this recording."
+            return
+        }
+        await perform {
+            self.recordingSession = try await workflow.resumeRecording(
+                jobID: recordingSession.jobID,
+                submission: RecordingResumeSubmission(
+                    microphoneDeviceID: microphoneID,
+                    directUserAcknowledgement: true
+                )
+            )
+            beginRecordingPolling(jobID: recordingSession.jobID)
+        }
+    }
+
+    public func fetchUNWebTVMetadata() async {
+        let value = unWebTVURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (try? ValidatedUNWebTVAssetURL(value)) != nil else {
+            safeErrorMessage = "Use an exact official UN Web TV asset URL such as https://webtv.un.org/en/asset/abc/asset-id."
+            return
+        }
+        guard unWebTVNetworkAuthorized else {
+            safeErrorMessage = "Authorize this one foreground official-page metadata request."
+            return
+        }
+        await perform {
+            let candidate = try await workflow.fetchUNWebTVMetadata(
+                url: value,
+                explicitNetworkAuthorization: true
+            )
+            webMetadataCandidate = candidate
+            reviewedUNTitle = firstMetadataValue(.title, in: candidate)
+            reviewedUNDescription = firstMetadataValue(.description, in: candidate)
+            reviewedUNProductionDate = firstMetadataValue(.productionDate, in: candidate)
+            reviewedUNLanguageAvailability = firstMetadataValue(
+                .languageAvailability,
+                in: candidate
+            )
+            unWebTVNetworkAuthorized = false
         }
     }
 
@@ -499,6 +675,15 @@ public final class MediaReviewStore {
         briefingReview = nil
         lastBriefingExport = nil
         storageReport = nil
+        recordingSetup = nil
+        recordingSession = nil
+        webMetadataCandidate = nil
+        recordingAcknowledged = false
+        unWebTVNetworkAuthorized = false
+        reviewedUNTitle = ""
+        reviewedUNDescription = ""
+        reviewedUNProductionDate = ""
+        reviewedUNLanguageAvailability = ""
         manualCoverageConfirmed = false
         selectedTrack = nil
         safeErrorMessage = nil
@@ -518,6 +703,24 @@ public final class MediaReviewStore {
                     return
                 }
                 try? await Task.sleep(for: .milliseconds(400))
+            }
+        }
+    }
+
+    private func beginRecordingPolling(jobID: JobID) {
+        recordingPollingTask?.cancel()
+        recordingPollingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                do {
+                    let current = try await workflow.recordingReview(jobID: jobID)
+                    recordingSession = current
+                    if current.state.isTerminal { return }
+                } catch {
+                    safeErrorMessage = "Recording status is temporarily unavailable; sealed local audio remains retained."
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(250))
             }
         }
     }
@@ -603,6 +806,13 @@ public final class MediaReviewStore {
         }.filter { !$0.isEmpty && $0.utf8.count <= 16_384 }
         guard Set(cleaned).count == cleaned.count else { return [] }
         return cleaned
+    }
+
+    private func firstMetadataValue(
+        _ field: UNWebTVMetadataField,
+        in candidate: UNWebTVMetadataCandidate
+    ) -> String {
+        candidate.fields.first(where: { $0.field == field })?.value ?? ""
     }
 
     private func transcriptSubmission() -> TranscriptStartSubmission? {

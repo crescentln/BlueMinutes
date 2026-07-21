@@ -5,13 +5,14 @@ import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 enum SQLiteSchema {
-    static let currentVersion: UInt32 = 6
+    static let currentVersion: UInt32 = 7
     static let initialMigrationIdentifier = "001_initial_persistence"
     static let taskRuntimeMigrationIdentifier = "002_task_runtime"
     static let transcriptCoverageMigrationIdentifier = "003_transcript_coverage"
     static let analysisMigrationIdentifier = "004_analysis_intelligence"
     static let briefingMigrationIdentifier = "005_briefing_foundation"
     static let hardeningMigrationIdentifier = "006_security_storage_hardening"
+    static let recordingCaptureMigrationIdentifier = "007_recording_capture_foundation"
     static let maximumSemanticPayloadBytes = 16 * 1_024 * 1_024
     static let maximumJobPayloadBytes = 1 * 1_024 * 1_024
 
@@ -1812,6 +1813,279 @@ enum SQLiteSchema {
     BEGIN SELECT RAISE(ABORT, 'managed asset purge receipts are immutable'); END;
     """
 
+    static let recordingCaptureSchemaSQL = """
+    CREATE TABLE recording_sessions (
+        session_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(session_id) = 36 AND lower(session_id) = session_id
+        ),
+        job_id TEXT NOT NULL UNIQUE CHECK (
+            length(job_id) = 36 AND lower(job_id) = job_id
+        ),
+        meeting_id TEXT NOT NULL CHECK (
+            length(meeting_id) = 36 AND lower(meeting_id) = meeting_id
+        ),
+        intent_format_version INTEGER NOT NULL CHECK (intent_format_version = 1),
+        capture_mode TEXT NOT NULL CHECK (capture_mode IN (
+            'microphone_only', 'application_audio_only',
+            'microphone_and_application_audio'
+        )),
+        requested_track_count INTEGER NOT NULL CHECK (requested_track_count IN (1, 2)),
+        sensitivity_label_revision_id TEXT NOT NULL CHECK (
+            length(sensitivity_label_revision_id) = 36
+                AND lower(sensitivity_label_revision_id) = sensitivity_label_revision_id
+        ),
+        access_policy_revision_id TEXT NOT NULL CHECK (
+            length(access_policy_revision_id) = 36
+                AND lower(access_policy_revision_id) = access_policy_revision_id
+        ),
+        data_classification TEXT NOT NULL CHECK (
+            data_classification IN ('public', 'internal', 'sensitive', 'restricted')
+        ),
+        no_outbound_mode INTEGER NOT NULL CHECK (no_outbound_mode IN (0, 1)),
+        authorization_event_id TEXT NOT NULL UNIQUE CHECK (
+            length(authorization_event_id) = 36 AND lower(authorization_event_id) = authorization_event_id
+        ),
+        state TEXT NOT NULL CHECK (state IN (
+            'preparing', 'recording', 'interrupted', 'recovering', 'stopping',
+            'finalizing', 'completed', 'incomplete', 'failed'
+        )),
+        state_version INTEGER NOT NULL CHECK (state_version > 0),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= created_at_ms),
+        terminal_reason TEXT,
+        final_manifest_logical_id TEXT,
+        final_manifest_revision_id TEXT,
+        intent_payload BLOB NOT NULL CHECK (
+            length(intent_payload) BETWEEN 1 AND 65536
+        ),
+        intent_sha256 TEXT NOT NULL CHECK (
+            length(intent_sha256) = 64 AND lower(intent_sha256) = intent_sha256
+        ),
+        CHECK (
+            (state IN ('completed', 'incomplete', 'failed') AND terminal_reason IS NOT NULL)
+            OR (state NOT IN ('completed', 'incomplete', 'failed') AND terminal_reason IS NULL)
+        ),
+        CHECK (
+            (final_manifest_logical_id IS NULL AND final_manifest_revision_id IS NULL)
+            OR (state = 'completed'
+                AND length(final_manifest_logical_id) = 36
+                AND lower(final_manifest_logical_id) = final_manifest_logical_id
+                AND length(final_manifest_revision_id) = 36
+                AND lower(final_manifest_revision_id) = final_manifest_revision_id)
+        )
+    );
+
+    CREATE TABLE recording_state_events (
+        event_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(event_id) = 36 AND lower(event_id) = event_id
+        ),
+        session_id TEXT NOT NULL,
+        prior_state TEXT NOT NULL CHECK (prior_state IN (
+            'preparing', 'recording', 'interrupted', 'recovering', 'stopping',
+            'finalizing', 'completed', 'incomplete', 'failed'
+        )),
+        replacement_state TEXT NOT NULL CHECK (replacement_state IN (
+            'preparing', 'recording', 'interrupted', 'recovering', 'stopping',
+            'finalizing', 'completed', 'incomplete', 'failed'
+        )),
+        prior_version INTEGER NOT NULL CHECK (prior_version > 0),
+        replacement_version INTEGER NOT NULL CHECK (replacement_version = prior_version + 1),
+        reason TEXT NOT NULL,
+        actor TEXT NOT NULL CHECK (actor IN (
+            'user', 'capture_provider', 'persistence_coordinator',
+            'task_manager', 'startup_recovery'
+        )),
+        occurred_at_ms INTEGER NOT NULL CHECK (occurred_at_ms >= 0),
+        event_payload BLOB NOT NULL CHECK (length(event_payload) BETWEEN 1 AND 65536),
+        event_sha256 TEXT NOT NULL CHECK (
+            length(event_sha256) = 64 AND lower(event_sha256) = event_sha256
+        ),
+        UNIQUE (session_id, prior_version),
+        FOREIGN KEY (session_id) REFERENCES recording_sessions(session_id),
+        CHECK (
+            (prior_state = 'preparing' AND replacement_state IN ('recording', 'stopping', 'failed'))
+            OR (prior_state = 'recording' AND replacement_state IN ('interrupted', 'stopping'))
+            OR (prior_state = 'interrupted' AND replacement_state = 'recovering')
+            OR (prior_state = 'recovering' AND replacement_state IN ('recording', 'stopping', 'finalizing'))
+            OR (prior_state = 'stopping' AND replacement_state = 'finalizing')
+            OR (prior_state = 'finalizing' AND replacement_state IN ('completed', 'incomplete', 'failed'))
+        )
+    );
+
+    CREATE TABLE recording_tracks (
+        track_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(track_id) = 36 AND lower(track_id) = track_id
+        ),
+        session_id TEXT NOT NULL,
+        source_kind TEXT NOT NULL CHECK (source_kind IN ('microphone', 'application_audio')),
+        is_required INTEGER NOT NULL CHECK (is_required IN (0, 1)),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        UNIQUE (session_id, source_kind),
+        FOREIGN KEY (session_id) REFERENCES recording_sessions(session_id)
+    );
+
+    CREATE TABLE recording_epochs (
+        epoch_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(epoch_id) = 36 AND lower(epoch_id) = epoch_id
+        ),
+        session_id TEXT NOT NULL,
+        epoch_sequence INTEGER NOT NULL CHECK (epoch_sequence > 0),
+        selected_at_ms INTEGER NOT NULL CHECK (selected_at_ms >= 0),
+        source_count INTEGER NOT NULL CHECK (source_count IN (1, 2)),
+        source_set_digest_sha256 TEXT NOT NULL CHECK (
+            length(source_set_digest_sha256) = 64
+                AND lower(source_set_digest_sha256) = source_set_digest_sha256
+        ),
+        start_host_ns_decimal TEXT NOT NULL CHECK (length(start_host_ns_decimal) BETWEEN 1 AND 20),
+        ended_at_ms INTEGER,
+        end_reason TEXT,
+        epoch_payload BLOB NOT NULL CHECK (length(epoch_payload) BETWEEN 1 AND 65536),
+        epoch_sha256 TEXT NOT NULL CHECK (
+            length(epoch_sha256) = 64 AND lower(epoch_sha256) = epoch_sha256
+        ),
+        UNIQUE (session_id, epoch_sequence),
+        FOREIGN KEY (session_id) REFERENCES recording_sessions(session_id),
+        CHECK (
+            (ended_at_ms IS NULL AND end_reason IS NULL)
+            OR (ended_at_ms >= selected_at_ms AND end_reason IS NOT NULL)
+        )
+    );
+
+    CREATE TABLE recording_segments (
+        segment_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(segment_id) = 36 AND lower(segment_id) = segment_id
+        ),
+        session_id TEXT NOT NULL,
+        epoch_id TEXT NOT NULL,
+        track_id TEXT NOT NULL,
+        segment_sequence INTEGER NOT NULL CHECK (segment_sequence > 0),
+        media_start_ns_decimal TEXT NOT NULL CHECK (length(media_start_ns_decimal) BETWEEN 1 AND 20),
+        media_end_ns_decimal TEXT NOT NULL CHECK (length(media_end_ns_decimal) BETWEEN 1 AND 20),
+        host_start_ns_decimal TEXT NOT NULL CHECK (length(host_start_ns_decimal) BETWEEN 1 AND 20),
+        host_end_ns_decimal TEXT NOT NULL CHECK (length(host_end_ns_decimal) BETWEEN 1 AND 20),
+        frame_count_decimal TEXT NOT NULL CHECK (length(frame_count_decimal) BETWEEN 1 AND 20),
+        storage_object_id TEXT NOT NULL UNIQUE,
+        content_hash_sha256 TEXT NOT NULL CHECK (
+            length(content_hash_sha256) = 64 AND lower(content_hash_sha256) = content_hash_sha256
+        ),
+        byte_size_decimal TEXT NOT NULL CHECK (length(byte_size_decimal) BETWEEN 1 AND 20),
+        rolling_descriptor_sha256 TEXT NOT NULL CHECK (
+            length(rolling_descriptor_sha256) = 64
+                AND lower(rolling_descriptor_sha256) = rolling_descriptor_sha256
+        ),
+        sealed_at_ms INTEGER NOT NULL CHECK (sealed_at_ms >= 0),
+        checkpoint_committed_at_ms INTEGER NOT NULL CHECK (checkpoint_committed_at_ms >= sealed_at_ms),
+        segment_payload BLOB NOT NULL CHECK (length(segment_payload) BETWEEN 1 AND 65536),
+        segment_sha256 TEXT NOT NULL CHECK (
+            length(segment_sha256) = 64 AND lower(segment_sha256) = segment_sha256
+        ),
+        UNIQUE (track_id, epoch_id, segment_sequence),
+        FOREIGN KEY (session_id) REFERENCES recording_sessions(session_id),
+        FOREIGN KEY (epoch_id) REFERENCES recording_epochs(epoch_id),
+        FOREIGN KEY (track_id) REFERENCES recording_tracks(track_id),
+        FOREIGN KEY (storage_object_id) REFERENCES managed_assets(storage_object_id)
+    );
+
+    CREATE TABLE recording_gaps (
+        gap_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(gap_id) = 36 AND lower(gap_id) = gap_id
+        ),
+        session_id TEXT NOT NULL,
+        epoch_id TEXT,
+        track_id TEXT NOT NULL,
+        media_start_ns_decimal TEXT,
+        media_end_ns_decimal TEXT,
+        host_start_ns_decimal TEXT,
+        host_end_ns_decimal TEXT,
+        reason TEXT NOT NULL,
+        detected_by TEXT NOT NULL CHECK (detected_by IN (
+            'user', 'capture_provider', 'persistence_coordinator',
+            'task_manager', 'startup_recovery'
+        )),
+        detected_at_ms INTEGER NOT NULL CHECK (detected_at_ms >= 0),
+        user_acknowledged_at_ms INTEGER CHECK (user_acknowledged_at_ms >= detected_at_ms),
+        gap_payload BLOB NOT NULL CHECK (length(gap_payload) BETWEEN 1 AND 65536),
+        gap_sha256 TEXT NOT NULL CHECK (
+            length(gap_sha256) = 64 AND lower(gap_sha256) = gap_sha256
+        ),
+        FOREIGN KEY (session_id) REFERENCES recording_sessions(session_id),
+        FOREIGN KEY (epoch_id) REFERENCES recording_epochs(epoch_id),
+        FOREIGN KEY (track_id) REFERENCES recording_tracks(track_id),
+        CHECK (
+            (media_start_ns_decimal IS NULL AND media_end_ns_decimal IS NULL)
+            OR (media_start_ns_decimal IS NOT NULL AND media_end_ns_decimal IS NOT NULL)
+        ),
+        CHECK (
+            (host_start_ns_decimal IS NULL AND host_end_ns_decimal IS NULL)
+            OR (host_start_ns_decimal IS NOT NULL AND host_end_ns_decimal IS NOT NULL)
+        )
+    );
+
+    CREATE TABLE recording_checkpoints (
+        checkpoint_id TEXT PRIMARY KEY NOT NULL CHECK (
+            length(checkpoint_id) = 36 AND lower(checkpoint_id) = checkpoint_id
+        ),
+        session_id TEXT NOT NULL,
+        state_version INTEGER NOT NULL CHECK (state_version > 0),
+        format_identifier TEXT NOT NULL CHECK (
+            format_identifier = 'meetingbuddy.recording-checkpoint.v1'
+        ),
+        format_version INTEGER NOT NULL CHECK (format_version = 1),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        checkpoint_payload BLOB NOT NULL CHECK (length(checkpoint_payload) BETWEEN 1 AND 65536),
+        checkpoint_sha256 TEXT NOT NULL CHECK (
+            length(checkpoint_sha256) = 64 AND lower(checkpoint_sha256) = checkpoint_sha256
+        ),
+        UNIQUE (session_id, checkpoint_sha256),
+        FOREIGN KEY (session_id) REFERENCES recording_sessions(session_id)
+    );
+
+    CREATE INDEX recording_sessions_by_state ON recording_sessions(state, updated_at_ms);
+    CREATE INDEX recording_segments_by_session_track
+        ON recording_segments(session_id, track_id, segment_sequence);
+    CREATE INDEX recording_gaps_by_session_track
+        ON recording_gaps(session_id, track_id, detected_at_ms);
+    CREATE INDEX recording_checkpoints_by_session
+        ON recording_checkpoints(session_id, created_at_ms, checkpoint_id);
+
+    CREATE TRIGGER recording_state_events_no_update
+    BEFORE UPDATE ON recording_state_events
+    BEGIN SELECT RAISE(ABORT, 'recording state events are immutable'); END;
+    CREATE TRIGGER recording_state_events_no_delete
+    BEFORE DELETE ON recording_state_events
+    BEGIN SELECT RAISE(ABORT, 'recording state events are immutable'); END;
+    CREATE TRIGGER recording_tracks_no_update
+    BEFORE UPDATE ON recording_tracks
+    BEGIN SELECT RAISE(ABORT, 'recording tracks are immutable'); END;
+    CREATE TRIGGER recording_tracks_no_delete
+    BEFORE DELETE ON recording_tracks
+    BEGIN SELECT RAISE(ABORT, 'recording tracks are immutable'); END;
+    CREATE TRIGGER recording_epochs_no_update
+    BEFORE UPDATE ON recording_epochs
+    BEGIN SELECT RAISE(ABORT, 'recording epochs are immutable'); END;
+    CREATE TRIGGER recording_epochs_no_delete
+    BEFORE DELETE ON recording_epochs
+    BEGIN SELECT RAISE(ABORT, 'recording epochs are immutable'); END;
+    CREATE TRIGGER recording_segments_no_update
+    BEFORE UPDATE ON recording_segments
+    BEGIN SELECT RAISE(ABORT, 'recording segments are immutable'); END;
+    CREATE TRIGGER recording_segments_no_delete
+    BEFORE DELETE ON recording_segments
+    BEGIN SELECT RAISE(ABORT, 'recording segments are immutable'); END;
+    CREATE TRIGGER recording_gaps_no_update
+    BEFORE UPDATE ON recording_gaps
+    BEGIN SELECT RAISE(ABORT, 'recording gaps are immutable'); END;
+    CREATE TRIGGER recording_gaps_no_delete
+    BEFORE DELETE ON recording_gaps
+    BEGIN SELECT RAISE(ABORT, 'recording gaps are immutable'); END;
+    CREATE TRIGGER recording_checkpoints_no_update
+    BEFORE UPDATE ON recording_checkpoints
+    BEGIN SELECT RAISE(ABORT, 'recording checkpoints are immutable'); END;
+    CREATE TRIGGER recording_checkpoints_no_delete
+    BEFORE DELETE ON recording_checkpoints
+    BEGIN SELECT RAISE(ABORT, 'recording checkpoints are immutable'); END;
+    """
+
     static var taskRuntimeChecksum: String {
         SHA256.hash(data: Data(taskRuntimeSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
@@ -1838,6 +2112,12 @@ enum SQLiteSchema {
 
     static var hardeningChecksum: String {
         SHA256.hash(data: Data(hardeningSchemaSQL.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static var recordingCaptureChecksum: String {
+        SHA256.hash(data: Data(recordingCaptureSchemaSQL.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
     }
@@ -2117,6 +2397,33 @@ enum SQLiteDatabaseBootstrap {
                 ]
             )
         }
+        migrator.registerMigration(SQLiteSchema.recordingCaptureMigrationIdentifier) { db in
+            try db.execute(sql: SQLiteSchema.recordingCaptureSchemaSQL)
+            try db.execute(
+                sql: """
+                INSERT INTO schema_migrations(
+                    identifier, ordinal, checksum_sha256, applied_at_ms
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    SQLiteSchema.recordingCaptureMigrationIdentifier,
+                    7,
+                    SQLiteSchema.recordingCaptureChecksum,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+            try db.execute(
+                sql: """
+                UPDATE workspace_metadata
+                SET database_schema_version = ?, updated_at_ms = ?
+                WHERE singleton = 1
+                """,
+                arguments: [
+                    7,
+                    migrationTimestamp.millisecondsSinceUnixEpoch
+                ]
+            )
+        }
         for migration in additionalMigrations {
             migrator.registerMigration(migration.identifier, migrate: migration.apply)
         }
@@ -2248,6 +2555,16 @@ enum SQLiteDatabaseBootstrap {
             guard hardeningChecksum == SQLiteSchema.hardeningChecksum else {
                 throw PersistenceContractError.migrationFailed(
                     "The security/storage hardening migration checksum does not match the accepted schema."
+                )
+            }
+            let recordingCaptureChecksum = try String.fetchOne(
+                db,
+                sql: "SELECT checksum_sha256 FROM schema_migrations WHERE identifier = ?",
+                arguments: [SQLiteSchema.recordingCaptureMigrationIdentifier]
+            )
+            guard recordingCaptureChecksum == SQLiteSchema.recordingCaptureChecksum else {
+                throw PersistenceContractError.migrationFailed(
+                    "The recording-capture migration checksum does not match the accepted schema."
                 )
             }
         }

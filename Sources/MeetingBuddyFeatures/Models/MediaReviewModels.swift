@@ -1,11 +1,45 @@
+import MeetingBuddyApplication
 import MeetingBuddyDomain
 
 public enum MediaReviewSection: Hashable, Sendable {
     case intake
+    case recording
+    case webMetadata
     case transcript
     case analysis
     case briefing
     case storage
+}
+
+public struct CaptureModeChoice: Identifiable, Hashable, Sendable {
+    public let value: CaptureMode
+    public let label: String
+    public let detail: String
+    public var id: String { value.rawValue }
+
+    public init(value: CaptureMode, label: String, detail: String) {
+        self.value = value
+        self.label = label
+        self.detail = detail
+    }
+
+    public static let all: [CaptureModeChoice] = [
+        CaptureModeChoice(
+            value: .microphoneOnly,
+            label: "Microphone only",
+            detail: "One explicitly selected microphone track"
+        ),
+        CaptureModeChoice(
+            value: .applicationAudioOnly,
+            label: "One application only",
+            detail: "Audio from exactly one application selected in the system picker"
+        ),
+        CaptureModeChoice(
+            value: .microphoneAndApplicationAudio,
+            label: "Application and microphone",
+            detail: "Two separate synchronized tracks; no authoritative mix"
+        )
+    ]
 }
 
 public struct ClassificationChoice: Identifiable, Hashable, Sendable {

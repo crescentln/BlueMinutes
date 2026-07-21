@@ -24,6 +24,10 @@
     <string>15.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MeetingBuddy records audio only from the microphone you choose for a visible local meeting recording.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>MeetingBuddy records audio only from the application you choose in the system picker for a visible local meeting recording.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

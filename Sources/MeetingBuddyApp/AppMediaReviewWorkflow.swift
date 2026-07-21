@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import MeetingBuddyAI
 import MeetingBuddyApplication
@@ -21,6 +22,10 @@ enum AppWorkflowError: LocalizedError {
     case transcriptUnavailable
     case analysisUnavailable
     case briefingUnavailable
+    case recordingInProgress
+    case recordingUnavailable
+    case recordingAuthorizationRequired
+    case webMetadataUnavailable
     case reviewFailed
 
     var errorDescription: String? {
@@ -53,6 +58,14 @@ enum AppWorkflowError: LocalizedError {
             "Analysis requires a complete reviewed transcript with exactly one resolved speaker and capacity for every segment."
         case .briefingUnavailable:
             "A current, fully validated analysis is required before creating or changing the briefing."
+        case .recordingInProgress:
+            "Finish or retain the current recording before switching workspaces."
+        case .recordingUnavailable:
+            "The recording session is unavailable or cannot be changed safely."
+        case .recordingAuthorizationRequired:
+            "Recording requires a direct visible acknowledgement and explicit source selection."
+        case .webMetadataUnavailable:
+            "The official UN Web TV page metadata could not be read safely. Open the page and enter metadata manually."
         case .reviewFailed:
             "The review change failed without replacing accepted content."
         }
@@ -71,10 +84,16 @@ private final class WorkspaceRuntime: @unchecked Sendable {
     let manager: LocalTaskManager
     let telemetry: LocalTelemetryBuffer
     let storageReporter: LocalWorkspaceStorageReporter
+    let recordingFileStore: LocalRecordingFileStore
+    let recordingRecovery: LocalRecordingRecoveryService
+    let captureProvider: MacOSAudioCaptureProvider
+    let captureRegistry: TransientRecordingCaptureRegistry
+    let metadataSource: URLSessionUNWebTVMetadataSource
     let transcriptionProvider: (any TranscriptionProvider)?
     let translationProvider: (any TranslationProvider)?
     let analysisProvider: (any AnalysisProvider)?
     let briefingProvider: (any BriefingSectionProvider)?
+    private(set) var mostRecentRecoveredRecordingSession: RecordingSessionSnapshot? = nil
 
     init(descriptor: LocalWorkspaceDescriptor) throws {
         self.descriptor = descriptor
@@ -95,6 +114,14 @@ private final class WorkspaceRuntime: @unchecked Sendable {
             workspace: descriptor,
             store: store
         )
+        recordingFileStore = LocalRecordingFileStore(workspace: descriptor)
+        recordingRecovery = LocalRecordingRecoveryService(
+            repository: store,
+            fileStore: recordingFileStore
+        )
+        captureProvider = MacOSAudioCaptureProvider()
+        captureRegistry = TransientRecordingCaptureRegistry()
+        metadataSource = URLSessionUNWebTVMetadataSource()
         let intakeExecutor = LocalMediaIntakeJobExecutor(
             intake: intake,
             sources: transientSources
@@ -105,7 +132,20 @@ private final class WorkspaceRuntime: @unchecked Sendable {
             catalog: store,
             fileAccess: fileAccess
         )
-        var executors: [any TaskJobExecutor] = [intakeExecutor, canonicalExecutor]
+        let recordingExecutor = RecordingCaptureJobExecutor(
+            repository: store,
+            fileStore: recordingFileStore,
+            assetStorage: coordinator,
+            assetCatalog: store,
+            assetFileAccess: fileAccess,
+            registry: captureRegistry,
+            recovery: recordingRecovery
+        )
+        var executors: [any TaskJobExecutor] = [
+            intakeExecutor,
+            canonicalExecutor,
+            recordingExecutor
+        ]
         if #available(macOS 26.0, *) {
             let speech = AppleOnDeviceTranscriptionProvider()
             let translation = AppleOnDeviceTranslationProvider()
@@ -161,6 +201,8 @@ private final class WorkspaceRuntime: @unchecked Sendable {
     }
 
     func recover() async throws {
+        let recordingOutcomes = try await recordingRecovery.recoverNonterminalSessions()
+        mostRecentRecoveredRecordingSession = recordingOutcomes.last?.snapshot
         let report = try await manager.recoverAtStartup(
             policy: StartupRecoveryPolicy()
         )
@@ -219,6 +261,9 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
     }
 
     func openOrCreateWorkspace(at selectedDirectory: URL) async throws -> WorkspaceReview {
+        if let runtime, !(try await runtime.store.nonterminalSessions()).isEmpty {
+            throw AppWorkflowError.recordingInProgress
+        }
         let authorizedURL = try workspaceSecurityScope.activate(selectedDirectory)
         do {
             let descriptor: LocalWorkspaceDescriptor
@@ -967,6 +1012,541 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             authorization: authorization
         )
         return try await storageReport()
+    }
+
+    func recordingSetup() async throws -> RecordingSetupReview {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let sessions = try await runtime.store.nonterminalSessions()
+        guard sessions.count <= 1 else { throw AppWorkflowError.workspaceHealthFailed }
+        let recoveredSession: RecordingSessionSnapshot?
+        if let recovered = runtime.mostRecentRecoveredRecordingSession {
+            recoveredSession = try await runtime.store.session(recovered.intent.sessionID)
+        } else {
+            recoveredSession = nil
+        }
+        let visibleSession = sessions.first ?? recoveredSession
+        let recoverable: RecordingSessionReview?
+        if let session = visibleSession {
+            recoverable = try await recordingReview(snapshot: session, runtime: runtime)
+        } else {
+            recoverable = nil
+        }
+        return RecordingSetupReview(
+            capability: await runtime.captureProvider.snapshot(),
+            microphones: try await runtime.captureProvider.microphones(),
+            recoverableSession: recoverable
+        )
+    }
+
+    func startRecording(
+        _ submission: RecordingStartSubmission
+    ) async throws -> RecordingSessionReview {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        guard submission.directUserAcknowledgement else {
+            throw AppWorkflowError.recordingAuthorizationRequired
+        }
+        guard try await runtime.store.nonterminalSessions().isEmpty else {
+            throw AppWorkflowError.recordingInProgress
+        }
+        let title = submission.meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.utf8.count <= 2_048 else {
+            throw AppWorkflowError.recordingAuthorizationRequired
+        }
+
+        let capability = await runtime.captureProvider.snapshot()
+        if submission.mode.requestedTrackKinds.contains(.applicationAudio) {
+            guard capability.applicationAudioAvailable, capability.systemPickerAvailable else {
+                throw AppWorkflowError.recordingUnavailable
+            }
+        }
+        let microphone: CaptureMicrophoneChoice?
+        if submission.mode.requestedTrackKinds.contains(.microphone) {
+            guard let microphoneID = submission.microphoneDeviceID,
+                  let selected = try await runtime.captureProvider.microphones().first(where: {
+                      $0.id == microphoneID
+                  })
+            else { throw AppWorkflowError.recordingAuthorizationRequired }
+            microphone = selected
+        } else {
+            guard submission.microphoneDeviceID == nil else {
+                throw AppWorkflowError.recordingAuthorizationRequired
+            }
+            microphone = nil
+        }
+
+        let sessionID = RecordingSessionID(UUID())
+        let jobID = JobID(UUID())
+        let epochID = RecordingEpochID(UUID())
+        var trackRequests: [RecordingTrackRequest] = []
+        if submission.mode.requestedTrackKinds.contains(.microphone) {
+            trackRequests.append(
+                try RecordingTrackRequest(
+                    kind: .microphone,
+                    speechSourceKind: submission.microphoneSpeechSourceKind,
+                    language: submission.language
+                )
+            )
+        }
+        if submission.mode.requestedTrackKinds.contains(.applicationAudio) {
+            trackRequests.append(
+                try RecordingTrackRequest(
+                    kind: .applicationAudio,
+                    speechSourceKind: submission.applicationSpeechSourceKind,
+                    language: submission.language
+                )
+            )
+        }
+
+        let selection = try await runtime.captureProvider.requestSelection(
+            CaptureSelectionRequest(
+                sessionID: sessionID,
+                epochID: epochID,
+                mode: submission.mode,
+                microphoneDeviceID: microphone?.id
+            )
+        )
+        let applicationFormat = try CaptureAudioFormat(
+            sampleRateHertz: 48_000,
+            channelCount: 2,
+            channelLayout: "interleaved-pcm-s16le",
+            formatRevision: 1
+        )
+        let epochSources = try trackRequests.map { request -> RecordingEpochSource in
+            switch request.kind {
+            case .microphone:
+                guard let microphone else {
+                    throw AppWorkflowError.recordingAuthorizationRequired
+                }
+                return try RecordingEpochSource(
+                    trackID: request.trackID,
+                    kind: request.kind,
+                    sessionScopedDeviceToken: sessionScopedSourceToken(
+                        sessionID: sessionID,
+                        sourceClass: "microphone",
+                        platformIdentifier: microphone.id,
+                        selectedAt: selection.selectedAt,
+                        format: microphone.audioFormat
+                    ),
+                    audioFormat: microphone.audioFormat
+                )
+            case .applicationAudio:
+                guard let token = selection.applicationSourceToken else {
+                    throw AppWorkflowError.recordingAuthorizationRequired
+                }
+                return try RecordingEpochSource(
+                    trackID: request.trackID,
+                    kind: request.kind,
+                    sessionScopedDeviceToken: token,
+                    audioFormat: applicationFormat
+                )
+            }
+        }
+        let epoch = try RecordingEpoch(
+            epochID: epochID,
+            sessionID: sessionID,
+            sequence: 1,
+            selectedAt: selection.selectedAt,
+            sources: epochSources,
+            sourceSetDigest: try sourceSetDigest(epochSources),
+            startHostNanoseconds: DispatchTime.now().uptimeNanoseconds
+        )
+
+        let createdAt = try currentInstant()
+        let meeting = try meetingProfile(
+            title: title,
+            classification: submission.dataClassification,
+            language: submission.language,
+            workspaceID: runtime.descriptor.manifest.workspaceID,
+            createdAt: createdAt
+        )
+        let policy = try persistMeetingAndDefaultPolicy(
+            meeting,
+            createdAt: createdAt,
+            runtime: runtime
+        )
+        let policySnapshot = try RecordingPolicySnapshot(
+            sensitivityLabelRevision: semanticReference(policy.sensitivityLabel),
+            accessPolicyRevision: semanticReference(policy.accessPolicy),
+            dataClassification: policy.accessPolicy.effectiveClassification,
+            localProcessingAllowed: policy.accessPolicy.localProcessingAllowed,
+            noOutboundMode: policy.accessPolicy.noOutboundMode
+        )
+        let intent = try RecordingIntent(
+            sessionID: sessionID,
+            jobID: jobID,
+            meetingID: meeting.meetingID,
+            mode: submission.mode,
+            requestedTracks: trackRequests,
+            policy: policySnapshot,
+            authorization: RecordingAuthorizationEvent(
+                occurredAt: selection.selectedAt,
+                directUserAction: true,
+                visibleRecordingAcknowledged: true,
+                participantAndPolicyResponsibilityAcknowledged: true
+            ),
+            diskBudgetBytes: 8 * 1_024 * 1_024 * 1_024,
+            createdAt: createdAt
+        )
+        let plan = try RecordingCaptureJobPlan(intent: intent, initialEpoch: epoch)
+        let initial = try await runtime.store.createIntent(intent)
+        try await runtime.store.registerEpoch(epoch)
+
+        let prepared: PreparedCapture
+        do {
+            prepared = try await runtime.captureProvider.prepare(
+                PreparedCaptureRequest(
+                    authorization: selection,
+                    tracks: trackRequests
+                )
+            )
+        } catch {
+            let failureReason: RecordingTransitionReason
+            if case CaptureProviderError.permissionDenied = error {
+                failureReason = .permissionDenied
+            } else {
+                failureReason = .sourceUnavailable
+            }
+            _ = try? await runtime.store.transition(
+                RecordingTransition(
+                    sessionID: sessionID,
+                    expectedStateVersion: initial.stateVersion,
+                    from: .preparing,
+                    to: .failed,
+                    reason: failureReason,
+                    actor: .captureProvider,
+                    occurredAt: try currentInstant()
+                )
+            )
+            throw error
+        }
+
+        try await runtime.captureRegistry.register(
+            RecordingCaptureExecutionAuthority(
+                preparedCapture: prepared,
+                epoch: epoch,
+                provider: runtime.captureProvider
+            ),
+            for: jobID
+        )
+        do {
+            _ = try await runtime.manager.enqueue(
+                RecordingCaptureJobFactory().request(
+                    plan: plan,
+                    requestedBy: JobRequester("meetingbuddy-app")
+                )
+            )
+        } catch {
+            await runtime.captureRegistry.discard(jobID: jobID)
+            if let snapshot = try? await runtime.store.session(sessionID), snapshot.state == .preparing {
+                _ = try? await runtime.store.transition(
+                    RecordingTransition(
+                        sessionID: sessionID,
+                        expectedStateVersion: snapshot.stateVersion,
+                        from: .preparing,
+                        to: .failed,
+                        reason: .sourceUnavailable,
+                        actor: .taskManager,
+                        occurredAt: try currentInstant()
+                    )
+                )
+            }
+            throw error
+        }
+        return try await recordingReview(jobID: jobID)
+    }
+
+    func recordingReview(jobID: JobID) async throws -> RecordingSessionReview {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        guard let snapshot = try await runtime.store.session(jobID: jobID) else {
+            throw AppWorkflowError.recordingUnavailable
+        }
+        return try await recordingReview(snapshot: snapshot, runtime: runtime)
+    }
+
+    func resumeRecording(
+        jobID: JobID,
+        submission: RecordingResumeSubmission
+    ) async throws -> RecordingSessionReview {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        guard submission.directUserAcknowledgement else {
+            throw AppWorkflowError.recordingAuthorizationRequired
+        }
+        guard let snapshot = try await runtime.store.session(jobID: jobID),
+              snapshot.state == .interrupted || snapshot.state == .recovering,
+              let job = try await runtime.manager.job(id: jobID),
+              job.state == .failed || job.state == .interrupted
+        else {
+            throw AppWorkflowError.recordingUnavailable
+        }
+
+        let mode = snapshot.intent.mode
+        let capability = await runtime.captureProvider.snapshot()
+        if mode.requestedTrackKinds.contains(.applicationAudio) {
+            guard capability.applicationAudioAvailable, capability.systemPickerAvailable else {
+                throw AppWorkflowError.recordingUnavailable
+            }
+        }
+        let microphone: CaptureMicrophoneChoice?
+        if mode.requestedTrackKinds.contains(.microphone) {
+            guard let microphoneID = submission.microphoneDeviceID,
+                  let selected = try await runtime.captureProvider.microphones().first(where: {
+                      $0.id == microphoneID
+                  })
+            else { throw AppWorkflowError.recordingAuthorizationRequired }
+            microphone = selected
+        } else {
+            guard submission.microphoneDeviceID == nil else {
+                throw AppWorkflowError.recordingAuthorizationRequired
+            }
+            microphone = nil
+        }
+
+        let priorEpochs = try await runtime.store.epochs(sessionID: snapshot.intent.sessionID)
+        guard let priorSequence = priorEpochs.map(\.sequence).max(),
+              priorSequence < UInt32.max
+        else { throw AppWorkflowError.recordingUnavailable }
+        let epochID = RecordingEpochID(UUID())
+        let selection = try await runtime.captureProvider.requestSelection(
+            CaptureSelectionRequest(
+                sessionID: snapshot.intent.sessionID,
+                epochID: epochID,
+                mode: mode,
+                microphoneDeviceID: microphone?.id
+            )
+        )
+        let applicationFormat = try CaptureAudioFormat(
+            sampleRateHertz: 48_000,
+            channelCount: 2,
+            channelLayout: "interleaved-pcm-s16le",
+            formatRevision: 1
+        )
+        let epochSources = try snapshot.intent.requestedTracks.map {
+            request -> RecordingEpochSource in
+            switch request.kind {
+            case .microphone:
+                guard let microphone else {
+                    throw AppWorkflowError.recordingAuthorizationRequired
+                }
+                return try RecordingEpochSource(
+                    trackID: request.trackID,
+                    kind: request.kind,
+                    sessionScopedDeviceToken: sessionScopedSourceToken(
+                        sessionID: snapshot.intent.sessionID,
+                        sourceClass: "microphone",
+                        platformIdentifier: microphone.id,
+                        selectedAt: selection.selectedAt,
+                        format: microphone.audioFormat
+                    ),
+                    audioFormat: microphone.audioFormat
+                )
+            case .applicationAudio:
+                guard let token = selection.applicationSourceToken else {
+                    throw AppWorkflowError.recordingAuthorizationRequired
+                }
+                return try RecordingEpochSource(
+                    trackID: request.trackID,
+                    kind: request.kind,
+                    sessionScopedDeviceToken: token,
+                    audioFormat: applicationFormat
+                )
+            }
+        }
+        let epoch = try RecordingEpoch(
+            epochID: epochID,
+            sessionID: snapshot.intent.sessionID,
+            sequence: priorSequence + 1,
+            selectedAt: selection.selectedAt,
+            sources: epochSources,
+            sourceSetDigest: try sourceSetDigest(epochSources),
+            startHostNanoseconds: DispatchTime.now().uptimeNanoseconds
+        )
+        let prepared = try await runtime.captureProvider.prepare(
+            PreparedCaptureRequest(
+                authorization: selection,
+                tracks: snapshot.intent.requestedTracks
+            )
+        )
+
+        if snapshot.state == .interrupted {
+            _ = try await runtime.recordingRecovery.recover(snapshot.intent.sessionID)
+        }
+        try await runtime.captureRegistry.register(
+            RecordingCaptureExecutionAuthority(
+                preparedCapture: prepared,
+                epoch: epoch,
+                provider: runtime.captureProvider
+            ),
+            for: jobID
+        )
+        do {
+            _ = try await runtime.manager.retry(jobID: jobID)
+        } catch {
+            await runtime.captureRegistry.discard(jobID: jobID)
+            throw error
+        }
+        return try await recordingReview(jobID: jobID)
+    }
+
+    func stopRecording(jobID: JobID) async throws -> RecordingSessionReview {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        guard let snapshot = try await runtime.store.session(jobID: jobID) else {
+            throw AppWorkflowError.recordingUnavailable
+        }
+        if snapshot.state.isTerminal {
+            return try await recordingReview(snapshot: snapshot, runtime: runtime)
+        }
+
+        let job = try await runtime.manager.job(id: jobID)
+        if let job, job.state.isActiveExecution || job.state == .queued {
+            _ = try await runtime.manager.cancel(jobID: jobID)
+        } else {
+            let outcome = try await runtime.recordingRecovery.recover(snapshot.intent.sessionID)
+            let coordinator = RecordingPersistenceCoordinator(
+                repository: runtime.store,
+                fileStore: runtime.recordingFileStore,
+                assetStorage: runtime.coordinator,
+                assetCatalog: runtime.store,
+                assetFileAccess: runtime.fileAccess
+            )
+            _ = try await coordinator.restore(
+                outcome: outcome,
+                epochs: try await runtime.store.epochs(sessionID: snapshot.intent.sessionID)
+            )
+            _ = try await coordinator.stop(reason: .recoveredWithoutResume)
+        }
+
+        for _ in 0..<100 {
+            if let current = try await runtime.store.session(jobID: jobID), current.state.isTerminal {
+                return try await recordingReview(snapshot: current, runtime: runtime)
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        throw AppWorkflowError.recordingUnavailable
+    }
+
+    func fetchUNWebTVMetadata(
+        url: String,
+        explicitNetworkAuthorization: Bool
+    ) async throws -> UNWebTVMetadataCandidate {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        do {
+            return try await runtime.metadataSource.metadataCandidate(
+                for: ValidatedUNWebTVAssetURL(url),
+                policy: UNWebTVMetadataRequestPolicy(
+                    directUserAction: explicitNetworkAuthorization,
+                    outboundEnabled: explicitNetworkAuthorization
+                )
+            )
+        } catch {
+            throw AppWorkflowError.webMetadataUnavailable
+        }
+    }
+
+    private func recordingReview(
+        snapshot: RecordingSessionSnapshot,
+        runtime: WorkspaceRuntime
+    ) async throws -> RecordingSessionReview {
+        let checkpoint = try? await runtime.store.latestCheckpoint(
+            sessionID: snapshot.intent.sessionID
+        )
+        let gaps = try await runtime.store.gaps(sessionID: snapshot.intent.sessionID)
+        guard let gapCount = UInt32(exactly: gaps.count) else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+        let safeReason: String?
+        if let reason = snapshot.terminalReason {
+            safeReason = reason.rawValue
+        } else if snapshot.state == .recovering {
+            safeReason = "Recovered sealed audio is retained. Finish to verify an incomplete result."
+        } else if snapshot.state == .interrupted {
+            safeReason = "Capture continuity was interrupted; no source was substituted."
+        } else {
+            safeReason = nil
+        }
+        return RecordingSessionReview(
+            sessionID: snapshot.intent.sessionID,
+            jobID: snapshot.intent.jobID,
+            state: snapshot.state,
+            stateVersion: snapshot.stateVersion,
+            activeTrackKinds: snapshot.intent.requestedTracks.map(\.kind).sorted {
+                $0.rawValue < $1.rawValue
+            },
+            durableThroughNanoseconds: checkpoint?.tracks
+                .map(\.lastCoveredMediaRange.endNanoseconds).max(),
+            knownGapCount: gapCount,
+            safeReason: safeReason
+        )
+    }
+
+    private func persistMeetingAndDefaultPolicy(
+        _ meeting: MeetingProfileV1,
+        createdAt: UTCInstant,
+        runtime: WorkspaceRuntime
+    ) throws -> LocalSecurityPolicyBundle {
+        try runtime.store.insert(meeting)
+        let meetingUUID = try requiredUUID(meeting.meetingID.canonicalString)
+        let policy = try LocalSecurityPolicyFactory().makeDefault(
+            meeting: meeting,
+            sensitivityLabelID: SensitivityLabelID(meetingUUID),
+            sensitivityLabelRevisionID: RevisionID(UUID()),
+            accessPolicyID: AccessPolicyID(meetingUUID),
+            accessPolicyRevisionID: RevisionID(UUID()),
+            createdAt: createdAt
+        )
+        try runtime.store.insert(policy.sensitivityLabel)
+        _ = try runtime.store.activate(
+            ActivePublishedRevisionSelection(
+                logicalID: policy.sensitivityLabel.labelID,
+                revisionID: policy.sensitivityLabel.revision.revisionID
+            ),
+            as: SensitivityLabelV1.self,
+            expectedCurrentRevisionID: nil,
+            markedAt: createdAt
+        )
+        try runtime.store.insert(policy.accessPolicy)
+        _ = try runtime.store.activate(
+            ActivePublishedRevisionSelection(
+                logicalID: policy.accessPolicy.policyID,
+                revisionID: policy.accessPolicy.revision.revisionID
+            ),
+            as: AccessPolicyV1.self,
+            expectedCurrentRevisionID: nil,
+            markedAt: createdAt
+        )
+        return policy
+    }
+
+    private func sessionScopedSourceToken(
+        sessionID: RecordingSessionID,
+        sourceClass: String,
+        platformIdentifier: String,
+        selectedAt: UTCInstant,
+        format: CaptureAudioFormat
+    ) throws -> ContentDigest {
+        let material = [
+            sessionID.canonicalString,
+            sourceClass,
+            platformIdentifier,
+            String(selectedAt.millisecondsSinceUnixEpoch),
+            String(format.sampleRateHertz),
+            String(format.channelCount),
+            format.channelLayout,
+            String(format.formatRevision)
+        ].joined(separator: "|")
+        let digest = SHA256.hash(data: Data(material.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        return try ContentDigest(algorithm: .sha256, lowercaseHex: digest)
+    }
+
+    private func sourceSetDigest(
+        _ sources: [RecordingEpochSource]
+    ) throws -> ContentDigest {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let payload = try encoder.encode(sources.sorted { $0.trackID < $1.trackID })
+        let digest = SHA256.hash(data: payload)
+            .map { String(format: "%02x", $0) }.joined()
+        return try ContentDigest(algorithm: .sha256, lowercaseHex: digest)
     }
 
     private func releasePendingSource() {

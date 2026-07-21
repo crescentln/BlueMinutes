@@ -196,16 +196,24 @@ public struct ManagedAssetRecord: Codable, Hashable, Sendable {
         }
         let original = originalRelativePath ?? relativePath
         let originalComponents = original.rawValue.split(separator: "/", omittingEmptySubsequences: false)
-        guard originalComponents.count == 4,
-              originalComponents[0] == "Meetings",
-              originalComponents[1] == meetingID.canonicalString,
-              originalComponents[2] == "assets"
-        else {
+        let isCanonicalMeetingAsset = originalComponents.count == 4
+            && originalComponents[0] == "Meetings"
+            && originalComponents[1] == meetingID.canonicalString
+            && originalComponents[2] == "assets"
+        let isCanonicalTemporaryRecordingAsset = originalComponents.count == 6
+            && originalComponents[0] == "Meetings"
+            && originalComponents[1] == meetingID.canonicalString
+            && originalComponents[2] == "recordings"
+            && UUID(uuidString: String(originalComponents[3]))
+                .map { $0.uuidString.lowercased() } == String(originalComponents[3])
+            && originalComponents[4] == "segments"
+            && retentionClass == .temporary
+        guard isCanonicalMeetingAsset || isCanonicalTemporaryRecordingAsset else {
             throw WorkspaceContractError.invalidStorageTransition(
-                "A managed asset original path must use its canonical meeting assets directory."
+                "A managed asset original path must use its canonical meeting asset or temporary recording directory."
             )
         }
-        let filename = String(originalComponents[3])
+        let filename = String(originalComponents[isCanonicalMeetingAsset ? 3 : 5])
         let identifier = storageObjectID.canonicalString
         let filenameIsCanonical: Bool
         if filename == identifier {

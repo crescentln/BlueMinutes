@@ -21,7 +21,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.transcriptCoverageMigrationIdentifier,
                 SQLiteSchema.analysisMigrationIdentifier,
                 SQLiteSchema.briefingMigrationIdentifier,
-                SQLiteSchema.hardeningMigrationIdentifier
+                SQLiteSchema.hardeningMigrationIdentifier,
+                SQLiteSchema.recordingCaptureMigrationIdentifier
             ]
         )
         #expect(store.migrationOutcome.rollbackAnchor == nil)
@@ -47,7 +48,10 @@ struct WorkspaceAndMigrationTests {
                 hasActiveBriefing: try db.tableExists("active_briefing_ledgers"),
                 hasBriefingExports: try db.tableExists("briefing_export_records"),
                 hasPurgeOperations: try db.tableExists("managed_asset_purge_operations"),
-                hasPurgeReceipts: try db.tableExists("managed_asset_purge_receipts")
+                hasPurgeReceipts: try db.tableExists("managed_asset_purge_receipts"),
+                hasRecordingSessions: try db.tableExists("recording_sessions"),
+                hasRecordingSegments: try db.tableExists("recording_segments"),
+                hasRecordingCheckpoints: try db.tableExists("recording_checkpoints")
             )
         }
         #expect(databaseFacts.journalMode == "wal")
@@ -69,6 +73,9 @@ struct WorkspaceAndMigrationTests {
         #expect(databaseFacts.hasBriefingExports)
         #expect(databaseFacts.hasPurgeOperations)
         #expect(databaseFacts.hasPurgeReceipts)
+        #expect(databaseFacts.hasRecordingSessions)
+        #expect(databaseFacts.hasRecordingSegments)
+        #expect(databaseFacts.hasRecordingCheckpoints)
 
         let rootMode = try posixMode(at: workspace.root)
         let manifestMode = try posixMode(at: workspace.descriptor.layout.workspaceManifest)
@@ -86,7 +93,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.transcriptCoverageMigrationIdentifier,
                 SQLiteSchema.analysisMigrationIdentifier,
                 SQLiteSchema.briefingMigrationIdentifier,
-                SQLiteSchema.hardeningMigrationIdentifier
+                SQLiteSchema.hardeningMigrationIdentifier,
+                SQLiteSchema.recordingCaptureMigrationIdentifier
             ]
         )
         #expect(reopened.migrationOutcome.rollbackAnchor == nil)
@@ -112,7 +120,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.transcriptCoverageMigrationIdentifier,
                 SQLiteSchema.analysisMigrationIdentifier,
                 SQLiteSchema.briefingMigrationIdentifier,
-                SQLiteSchema.hardeningMigrationIdentifier
+                SQLiteSchema.hardeningMigrationIdentifier,
+                SQLiteSchema.recordingCaptureMigrationIdentifier
             ]
         )
         try migrated.close()
@@ -183,7 +192,8 @@ struct WorkspaceAndMigrationTests {
                 SQLiteSchema.transcriptCoverageMigrationIdentifier,
                 SQLiteSchema.analysisMigrationIdentifier,
                 SQLiteSchema.briefingMigrationIdentifier,
-                SQLiteSchema.hardeningMigrationIdentifier
+                SQLiteSchema.hardeningMigrationIdentifier,
+                SQLiteSchema.recordingCaptureMigrationIdentifier
             ]
         )
         let rollbackAnchor = try #require(migrated.migrationOutcome.rollbackAnchor)
@@ -598,6 +608,117 @@ struct WorkspaceAndMigrationTests {
         #expect(backupFacts.payload == payload)
         #expect(!backupFacts.hasPurgeOperations)
         #expect(backupFacts.quickCheck == "ok")
+        try backup.close()
+    }
+
+    @Test
+    func migratesAcceptedVersionSixWithVerifiedV6RollbackAnchorAndUnchangedPayload() throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "accepted-v6")
+        defer { workspace.cleanup() }
+        let queue = try DatabaseQueue(path: workspace.descriptor.layout.databaseFile.path)
+        let migrator = SQLiteDatabaseBootstrap.makeMigrator(
+            workspaceID: workspace.descriptor.manifest.workspaceID,
+            migrationTimestamp: PersistenceFixtures.createdAt,
+            additionalMigrations: []
+        )
+        try migrator.migrate(queue, upTo: SQLiteSchema.hardeningMigrationIdentifier)
+        let meeting = try PersistenceFixtures.meetingProfile()
+        let payload = try CanonicalJSON.encodeValidated(meeting)
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO semantic_revisions(
+                    object_type, logical_id, revision_id, schema_major, schema_minor,
+                    lifecycle_status, validation_state, created_at_ms, published_at_ms,
+                    supersedes_revision_id, data_classification, semantic_hash_algorithm,
+                    semantic_hash_hex, canonical_payload, payload_sha256, payload_byte_size
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, ?, ?, ?)
+                """,
+                arguments: [
+                    meeting.revision.objectType.encodedValue,
+                    meeting.meetingID.canonicalString,
+                    meeting.revision.revisionID.canonicalString,
+                    Int64(meeting.revision.schemaVersion.major),
+                    Int64(meeting.revision.schemaVersion.minor),
+                    meeting.revision.lifecycleStatus.encodedValue,
+                    meeting.revision.validationState.encodedValue,
+                    meeting.revision.createdAt.millisecondsSinceUnixEpoch,
+                    meeting.revision.dataClassification.encodedValue,
+                    payload,
+                    SQLitePayloadCodec.sha256(payload),
+                    payload.count
+                ]
+            )
+            try db.execute(
+                sql: """
+                INSERT INTO revision_current_state(
+                    object_type, logical_id, revision_id, currency_state, last_stale_at_ms
+                ) VALUES (?, ?, ?, 'current', NULL)
+                """,
+                arguments: [
+                    meeting.revision.objectType.encodedValue,
+                    meeting.meetingID.canonicalString,
+                    meeting.revision.revisionID.canonicalString
+                ]
+            )
+        }
+        try queue.close()
+
+        let migrated = try SQLitePersistenceStore(
+            workspace: workspace.descriptor,
+            migrationTimestamp: PersistenceFixtures.publishedAt
+        )
+        #expect(migrated.migrationOutcome.schemaVersion == 7)
+        let anchor = try #require(migrated.migrationOutcome.rollbackAnchor)
+        #expect(anchor.sourceSchemaVersion == 6)
+        #expect(
+            try migrated.databasePool.read { db in
+                try db.tableExists("recording_sessions")
+                    && db.tableExists("recording_state_events")
+                    && db.tableExists("recording_tracks")
+                    && db.tableExists("recording_epochs")
+                    && db.tableExists("recording_segments")
+                    && db.tableExists("recording_gaps")
+                    && db.tableExists("recording_checkpoints")
+                    && Row.fetchAll(db, sql: "PRAGMA foreign_key_check").isEmpty
+            }
+        )
+        #expect(
+            try migrated.databasePool.read { db in
+                try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM semantic_revisions WHERE revision_id = ?",
+                    arguments: [meeting.revision.revisionID.canonicalString]
+                )
+            } == payload
+        )
+        try migrated.close()
+
+        let backupURL = workspace.root.appendingPathComponent(
+            anchor.artifact.relativePath.rawValue
+        )
+        let backup = try DatabaseQueue(path: backupURL.path)
+        let backupFacts = try backup.read { db in
+            (
+                version: try UInt32.fetchOne(
+                    db,
+                    sql: "SELECT database_schema_version FROM workspace_metadata WHERE singleton = 1"
+                ),
+                payload: try Data.fetchOne(
+                    db,
+                    sql: "SELECT canonical_payload FROM semantic_revisions WHERE revision_id = ?",
+                    arguments: [meeting.revision.revisionID.canonicalString]
+                ),
+                hasRecording: try db.tableExists("recording_sessions"),
+                quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check"),
+                foreignKeyFailures: try Row.fetchAll(db, sql: "PRAGMA foreign_key_check").count
+            )
+        }
+        #expect(backupFacts.version == 6)
+        #expect(backupFacts.payload == payload)
+        #expect(!backupFacts.hasRecording)
+        #expect(backupFacts.quickCheck == "ok")
+        #expect(backupFacts.foreignKeyFailures == 0)
         try backup.close()
     }
 

@@ -25,12 +25,16 @@ public struct MeetingBuddyRootView: View {
                         presentFileImporter(.workspace)
                     }
                     .keyboardShortcut("o", modifiers: .command)
-                    .disabled(store.isWorking)
+                    .disabled(store.isWorking || store.blocksWorkspaceSwitch)
                     .accessibilityHint("Open an existing local workspace or create one in an empty folder.")
                 }
                 Section("Workflow") {
                     Label("Local Media", systemImage: "waveform")
                         .tag(MediaReviewSection.intake)
+                    Label("Record Audio", systemImage: "record.circle")
+                        .tag(MediaReviewSection.recording)
+                    Label("UN Web TV Metadata", systemImage: "link.badge.plus")
+                        .tag(MediaReviewSection.webMetadata)
                     Label("Transcript Review", systemImage: "text.bubble")
                         .tag(MediaReviewSection.transcript)
                         .disabled(store.job?.state != .succeeded)
@@ -47,28 +51,16 @@ public struct MeetingBuddyRootView: View {
             .navigationTitle("MeetingBuddy")
             .listStyle(.sidebar)
         } detail: {
-            Group {
-                if store.workspace == nil {
-                    workspaceOnboarding
-                } else {
-                    switch store.selectedSection ?? .intake {
-                    case .intake:
-                        intakeView
-                    case .transcript:
-                        TranscriptReviewView(store: store)
-                    case .analysis:
-                        AnalysisReviewView(store: store)
-                    case .briefing:
-                        BriefingReviewView(store: store)
-                    case .storage:
-                        StorageDashboardView(store: store) { item in
-                            pendingPermanentDeletion = item
-                        }
-                    }
-                }
-            }
+            detailContent
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle(navigationTitle)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let recording = store.recordingSession,
+                   store.recordingIndicatorIsVisible
+                {
+                    recordingBanner(recording)
+                }
+            }
             .toolbar {
                 if store.isWorking {
                     ProgressView()
@@ -83,6 +75,8 @@ public struct MeetingBuddyRootView: View {
         .onChange(of: store.selectedSection) { _, section in
             Task {
                 switch section {
+                case .recording:
+                    await store.loadRecordingSetup()
                 case .transcript:
                     await store.loadTranscriptReview()
                     await store.refreshTranscriptRoute()
@@ -94,7 +88,7 @@ public struct MeetingBuddyRootView: View {
                     await store.refreshBriefingRoute()
                 case .storage:
                     await store.loadStorageReport()
-                case .intake, nil:
+                case .intake, .webMetadata, nil:
                     break
                 }
             }
@@ -150,6 +144,56 @@ public struct MeetingBuddyRootView: View {
         }
     }
 
+    private func recordingBanner(_ recording: RecordingSessionReview) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(.red)
+                .frame(width: 9, height: 9)
+                .accessibilityHidden(true)
+            Text(recording.state == .recording ? "Recording" : recording.state.rawValue)
+                .font(.callout.weight(.semibold))
+            Button("Stop") {
+                Task { await store.stopRecording() }
+            }
+            .disabled(store.isWorking || !recording.canStop)
+            .accessibilityHint(
+                "Stop packet admission, seal valid audio, and verify the retained result."
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity)
+        .background(.red.opacity(0.12))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Visible recording state: \(recording.state.rawValue)")
+    }
+
+    @ViewBuilder
+    private var detailContent: some View {
+        if store.workspace == nil {
+            workspaceOnboarding
+        } else {
+            switch store.selectedSection ?? .intake {
+            case .intake:
+                intakeView
+            case .recording:
+                RecordingCaptureView(store: store)
+            case .webMetadata:
+                UNWebTVMetadataView(store: store)
+            case .transcript:
+                TranscriptReviewView(store: store)
+            case .analysis:
+                AnalysisReviewView(store: store)
+            case .briefing:
+                BriefingReviewView(store: store)
+            case .storage:
+                StorageDashboardView(store: store) { item in
+                    pendingPermanentDeletion = item
+                }
+            }
+        }
+    }
+
     private var workspaceOnboarding: some View {
         ContentUnavailableView {
             Label("Choose a Workspace", systemImage: "folder.badge.plus")
@@ -162,12 +206,14 @@ public struct MeetingBuddyRootView: View {
                 presentFileImporter(.workspace)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(store.isWorking)
+            .disabled(store.isWorking || store.blocksWorkspaceSwitch)
         }
     }
 
     private var navigationTitle: String {
         switch store.selectedSection {
+        case .recording: "Record Audio"
+        case .webMetadata: "UN Web TV Metadata"
         case .transcript: "Transcript Review"
         case .analysis: "Analysis Review"
         case .briefing: "Briefing"

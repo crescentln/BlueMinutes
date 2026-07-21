@@ -4,8 +4,8 @@
 project: MeetingBuddy
 controller_version: "1.1"
 master_spec_version: "1.1"
-current_task: "008A"
-current_status: accepted
+current_task: "008B"
+current_status: completed_pending_user_acceptance
 accepted_tasks:
   - "001"
   - "002"
@@ -19,27 +19,28 @@ accepted_tasks:
   - "006B"
   - "007"
   - "008A"
-completed_pending_acceptance: []
+completed_pending_acceptance:
+  - "008B"
 blocked_tasks: []
-last_known_git_head: "36510b7df464e178dcf8866c9cb1ce2d81dc04cb (Task 008A completion-evidence commit; accepted Task 007 commit 75b11e202c9f10611aada76445f1e5eb2346c914 is the pre-Task-008A rollback anchor; the Task 008A acceptance commit is the current Git HEAD after acceptance)"
-working_tree_status_summary: "Task 008A completion evidence and acceptance are committed locally; preserved pre-existing planning/governance/architecture/ADR documentation edits remain uncommitted; no package/source/test/configuration/entitlement/Info.plist/schema/dependency change, real recording, user-workspace write, media download, credential, network route, push, deployment, or Task 008B work was created"
+last_known_git_head: "e03d05bbf635ebf0af2c668d24e14f1bd73e3255 (accepted Task 008A boundary; unchanged pre-Task-008B code rollback anchor)"
+working_tree_status_summary: "Task 008B implementation, tests, configuration, script, report, and this ledger update are uncommitted; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved and uncommitted; Package.swift and Package.resolved are unchanged; no real capture, real UN request, user-workspace migration/write, media acquisition/download, credential, commit, push, deployment, or Task 009A work occurred"
 last_verification_commands:
-  - "read the governing master specification, controller, project/shared AGENTS policies, accepted ADRs, Task 007 report, architecture/security/storage/acceptance documents, Package.swift, current source contracts, and Git/ledger state"
-  - "read-only curl probes of two public UN Web TV asset pages, robots.txt, response headers, and the dedicated Copyright & Use page; no player/media/subresource request"
-  - "official Apple documentation review plus installed macOS 26.5 SDK ScreenCaptureKit header inspection for audio/microphone outputs, system picker, recording output, errors, and availability"
-  - "xcodebuild -version; swift --version; sw_vers; xcrun --show-sdk-path; plutil configuration inspection; codesign identity and entitlement inspection of the current ad-hoc app"
-  - "git diff --check; relative Markdown-link/source-URL checks; ledger YAML parse; production/configuration/dependency change-scope checks; Git status and diff-stat reconciliation"
-  - "two-commit acceptance isolation: staged Task 008A completion artifacts separately, applied ADR-index changes at patch granularity, inspected cached diffs, and rechecked preserved unstaged files before each commit"
+  - "swift test --enable-swift-testing --parallel -Xswiftc -warnings-as-errors"
+  - "focused RecordingContractAndMetadataTests, RecordingPersistenceIntegrationTests, WorkspaceAndMigrationTests, Task008BViewAccessibilityTests, TaskManager cancellation, and recovery tests with warnings as errors"
+  - "swift build -Xswiftc -warnings-as-errors; swift build -c release -Xswiftc -warnings-as-errors"
+  - "swift package dump-package; swift package show-dependencies"
+  - "plutil -lint Configuration/MeetingBuddy-Info.plist Configuration/MeetingBuddy.entitlements"
+  - "MEETINGBUDDY_SIGN_IDENTITY=- ./script/build_and_run.sh --stage-only; codesign --verify --deep --strict --verbose=2 dist/MeetingBuddy.app; staged-app entitlement and bundled-Info inspection"
+  - "exact-host/forbidden media-route, no-screen/no-persistent-capture, URLSession ownership, dependency-surface, relative Markdown-link, ledger-YAML, Git status/HEAD, and git diff --check inspections"
 last_verification_results:
-  - "current public UN Web TV pages expose bounded HTML metadata and a client-side Kaltura player shape, but no reviewed stable media/track acquisition contract"
-  - "the dedicated UN Web TV copyright page requires UN authorization/licensing for footage; automatic media acquisition, browser-audio recording, and UN-footage analysis remain default no-go legal/rights-gated capabilities"
-  - "native macOS 15 audio-only capture is technically feasible through ScreenCaptureKit with explicit system-picker/microphone selection, separate tracks, and no screen-frame persistence"
-  - "the recommended durability contract uses explicit nine-state recording state, nominal five-second CAF segments, a six-second hard open-span bound, bounded checkpoints, schema-007 additive operational tables, and an immutable generated SourceAsset capture manifest"
-  - "the current app remains ad-hoc signed with no microphone/network/persistent-content entitlement and no microphone/system-audio purpose string; Task 008A changes none of them"
-  - "the user accepted ADR-0013 decisions D1-D5: bounded audio-only capture, least capture entitlements, exact-host METADATA_ONLY_NETWORK with no-outbound/manual fallback, the UN-media no-go, and the schema-007 durability/provenance contract"
-  - "ADR-0013 is Accepted for Task 008B implementation and separates accepted, legal/rights-gated, rejected, and deferred capabilities; Task 008B has not begun"
-  - "diff-whitespace, ledger-YAML, relative-link, required-scope-content, and primary-source URL checks pass; the general UN terms page rejects direct curl with HTTP 403 but was readable through the browser research path"
-  - "Package/Resolved, Info.plist, and entitlement SHA-256 values match the pre-spike baseline; production source, tests, package, and configuration remain clean, and the current signed app still exposes only its three accepted sandbox/file entitlements"
+  - "212 tests in 37 suites pass with warnings as errors; three opt-in Apple installed-model routes remain skipped rather than inferred"
+  - "normal capture, source loss, disk-budget failure, restart, corrupt checkpoint rebuild, tamper detection, finalization crash/restart, zero-byte stop, Task Manager cancellation, explicit new-epoch resume, and native microphone interruption notification fixtures pass"
+  - "schema 007 is additive; fresh schema and accepted-v6 migration tests preserve exact semantic payload bytes and a readable verified v6 backup with no v7 recording tables"
+  - "recording intent/epochs precede native start; five-second nominal/six-second hard CAF segmentation, two-second per-track queue, one-second checkpoint deadline, manifest binding, and non-auto-active incomplete state are enforced"
+  - "the metadata adapter accepts one exact-host HTTPS asset request only, retains bounded field provenance, honors no-outbound before network, and exposes no UN media/player/download/credential route"
+  - "the staged ad-hoc app verifies and exposes only sandbox, microphone input, outbound client, app bookmark, and user-selected read/write entitlements plus truthful microphone/system-audio purpose strings; no persistent content-capture entitlement exists"
+  - "debug/release builds, package inspection, Plist lint, staged packaging/signature, static forbidden-surface scans, diff whitespace, relative links, and ledger YAML pass; no dependency was added"
+  - "interactive TCC grant/deny/revoke, physical/virtual device loss, system-picker capture, application exit, sleep, live two-track capture, long native capture/process kill, and sudden power loss were not run because they require explicit user source/TCC participation; this remains release-validation evidence, not a silently claimed result"
 open_P0_decisions: []
 open_P1_decisions: []
 known_out_of_scope_findings:
@@ -50,10 +51,10 @@ known_out_of_scope_findings:
   - "compiled accessibility labels/hints/values and keyboard shortcuts pass structural tests, but manual assistive-technology, localization, reduced-motion/contrast, and clean-machine review remain release evidence"
   - "recovery JSONL remains integrity-checked export-only; the verified SQLite backup is authoritative, and no automatic Trash purge scheduler exists"
   - "application-level workspace encryption is intentionally absent under ADR-0012; host/account and volume protection remain operator controls"
-  - "no live capture, UN Web TV production adapter, automation adapter, external/cloud provider, outbound meeting-data route, organization telemetry destination, or production release exists"
-  - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition is rejected for Task 008B"
-  - "signed macOS 15/current-OS TCC behavior, process-kill and long synthetic capture durability, device/source changes, and sudden power loss remain Task 008B or later proof gaps"
+  - "no approved UN Web TV media acquisition, browser recording, player/track extraction, redistribution, automation adapter, external/cloud provider, meeting-data upload route, organization telemetry destination, or production release exists"
+  - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
+  - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain Task 011"
-next_eligible_task: "008B (eligible but not started; requires a separate explicit PROCEED TO TASK 008B command)"
-last_updated_at: "2026-07-19T13:11:25Z"
+next_eligible_task: "009A (only after explicit user acceptance of Task 008B)"
+last_updated_at: "2026-07-19T15:20:53Z"
 ```

@@ -182,6 +182,100 @@ public struct MediaImportSubmission: Sendable {
     }
 }
 
+public struct RecordingSetupReview: Hashable, Sendable {
+    public let capability: CaptureCapabilitySnapshot
+    public let microphones: [CaptureMicrophoneChoice]
+    public let recoverableSession: RecordingSessionReview?
+
+    public init(
+        capability: CaptureCapabilitySnapshot,
+        microphones: [CaptureMicrophoneChoice],
+        recoverableSession: RecordingSessionReview? = nil
+    ) {
+        self.capability = capability
+        self.microphones = microphones
+        self.recoverableSession = recoverableSession
+    }
+}
+
+public struct RecordingStartSubmission: Sendable {
+    public let meetingTitle: String
+    public let dataClassification: DataClassification
+    public let mode: CaptureMode
+    public let microphoneDeviceID: String?
+    public let microphoneSpeechSourceKind: SpeechSourceKind
+    public let applicationSpeechSourceKind: SpeechSourceKind
+    public let language: LanguageTag?
+    public let directUserAcknowledgement: Bool
+
+    public init(
+        meetingTitle: String,
+        dataClassification: DataClassification,
+        mode: CaptureMode,
+        microphoneDeviceID: String?,
+        microphoneSpeechSourceKind: SpeechSourceKind,
+        applicationSpeechSourceKind: SpeechSourceKind,
+        language: LanguageTag?,
+        directUserAcknowledgement: Bool
+    ) {
+        self.meetingTitle = meetingTitle
+        self.dataClassification = dataClassification
+        self.mode = mode
+        self.microphoneDeviceID = microphoneDeviceID
+        self.microphoneSpeechSourceKind = microphoneSpeechSourceKind
+        self.applicationSpeechSourceKind = applicationSpeechSourceKind
+        self.language = language
+        self.directUserAcknowledgement = directUserAcknowledgement
+    }
+}
+
+public struct RecordingResumeSubmission: Sendable {
+    public let microphoneDeviceID: String?
+    public let directUserAcknowledgement: Bool
+
+    public init(
+        microphoneDeviceID: String?,
+        directUserAcknowledgement: Bool
+    ) {
+        self.microphoneDeviceID = microphoneDeviceID
+        self.directUserAcknowledgement = directUserAcknowledgement
+    }
+}
+
+public struct RecordingSessionReview: Hashable, Sendable {
+    public let sessionID: RecordingSessionID
+    public let jobID: JobID
+    public let state: RecordingState
+    public let stateVersion: UInt64
+    public let activeTrackKinds: [CaptureTrackKind]
+    public let durableThroughNanoseconds: UInt64?
+    public let knownGapCount: UInt32
+    public let safeReason: String?
+
+    public init(
+        sessionID: RecordingSessionID,
+        jobID: JobID,
+        state: RecordingState,
+        stateVersion: UInt64,
+        activeTrackKinds: [CaptureTrackKind],
+        durableThroughNanoseconds: UInt64?,
+        knownGapCount: UInt32,
+        safeReason: String?
+    ) {
+        self.sessionID = sessionID
+        self.jobID = jobID
+        self.state = state
+        self.stateVersion = stateVersion
+        self.activeTrackKinds = activeTrackKinds
+        self.durableThroughNanoseconds = durableThroughNanoseconds
+        self.knownGapCount = knownGapCount
+        self.safeReason = safeReason
+    }
+
+    public var canStop: Bool { !state.isTerminal && state != .stopping && state != .finalizing }
+    public var blocksWorkspaceSwitch: Bool { !state.isTerminal }
+}
+
 @MainActor
 public protocol MediaReviewWorkflow: AnyObject {
     func restoreWorkspace() async throws -> WorkspaceReview?
@@ -261,9 +355,54 @@ public protocol MediaReviewWorkflow: AnyObject {
         confirmsPermanentDeletion: Bool,
         acknowledgesUnlinkIsNotSecureErasure: Bool
     ) async throws -> WorkspaceStorageReport
+    func recordingSetup() async throws -> RecordingSetupReview
+    func startRecording(_ submission: RecordingStartSubmission) async throws
+        -> RecordingSessionReview
+    func recordingReview(jobID: JobID) async throws -> RecordingSessionReview
+    func resumeRecording(
+        jobID: JobID,
+        submission: RecordingResumeSubmission
+    ) async throws -> RecordingSessionReview
+    func stopRecording(jobID: JobID) async throws -> RecordingSessionReview
+    func fetchUNWebTVMetadata(
+        url: String,
+        explicitNetworkAuthorization: Bool
+    ) async throws -> UNWebTVMetadataCandidate
 }
 
 public extension MediaReviewWorkflow {
+    func recordingSetup() async throws -> RecordingSetupReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func startRecording(
+        _ submission: RecordingStartSubmission
+    ) async throws -> RecordingSessionReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func recordingReview(jobID: JobID) async throws -> RecordingSessionReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func resumeRecording(
+        jobID: JobID,
+        submission _: RecordingResumeSubmission
+    ) async throws -> RecordingSessionReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func stopRecording(jobID: JobID) async throws -> RecordingSessionReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func fetchUNWebTVMetadata(
+        url: String,
+        explicitNetworkAuthorization: Bool
+    ) async throws -> UNWebTVMetadataCandidate {
+        throw TranscriptWorkflowError.unavailable
+    }
+
     func storageReport() async throws -> WorkspaceStorageReport {
         throw WorkspaceContractError.managedAssetMismatch(
             "Workspace storage reporting is unavailable."

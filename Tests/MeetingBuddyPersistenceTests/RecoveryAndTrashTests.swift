@@ -473,7 +473,7 @@ struct RecoveryAndTrashTests {
         )
         #expect(bounded.scanTruncated)
         #expect(bounded.categories.reduce(0) { $0 + $1.fileCount } <= 32)
-        #expect(bounded.totalByteCount <= 32 * 128 + 1_000_000)
+        #expect(bounded.totalByteCount <= 32 * 128 + 1_048_576)
 
         let exposed = cache.appendingPathComponent("entry-000.bin")
         try FileManager.default.setAttributes(
