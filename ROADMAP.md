@@ -4,22 +4,30 @@ This roadmap describes maintenance priorities, not delivery promises. Scope and
 timing are decided through Issues, ADRs, Pull Requests, passing gates, and
 explicit maintainer authorization.
 
-## Completed milestone: private source-publication foundation
+## Completed milestone: public source-publication foundation
 
 - Completed the evidence-integrity remediation and warning-as-error test gate.
 - Adopted the maintainer-selected `BlueMinutes` public brand while preserving
   compatibility-sensitive internal identifiers.
-- Published source first to a private GitHub repository with Apache License 2.0,
-  maintenance policies, synthetic-safe CI, and an Issue/short-branch/Pull
-  Request workflow.
-- Verified secrets, reachable history, generated files, private repository
-  access, and GitHub Actions before any public-conversion decision.
+- Published source first to a private GitHub repository, then completed the
+  separately authorized final history/data gate and converted
+  [`crescentln/BlueMinutes`](https://github.com/crescentln/BlueMinutes) to
+  PUBLIC.
+- Replaced the personal/application-oriented landing text with an objective
+  project-first README covering operation, capabilities, privacy, architecture,
+  limitations, and the multilateral-diplomacy workflow.
+- Verified signed-out HTTP, unauthenticated API, anonymous Git, exact-main
+  public CI, Apache License 2.0, notices, community files, reachable history,
+  and tracked-artifact boundaries.
+- Protected `main` with Pull Requests, strict CI, linear history, resolved
+  conversations, administrator enforcement, and force-push/delete denial;
+  enabled the available Dependabot, secret-scanning, private-reporting, and
+  CodeQL controls.
 
-No public repository, Git tag, GitHub Release, distributable binary, signing,
-notarization, package, or deployment is part of this milestone unless separately
-authorized.
+No Git tag, GitHub Release, distributable binary, signing, notarization,
+installer, package, or deployment is part of this source-publication milestone.
 
-## Candidate milestone: public open-source readiness
+## Candidate milestone: public project presentation
 
 - Perform a final professional name and trademark review before distribution;
   the current repository, app-store, package-registry, domain, and web screen is
@@ -27,10 +35,7 @@ authorized.
 - Add a short demonstration and screenshots using synthetic or already-public
   material only.
 - Open several well-scoped Issues for contributor-sized work.
-- Run public CI and document the exact supported toolchain.
-- Conduct a follow-up security review and publish only safe, bounded findings.
-- Make the repository public only after an explicit maintainer command and
-  final sensitive-data/history review.
+- Collect honest early-user feedback without manufacturing adoption signals.
 
 ## Candidate milestone: contributor hardening
 

@@ -1,7 +1,7 @@
 # Codex for Open Source Application Pack
 
-Status: draft; submit after the official fields and public-repository truth
-checks pass
+Status: draft; public-repository gates complete; submit after the maintainer
+verifies the private account fields and final live-form text
 Last verified against the official form: 2026-07-22
 
 The maintainer-selected public project name is `BlueMinutes`. Internal
@@ -30,23 +30,25 @@ Official references:
 - [Application form](https://openai.com/form/codex-for-oss/)
 - [Program terms](https://learn.chatgpt.com/docs/codex-for-oss-terms)
 
-BlueMinutes is now published to an initial **private** GitHub repository. That
-private repository is not sufficient for submission. Making it public remains
-a separate action requiring explicit maintainer authorization after the
-sensitive-data, license, CI, name, and public-readiness gates pass.
+BlueMinutes is now published at the public
+[`crescentln/BlueMinutes`](https://github.com/crescentln/BlueMinutes)
+repository. Signed-out page, raw-file, API, and anonymous Git checks resolve
+public baseline `e621537`, and
+[exact-main public CI run 29964705558](https://github.com/crescentln/BlueMinutes/actions/runs/29964705558)
+passes.
 
 ## Current readiness scorecard
 
 | Gate | Current status | Required before submission |
 | --- | --- | --- |
 | Public GitHub profile | Ready | Public API state and a signed-out HTTP request both succeeded; repeat the visual check immediately before submission. |
-| Public GitHub repository | Private publication complete; public conversion not authorized | Perform the final history review and make a separate public-conversion decision. |
-| Open-source license and governance | Ready in the private repository | Confirm Apache-2.0, notices, policies, and templates are visible on the public commit. |
-| Build and tests | Private `main` CI passed | Pass GitHub Actions on the exact public `main` commit and update dynamic counts. |
-| Sensitive-data and secret boundary | Verified for private publication | Offline detect-secrets and layered working-tree/reachable-history checks pass; repeat them on the exact public commit. |
+| Public GitHub repository | Ready | Public visibility, signed-out HTTP, unauthenticated API, and anonymous Git all resolve exact baseline `e621537`. |
+| Open-source license and governance | Ready | Apache-2.0, notices, policies, templates, and community files are visible publicly. |
+| Build and tests | Ready | [Public exact-main run 29964705558](https://github.com/crescentln/BlueMinutes/actions/runs/29964705558) passes the warning-as-error build, focused gates, and complete synthetic-safe suite. |
+| Sensitive-data and secret boundary | Ready for the recorded baseline | Layered working-tree and reachable-history checks pass on `e621537`; repeat after later code changes. |
 | Name and brand | Ready for source publication | BlueMinutes is selected, the preliminary collision screen and independence language are recorded, and no formal trademark clearance is claimed. |
 | Demonstration | Optional strengthening | A synthetic or already-public demo can improve the application but is not an official form prerequisite. |
-| Public maintenance evidence | Visible in the private repository | Commit history, tests, roadmap, and governance become public only after separate conversion; contributor-sized Issues can strengthen the application later. |
+| Public maintenance evidence | Ready | Commit history, tests, Issues, Pull Requests, roadmap, and governance are public; contributor-sized Issues can strengthen the application later. |
 | Form narratives | Draft complete | Recount in the live form and verify every factual statement. |
 | Requested benefit | Six months of ChatGPT Pro with Codex, plus API credits | Leave Codex Security unselected; no trusted-access dependency remains. |
 
@@ -60,14 +62,15 @@ following repository-truth checks are complete:
 - the GitHub profile is public;
 - the applicant has a valid ChatGPT account, uses the account-associated email,
   and has the required OpenAI Organization ID ready for the form;
-- the repository is explicitly made public by the maintainer;
+- the repository is public and resolves from signed-out and anonymous clients;
 - Apache License 2.0 and third-party notices are visible;
 - source builds from documented instructions and CI passes on `main`;
 - no credential, signing material, private meeting data, internal document,
   transcript, briefing, user database, workspace, or log is present in the
   working tree or reachable history;
-- the README clearly states that the project is personal and is not endorsed by
-  the United Nations, any UN entity, any government, or OpenAI;
+- the README objectively documents the project, source-only alpha status,
+  current limitations, and independence from the United Nations, United
+  Nations entities, and governments;
 - the source-only alpha status, roadmap, and recent maintenance evidence are
   visible; and
 - any screenshots or demo submitted with the application use synthetic or
@@ -175,17 +178,9 @@ those private account details to the repository. Immediately before submitting:
    currently implemented UN data API integration; and
 6. save a private copy of the exact submitted text and submission date.
 
-## Recommended README opening after naming
-
-```text
-BlueMinutes is an open-source native macOS application that turns long multilingual meetings into reviewable transcripts, structured positions, evidence-linked briefing sections, and reusable historical context. It is designed for diplomats, international-organization staff, policy researchers, civil-society organizations, and other professional meeting users.
-
-BlueMinutes is an independent personal open-source project. It is not affiliated with, sponsored by, or endorsed by the United Nations, any United Nations entity, any government, or OpenAI.
-```
-
 ## Evidence to strengthen before submission
 
-- Reproducible build instructions and a passing public CI run.
+- Keep the reproducible build instructions and passing public CI current.
 - Screenshots or a short demo using synthetic or public material.
 - A roadmap, current milestone, and several well-defined GitHub Issues.
 - Contribution, code-of-conduct, support, security, maintenance, backup, and
