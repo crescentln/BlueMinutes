@@ -1,6 +1,6 @@
 # Task 011 Release-Candidate Audit
 
-Status: Completed pending user acceptance
+Status: Accepted
 Release classification: **INTERNAL ALPHA**
 Selected product: `MeetingBuddy.app` for Apple Silicon, macOS 15 or later
 Audit date: 2026-07-21
@@ -53,11 +53,11 @@ digest, source inventory, and source/build manifest are staged and verified as
 one coherent directory set, then recoverably replace the prior set. Acceptance
 fails on mixed components. Replacement uses two renames rather than a strict
 atomic directory exchange, so interruption can leave a `.previous-*` set that
-requires manual inspection. The artifact was built from an uncommitted Task
-011 working tree; its manifest records the dirty state and exact file hashes,
-but it is not a publication candidate until Task 011 is accepted and a
-separately authorized, reproducible signed build is made from an accepted
-revision. Detailed command evidence is in
+requires manual inspection. The artifact was built before acceptance from an
+uncommitted Task 011 working tree; its manifest records that dirty state and
+the exact file hashes. Task 011 is now accepted locally, but this artifact is
+not a publication candidate until a separately authorized, reproducible signed
+build is made from the accepted revision. Detailed command evidence is in
 `docs/audits/TASK-011_VERIFICATION_EVIDENCE.md`.
 
 ## Task 011 hardening
@@ -84,7 +84,7 @@ destination, automatic updater, or feature route was added.
 
 | Gate | Result | Evidence and limitation |
 |---|---|---|
-| Accepted prerequisites | PASS | Tasks 001 through 010 are accepted; Task 011 alone is pending acceptance. |
+| Accepted prerequisites | PASS | Tasks 001 through 011 are accepted. |
 | Debug build and full tests | PASS | New-scratch `swift test -Xswiftc -warnings-as-errors`: 242 tests, 42 suites, zero failures; three explicitly opt-in model tests are skipped in the ordinary run. |
 | Installed Apple provider smoke tests | PASS | Three opt-in, synthetic-only local tests passed in 6.016 seconds: speech/translation, analysis, and briefing. Provider success does not close semantic-grounding findings. |
 | Golden fixtures | PASS | Seven unique synthetic quality cases, canonical contract graphs, exact evidence references, adversarial negation preservation, and the 5/5 diplomatic rubric pass. |
@@ -152,9 +152,9 @@ None established in the selected internal-alpha boundary.
 
 - No Developer ID identity, Team ID, notarization ticket, affirmative
   Gatekeeper result, or clean-machine install proof exists.
-- The Task 011 source is uncommitted and the generated archive is intentionally
-  local/ignored; it is hash-inventoried but not bound to a clean accepted
-  revision.
+- The Task 011 source is committed locally, but the generated archive was
+  built before acceptance from the dirty source inventory and remains
+  local/ignored; it is not a clean accepted-revision distribution build.
 - Manual accessibility, localization, icon, and live TCC/capture validation are
   incomplete.
 
@@ -193,11 +193,12 @@ None established in the selected internal-alpha boundary.
 
 ## Publication boundary
 
-Task 011 performed no commit, tag, push, notarization submission, upload,
-installation, or distribution. The only permissible use of the current bundle
-is local internal-alpha evaluation with synthetic or non-sensitive data and
-human review of all derived intelligence. External beta or release-candidate
-classification requires, at minimum:
+Task 011 implementation and acceptance were committed locally. No tag, push,
+notarization submission, upload, installation, or distribution occurred. The
+only permissible use of the current bundle is local internal-alpha evaluation
+with synthetic or non-sensitive data and human review of all derived
+intelligence. External beta or release-candidate classification requires, at
+minimum:
 
 1. application-owned grounding/quarantine for all four medium findings;
 2. a follow-up security scan against an accepted source revision;

@@ -84,9 +84,10 @@ The scan does not support external beta or release-candidate classification.
 with human review of all derived intelligence. Before external release:
 
 1. remediate all four medium evidence-integrity findings;
-2. accept and commit the Task 011 changes under explicit user authority;
-3. run a security diff/follow-up scan against that exact accepted revision; and
-4. bind closure records to regression evidence and the new scan occurrence IDs.
+2. run a security diff/follow-up scan against the exact accepted Task 011
+   revision; and
+3. bind closure records to regression evidence and the new scan occurrence IDs.
 
-The sealed scan remains immutable. Post-scan working-tree fixes do not alter or
-silently close its findings.
+The sealed scan remains immutable. Post-scan fixes are now committed in the
+accepted Task 011 revision, but they do not alter or silently close its
+findings.

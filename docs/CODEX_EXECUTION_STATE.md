@@ -5,7 +5,7 @@ project: MeetingBuddy
 controller_version: "1.1"
 master_spec_version: "1.1"
 current_task: "011"
-current_status: completed_pending_user_acceptance
+current_status: accepted
 accepted_tasks:
   - "001"
   - "002"
@@ -23,11 +23,11 @@ accepted_tasks:
   - "009A"
   - "009B"
   - "010"
-completed_pending_acceptance:
   - "011"
+completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "2a0d7fe7ac8ab10d125f3c65b6606238e4df9343 (accepted Task 010 state and the pre-Task-011 rollback anchor; Task 011 is intentionally uncommitted pending user acceptance)"
-working_tree_status_summary: "Task 011 source/test hardening, privacy/license resources, release/backup verification scripts, dependency re-review, security/verification summaries, release notes, backup/rollback instructions, and completion audit are uncommitted pending user acceptance; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved and were not edited by Task 011; Package.resolved is unchanged; ignored dist output contains one coherent local release set with an ad-hoc-signed arm64 internal-alpha app, verified ZIP/digest, exact source-file inventory, and build manifest; no real user workspace or meeting data, credential, remote publication, commit, tag, push, notarization submission, upload, install, or distribution occurred"
+last_known_git_head: "56deadcabf80fddc31e5b2122bb8a41f7671e657 (Task 011 implementation and completion-evidence commit; accepted Task 010 commit 2a0d7fe7ac8ab10d125f3c65b6606238e4df9343 remains the pre-Task-011 rollback anchor; this Task 011 acceptance update follows as a separate local commit)"
+working_tree_status_summary: "Task 011 source/test hardening, privacy/license resources, release/backup verification scripts, dependency re-review, security/verification summaries, release notes, backup/rollback instructions, and completion audit are committed locally and accepted; the twenty pre-existing planning/governance/architecture/ADR documentation edits remain preserved and uncommitted; Package.resolved is unchanged; ignored dist output contains one coherent ad-hoc-signed arm64 internal-alpha release set built before acceptance from the hash-inventoried dirty source state, so it remains non-distributable; no uncommitted Task 011 code/test/configuration/script/report change, real user workspace or meeting data, credential, remote publication, tag, push, notarization submission, upload, install, or distribution exists"
 last_verification_commands:
   - "Codex Security standard repository scan ec5ba727-af63-4f1a-bd8c-feb3001ed3a2 with 134/134 receipts, validation, reconciliation, attack-path analysis, sealed manifest/findings/coverage/report/SARIF, and completion indexing"
   - "swift test --scratch-path <new temporary directory> -Xswiftc -warnings-as-errors"
@@ -57,7 +57,7 @@ known_out_of_scope_findings:
   - "release-set replacement is a recoverable two-rename operation rather than a strict atomic exchange; interruption can require inspection of a fail-closed .previous-* directory"
   - "the cold-backup verifier takes no OS-level lock; initial/final inventory comparison detects observed mutation, but MeetingBuddy must remain quit throughout copy and verification"
   - "four medium security findings remain open: application-owned semantic grounding is absent for analysis and briefing publication, and provider-only non-substantive/no-speech classifications can close published coverage; all derived intelligence requires human review"
-  - "the three low scan findings have post-scan working-tree mitigations for duration, audio-track cardinality, and HTML cleanup but require an accepted revision and follow-up security scan before closure"
+  - "the three low scan findings have mitigations committed in the accepted Task 011 revision for duration, audio-track cardinality, and HTML cleanup but require a follow-up security scan before closure"
   - "automatic updates remain unapproved; the verified local ZIP is a hash-bound internal artifact, not a signed/notarized distribution or update channel"
   - "the initial package is arm64 only; universal/Intel distribution is not selected or tested"
   - "Task 010 adds no full relationship-graph UI, organization synchronization, enterprise administration, complex cross-organization ACL, hidden/vector/LLM memory, automatic policy-change claim, full named-speaker identification, real-time coaching, mail connector, public-source fetcher, or new network/provider route"
@@ -75,6 +75,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
-next_eligible_task: "none until Task 011 user acceptance; a local commit and every push, tag, notarization, release, upload, install, or distribution action remain separately authorized"
-last_updated_at: "2026-07-22T01:35:57Z"
+next_eligible_task: "none; Task 011 is accepted and the canonical MVP task sequence is complete; any post-MVP work, push, tag, notarization, release, upload, install, or distribution requires separate explicit authorization"
+last_updated_at: "2026-07-22T13:02:45Z"
 ```

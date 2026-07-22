@@ -11,7 +11,8 @@ The ignored local release set is
 `release-manifest.json` records:
 
 - Git HEAD `2a0d7fe7ac8ab10d125f3c65b6606238e4df9343`;
-- source state `dirty`, because Task 011 remains intentionally uncommitted;
+- source state `dirty`, because the artifact was built before Task 011
+  acceptance from the then-uncommitted working tree;
 - 189 build, test, configuration, notice, and script files in
   `source-files.sha256`;
 - source-inventory SHA-256

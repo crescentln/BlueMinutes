@@ -74,13 +74,14 @@ Local ignored output:
 - SHA-256:
   `2ae023748b20f0bcf3c5dba87a839948248ff5edc914015020ade5ee50b12f44`
 
-`release-manifest.json` explicitly records the dirty/uncommitted source state,
-toolchain, artifact hashes, ad-hoc identity, and non-distribution status. Its
-`source-files.sha256` inventory digest is
+`release-manifest.json` explicitly records the dirty/uncommitted source state
+at build time, toolchain, artifact hashes, ad-hoc identity, and
+non-distribution status. Its `source-files.sha256` inventory digest is
 `ed9983486f217bd6274ceb97dc324d7b9547ffae2daba32ef44e8942ff059e5b`.
 
-The current archive was made from an uncommitted Task 011 working tree and is
-not a publication artifact. Rebuild from an accepted revision with Developer
+The current archive was made before acceptance from an uncommitted Task 011
+working tree. Task 011 is now accepted locally, but this archive is not a
+publication artifact. Rebuild from the accepted revision with Developer
 ID/notarization only after separate authorization.
 
 ## Backup and rollback
