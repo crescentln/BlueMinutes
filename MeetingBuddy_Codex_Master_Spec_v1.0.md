@@ -1,10 +1,14 @@
 # MeetingBuddy — Codex Master Build Specification
 
-**Version:** 1.0  
+**Version:** 1.1 (stable filename retained)
 **Status:** Final build specification  
-**Date:** 2026-07-17  
+**Date:** 2026-07-22
 **Primary audience:** Codex and human reviewers  
-**Current authorized action:** **Task 001 — Read-Only Repository and Architecture Audit only**
+**Current authorized action:** Read `docs/CODEX_EXECUTION_STATE.md`; this
+specification does not authorize a task by itself. Tasks 001 through 011 are
+accepted, the canonical MVP sequence is complete, and there is no next eligible
+numbered task. Post-MVP work and any commit, push, tag, notarization, release,
+upload, install, or distribution action require separate explicit authority.
 
 ---
 
@@ -39,20 +43,14 @@ If a conflict remains, report it rather than silently choosing a destructive or 
 
 ### 0.2 Current execution gate
 
-The only task currently authorized by this document is **Task 001** in Section 87.
-
-For Task 001, Codex must not:
-
-- edit repository files;
-- create project documentation;
-- install dependencies;
-- change build settings;
-- implement schemas;
-- write production code;
-- create commits;
-- migrate or modify data.
-
-The audit must be reviewed before implementation begins.
+Section 87 records the historical Task 001 bootstrap contract. Current task
+status comes only from `docs/CODEX_EXECUTION_STATE.md`, reconciled with Git and
+the user's latest explicit authorization. The one-time post-005A roadmap
+integration was planning-only: it did not itself start Task 005B, implement
+application features, run migrations, add dependencies, or authorize a commit.
+Tasks 005B through 011 were later authorized and accepted individually. The
+numbered MVP sequence is now complete; deferred capabilities receive a new task
+ID only after explicit user promotion.
 
 ### 0.3 Recommended Codex model settings
 
@@ -166,6 +164,15 @@ It must remain useful when:
 - historical data grows substantially.
 
 Architecture and data integrity take priority over short-term demonstrations.
+
+### 4.1 Local-first product boundary
+
+Meeting audio, transcripts, meeting metadata, and derived intelligence remain
+on the device by default. Any external processing path must identify the exact
+data categories, destination, permitted provider, retention behavior, policy
+authority, and visible user authorization before transmission. Every supported
+workflow must retain a local/offline or no-external-processing mode; provider
+availability never creates transmission authority.
 
 ---
 
@@ -625,6 +632,26 @@ created_at
 
 A transcript segment must not summarize, infer diplomatic intent, group countries, compare policy positions, or write briefing prose.
 
+The transcript lineage must also preserve, directly or through exact immutable
+references:
+
+```text
+stable segment and meeting identity
+original machine transcript text
+human-edited transcript revision and edit history
+microphone, system-audio, or imported-source provenance
+source audio revision and exact time range
+ASR provider, model, version, and confidence
+speaker-assignment revision and speaker confidence
+evidence or content-integrity hash
+```
+
+Original ASR text is never destructively replaced. A correction creates a new
+revision linked to the exact machine transcript revision. Speaker identity and
+confidence remain separate speaker-assignment evidence, not an untraceable
+string embedded in transcript text. Task 005B must choose a backward-compatible
+representation and migration path before persisting production transcripts.
+
 ## 16. TranslationSegment.v1
 
 Translation is a first-class stage and object.
@@ -944,6 +971,40 @@ Findings must use qualified language such as:
 
 The system must not automatically state that a country's policy changed.
 
+## 25.1 Extended meeting-intelligence entities
+
+The future semantic layer must represent these as independently addressable,
+versioned entities rather than only headings or paragraphs inside a summary:
+
+```text
+Meeting
+Participant
+Organization
+TranscriptSegment or Utterance
+Issue
+Position
+Commitment
+Decision
+Evidence
+SensitivityLabel
+AccessPolicy
+```
+
+`MeetingProfile.v1` may realize Meeting, `EvidenceRef.v1` may realize Evidence,
+and existing Actor/SpeakingCapacity contracts may provide identity foundations,
+but later task specifications must add any missing independent contracts rather
+than hiding them in free-form briefing prose.
+
+A Commitment must be capable of retaining actor, recipient, content,
+conditions, deadline, status, exact source evidence, confidence, and human-
+confirmation state. A Position must retain actor, issue, content, effective
+time, source, confidence, and an evidence-based comparison state rather than a
+bare “changed” flag. Evidence must support transcript segments and audio time
+ranges as well as documents, email, permitted public sources, and integrity
+metadata. Task 006A owns the first typed Issue/Position/Commitment/Decision
+foundation; Task 007 owns sensitivity/access-policy hardening; Task 010 owns
+historical comparison semantics.
+
 ---
 
 # Part V — Versioning, Dependencies, and Invalidation
@@ -1186,7 +1247,23 @@ These are separate trust boundaries. Do not reuse one interface for both.
 
 ## 35. Provider abstraction
 
-Possible providers include:
+Provider-facing business logic must use narrow application-owned interfaces for:
+
+```text
+authorized audio capture
+speech-to-text
+translation
+summary, extraction, validation, and generation models
+local models
+organization-hosted models
+approved cloud models
+semantic and asset storage
+operating-system secret storage
+```
+
+Storage and secret-storage interfaces are not inference providers, but they
+follow the same dependency rule: concrete implementation details never enter
+MeetingBuddy domain logic. Possible inference providers include:
 
 ```text
 LocalTranscriptionProvider
@@ -1214,6 +1291,27 @@ subscription_safe_batching
 ```
 
 Provider selection must eventually be driven by MeetingBuddy's own evaluations rather than general reputation.
+
+### 35.1 Model policy routing
+
+An application-owned model-policy router decides which providers and models
+are eligible. It evaluates at least:
+
+```text
+meeting sensitivity and access policy
+offline or no-outbound-network mode
+organization policy
+deployment environment
+permitted data destination and provider retention
+visible user authorization
+task capability and bounded data categories
+```
+
+A model dropdown is only a preference among already-eligible routes. It cannot
+override policy. A denied or unavailable route fails closed and never falls
+back to a less restrictive destination. Task 005B establishes the interface
+and enforcement for transcription/translation; Tasks 006A/006B reuse it for
+derived intelligence; Tasks 007 and 009B harden and extend it.
 
 ## 36. Subscription-backed providers
 
@@ -1291,6 +1389,13 @@ A summary is not automatically less sensitive than its source.
 
 ## 39. Cloud-routing policy
 
+Local processing is the default for every classification. An external route
+exists only after an explicit architectural policy decision names a permitted
+provider and the product can display the exact bounded categories, destination,
+retention behavior, and authorizing policy. The user must visibly authorize
+the route, and the same workflow must remain operable without that external
+path.
+
 A provider call is allowed only when all of the following permit it:
 
 ```text
@@ -1299,11 +1404,17 @@ meeting.cloud_processing_policy
 asset.data_classification
 user.provider_policy
 provider.data_policy
+offline_or_no_outbound_mode
+organization.policy
+deployment.environment
+destination_and_retention_policy
+visible_user_authorization
 ```
 
 Default policy:
 
-- `public`: cloud allowed if user enables the provider;
+- `public`: local by default; cloud requires an explicit approved route and
+  visible user authorization;
 - `internal`: cloud requires explicit meeting or workspace permission;
 - `sensitive`: local by default; cloud requires explicit per-policy approval and clear disclosure;
 - `restricted`: no external processing unless a separately defined institutional policy explicitly permits it.
@@ -1388,13 +1499,33 @@ Before implementing recording and external-process features, create ADRs for:
 - automatic updates;
 - crash reporting and telemetry.
 
-No telemetry may include meeting content by default.
+### 45.1 Privacy-preserving telemetry
+
+Telemetry and third-party crash reporting are disabled by default unless a
+later accepted ADR explicitly enables an opt-in route. Any future telemetry:
+
+- contains no meeting audio, transcript, document, or derived-intelligence
+  content;
+- contains no API key, token, meeting title, filename, sensitive path, or
+  identifiable meeting metadata;
+- can be fully disabled and respects a no-outbound-network mode;
+- documents destination, retention, operator, and user/organization control;
+- may support an organization-controlled or self-hosted destination only after
+  separate review.
+
+Telemetry is never a prerequisite for normal application operation.
 
 ## 46. Encryption policy
 
 Do not invent custom cryptography.
 
 Credentials must use Keychain. Workspace-at-rest protection must be documented. If application-level encryption is required, it must be designed through a separate security ADR with key recovery, migration, backup, and corruption handling.
+
+Sensitive local storage also requires minimum filesystem permissions,
+controlled export, documented retention, secure deletion semantics appropriate
+to the underlying storage, and redacted diagnostics. Signed and verified update
+paths are a Task 011 release gate. Do not claim guaranteed physical erasure on
+copy-on-write or flash storage without platform evidence.
 
 ---
 
@@ -1619,6 +1750,41 @@ A task must verify that its input revisions are still current before publishing 
 - Resume from the last verified checkpoint.
 - Do not permanently retain redundant chunk copies after canonicalization and verification.
 
+### 55.1 Reliable and recoverable recording
+
+Any live recording implementation must persist incrementally while capture is
+in progress. A complete meeting must never exist only in volatile memory until
+the user stops recording.
+
+The recording contract must define explicit capture, persistence, checkpoint,
+interruption, recovery, incomplete, finalizing, completed, and failed states.
+It must checkpoint recoverable media and metadata, detect abnormal termination,
+recover or clearly mark incomplete recordings, handle microphone/system-audio
+device disconnection, and preserve truthful missing ranges. Task 008A fixes the
+technical/permission design; Task 008B implements it with crash, interruption,
+device-loss, disk-full, and forced-termination tests. Real-time coaching or
+response recommendations cannot precede this gate.
+
+### 55.2 Long-transcript completeness
+
+Transcription, chunk merging, hierarchical extraction, and summarization must
+be deterministic and must prove coverage before publication:
+
+- every expected core range and source segment has exactly one accounted-for
+  outcome;
+- physical overlap is bounded, documented, and never double-counted as new
+  source content;
+- missing, failed, empty/no-speech, and retried ranges remain explicit;
+- processing makes measurable forward progress and cannot loop silently;
+- the coverage union equals 100 percent of the eligible source timeline or
+  segment set;
+- inability to prove coverage is a blocking failure;
+- every conclusion retains the exact supporting segment IDs or other evidence.
+
+Task 005B owns transcript coverage manifests and fail-closed publication;
+Tasks 006A/006B own evidence/coverage ledgers for hierarchical processing; Task
+007 owns multi-hour stress and failure testing.
+
 ## 56. Startup health check
 
 Normal launch should perform only lightweight checks:
@@ -1762,6 +1928,17 @@ The user must be able to see, before and after processing:
 # Part XIII — Briefing System
 
 ## 64. Section model
+
+Meeting templates are versioned structured contracts, not only Markdown
+formatting. A template may define meeting type, extraction schemas, required
+entities, required evidence links, validation rules, section assembly, and
+output renderings. Initial and future types may include bilateral,
+multilateral-consultation, internal-coordination, negotiation, board, project,
+and investor meetings.
+
+Task 006B implements only the template foundation and the smallest types needed
+by its approved vertical slice. Broader template catalogs and relationship UI
+remain post-MVP work after evidence, provider, and security gates.
 
 Possible sections include:
 
@@ -2000,6 +2177,23 @@ No source or derived data is sent to a provider in violation of its classificati
 
 Published revisions are immutable, dependencies are exact, and upstream corrections produce correct stale propagation.
 
+### Gate 10 — Transcript completeness
+
+No transcript or hierarchical processing result publishes unless deterministic
+coverage proves that every eligible source range/segment is accounted for and
+all conclusions retain source evidence.
+
+### Gate 11 — Recording durability
+
+Capture persists incrementally, exposes truthful durable states, and recovers
+or explicitly marks incomplete data after interruption, device loss, or crash.
+
+### Gate 12 — Local-first and telemetry integrity
+
+Meeting data stays local unless an explicit approved route is visibly
+authorized; offline/no-outbound operation remains available, and telemetry is
+default-off and excludes sensitive content and metadata.
+
 ## 74. Golden Test Set
 
 Create the Golden Test Set from the first contract milestone, not at the end.
@@ -2125,6 +2319,12 @@ Import local audio or video
   → Assemble and export Markdown
 ```
 
+This slice must also establish local-first provider policy, transcript edit
+lineage, deterministic 100 percent transcript coverage, evidence-linked typed
+Issue/Position/Commitment/Decision foundations, and structured template
+contracts in their assigned controller tasks. It must not move live-recording,
+enterprise, or real-time coaching scope into Task 005B.
+
 Include the minimum Workspace Service, Task Manager, persistence, logging, and recovery required by this path.
 
 Do not implement every work mode before this vertical slice is usable.
@@ -2145,6 +2345,11 @@ Add:
 - provider failure tests;
 - destructive-operation tests;
 - expanded Golden Test Set.
+- default-off content-free telemetry policy and no-outbound-network tests;
+- model-policy routing hardening;
+- controlled export, retention, secure-deletion semantics, and any required
+  at-rest encryption ADR;
+- multi-hour transcript coverage tests that fail on injected omissions.
 
 ## 81. Milestone 4 — Live capture and UN Web TV
 
@@ -2164,6 +2369,9 @@ Then implement:
 - UN Web TV adapter;
 - language-track provenance;
 - safe failure and recovery.
+- incremental recording persistence and durable checkpoints;
+- interruption, abnormal-termination, and device-disconnection recovery;
+- explicit incomplete-recording detection and states.
 
 ## 82. Milestone 5 — Automation and additional providers
 
@@ -2186,6 +2394,16 @@ Add:
 - user confirmation of possible changes;
 - transparent learned preferences;
 - larger historical performance tests.
+
+## 83.1 Post-MVP deferred capability boundary
+
+The following are not part of Task 005B or the initial vertical slice: a
+complete relationship-graph UI, full organization synchronization, enterprise
+administration, complex cross-organization access management, full named-
+speaker identification, and real-time political/negotiation coaching or
+automatic response recommendations. The canonical implementation plan records
+their prerequisite gates. They receive a numbered implementation task only
+after the user explicitly promotes one into scope.
 
 ---
 
@@ -2219,6 +2437,16 @@ Codex must:
 22. add tests with every behavioral change;
 23. update relevant ADRs and documentation in the same change;
 24. leave no unexplained placeholder production code.
+25. keep meeting data local unless an explicit approved route satisfies the
+    local-first outbound contract;
+26. prove complete transcript/source-segment coverage before publication;
+27. store secrets only through the operating-system secret-store boundary;
+28. require backward-compatible migrations, rollback anchors, and prior-state
+    tests for schema changes;
+29. keep telemetry default-off, content-free, metadata-minimized, fully
+    disableable, and compatible with no-outbound-network mode;
+30. implement external product behavior independently rather than copying
+    code from another repository merely to reproduce it.
 
 ## 85. Dependency rule
 
@@ -2272,9 +2500,14 @@ Do not create all documents merely to satisfy a list. Each document must have a 
 
 ---
 
-# Part XIX — Current Authorized Codex Task
+# Part XIX — Historical Initial Codex Task
 
-## 87. Task 001 — Read-Only Repository and Architecture Audit
+## 87. Task 001 — Read-Only Repository and Architecture Audit (accepted history)
+
+Task 001 is complete and retained here as the original bootstrap contract. It
+is not the current task and must not be reopened merely because this historical
+section exists. Current status and the next eligible task come from the
+execution ledger.
 
 ### Objective
 
@@ -2403,9 +2636,12 @@ Do not proceed to Milestone 1 without explicit user authorization.
 
 ---
 
-# Part XX — User Authorization Template for Later Tasks
+# Part XX — Historical User Authorization Template
 
-After reviewing Task 001, the user may authorize the next task with language similar to:
+This example records the original transition after Task 001. It is not the
+current next command; the execution ledger now controls that fact.
+
+After reviewing Task 001, the user could authorize the next task with language similar to:
 
 ```text
 Proceed with Milestone 1 only.

@@ -35,6 +35,13 @@ providers or UI code to storage layout.
   artifact. The versioned semantic JSONL snapshot is an integrity-checked,
   validated export only until a later task proves full operational-state
   reconstruction from it.
+- The accepted Task 008B live-recording path persists bounded increments and
+  durable checkpoints while capture is active. Explicit capture/persistence
+  states distinguish completed, incomplete, recoverable, and failed data; a
+  meeting never exists only in volatile memory until stop.
+- Crash, process kill, OS interruption, disk-full, permission loss, and audio-
+  device disconnection reconcile durable bytes/checkpoints or preserve a
+  visible incomplete recording with exact missing ranges.
 
 ## Consequences
 
@@ -46,3 +53,9 @@ providers or UI code to storage layout.
 - The package requires Swift tools 6.1 to match the reviewed GRDB release.
 - The complete dependency, license, validation, update, and removal record is
   maintained in [`../dependencies/GRDB.md`](../dependencies/GRDB.md).
+- Task 008A accepted the recording state/checkpoint/migration design before the
+  Task 008B implementation, including abnormal-termination and rollback tests.
+- Task 011 verifies cold whole-workspace copy/reopen only with disposable
+  synthetic data. MeetingBuddy must remain quit because the verifier takes no
+  OS-level lock; older-binary rollback and clean-machine restore remain
+  unproved.

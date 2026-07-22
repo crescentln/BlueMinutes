@@ -22,6 +22,13 @@ the evidence needed to reproduce or challenge an output.
 - Derived revisions record exact input and source-asset revision IDs.
 - Manual edits, locks, provider metadata, schema versions, classification, and
   evidence remain part of revision provenance.
+- Original source material, machine transcription, human correction, AI
+  extraction, AI inference, and human-confirmed fact remain distinguishable.
+  A derived claim is a typed revision with exact evidence, never an
+  indistinguishable paragraph appended to a summary.
+- Transcript correction preserves the original machine transcript revision and
+  edit lineage; speaker identity/confidence remains an exact
+  SpeakerAssignment revision.
 
 ## Consequences
 
@@ -31,3 +38,6 @@ the evidence needed to reproduce or challenge an output.
   required from the first domain milestone.
 - User-visible history and stale status can be explained without deleting prior
   output.
+- Issue, Position, Commitment, Decision, and other later intelligence entities
+  require their own immutable contracts and compatible migrations in their
+  owning tasks.

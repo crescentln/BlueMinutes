@@ -25,6 +25,10 @@ unreliable; retaining outdated output as current would be equally unsafe.
   marked stale and require user review.
 - A job rechecks that its inputs are still current immediately before
   publication.
+- Transcript and hierarchical coverage manifests are exact publication inputs.
+  A missing source range/segment or unprovable 100 percent coverage blocks the
+  dependent transcript, extraction, section, or final briefing rather than
+  silently publishing a partial result.
 
 ## Consequences
 
@@ -33,3 +37,8 @@ unreliable; retaining outdated output as current would be equally unsafe.
 - Task 004A persists edges and stale state transactionally.
 - Later UI must explain which input changed and which outputs are affected.
 - Idempotency keys and publication gates include exact input revisions.
+- Accepted Tasks 005B, 006A, and 006B test injected omissions, bounded overlap,
+  retries, restarts, and segment-to-conclusion traceability. Task 011 re-audits
+  those structural gates but leaves provider-only `noSpeech` and
+  `nonSubstantive` closure as medium evidence-integrity findings requiring
+  human review.

@@ -1,9 +1,8 @@
 # Domain Contract Baseline
 
-Status: Task 004A semantic persistence and Task 004B operational job contracts
-accepted; Task 005A media contracts implemented pending full-Xcode gate
+Status: Tasks 001 through 011 accepted; semantic schema remains v10
 Owner: Codex
-Last updated: 2026-07-18
+Last updated: 2026-07-22
 Purpose: Define semantic invariants and task ownership without reproducing the
 master specification's field lists.
 
@@ -204,6 +203,90 @@ silently lowering the result. The type-erased view is ephemeral validator
 input, not a persisted semantic object. These checks perform no I/O and are not
 a persistence or provider service.
 
+## Task 005B transcript provenance and completeness
+
+The accepted `TranscriptSegmentV1` already provides stable logical/revision
+identity, meeting ID, exact source-audio revision and time range, language,
+source text, confidence, review state, semantic hash, and provider/model/version
+through generation metadata. `SpeakerAssignmentV1` correctly keeps speaker ID
+and confidence separate.
+
+Task 005B implements that contract without changing the accepted v1 semantic
+wire shapes. The first machine transcript remains immutable. A human correction
+is a published user-created revision that supersedes and directly names the
+exact prior revision as an input; translation corrections remain separate
+translation revisions. `TranscriptSetID` and `TranscriptCoverageManifestID`
+identify an application-owned immutable coverage proof rather than adding a
+new semantic revision type to the closed v1 object vocabulary.
+
+The manifest binds the canonical-audio revision, deterministic chunk-plan
+identifier/version, canonical frame count, exact core/physical ranges,
+model-policy decisions, provider outcomes, attempt counts, stable machine and
+reviewed segment references, translations, explicit no-speech/failed/missing
+state, superseded manifest, timestamp, and SHA-256 content hash. Published
+state requires every planned core exactly once and allows only transcribed or
+explicit no-speech outcomes. Incomplete manifests retain precise retry evidence
+but cannot become active.
+
+Schema migration 003 persists immutable manifest payloads plus one active
+manifest pointer and immutable pointer events. Fresh, accepted-v1, accepted-v2,
+unknown-future, injected-failure, rollback-anchor, and close/reopen cases are
+covered in disposable tests.
+
+## Task 006A evidence-linked intelligence contracts
+
+Task 006A adds eight independent v1 semantic contracts rather than embedding
+analysis in generic summaries:
+
+```text
+Participant.v1
+Organization.v1
+Issue.v1
+Position.v1
+Commitment.v1
+Decision.v1
+InterventionCard.v1
+DelegationPositionCard.v1
+```
+
+Every contract uses the common immutable revision envelope and frozen semantic
+hash profile. Participant and Organization build on exact Actor and
+SpeakingCapacity revisions without treating formal-group membership as a
+meeting position. Position retains the actor, represented entity, speaking
+capacity, Issue, typed position, effective time, evidence-linked statement,
+reservations, conditions, confidence, review status, user confirmation, and an
+explicit comparison state limited to unknown or insufficient evidence.
+Commitment independently retains actor, optional recipient, content,
+conditions, deadline, status, evidence, confidence, and confirmation; provider
+output cannot assert completion. Decision remains independent and provider
+output must remain uncertain until human confirmation.
+
+`ClaimTaxonomy` distinguishes source fact, delegation claim, MeetingBuddy
+extraction, MeetingBuddy inference, and user-confirmed conclusion.
+`EvidenceLinkedClaim` retains exact EvidenceRef revisions plus explicit
+supported, unsupported, or uncertain state. `IntelligenceGraphValidation`
+resolves actor/capacity/representation, exact evidence and source dependencies,
+classification inheritance, cards, and every cross-object reference before
+publication. Reservations and conditions remain separate typed claim arrays
+through deterministic delegation-card aggregation.
+
+The application-owned `AnalysisCoverageLedger` is immutable and content-hash
+bound. It records exact eligible transcript revisions, transcript manifest,
+route request/decision, provider/runtime evidence, prompt-module versions,
+protected-rules digest, input-package digest, schema version, synthetic fixture
+provenance, per-segment attempts, exact evidence/output revisions, and explicit
+substantive, non-substantive, failed, or missing disposition. Published state
+requires exactly one terminal substantive or non-substantive record for every
+eligible reviewed segment. Missing, duplicated, or failed coverage cannot
+publish.
+
+Schema migration 004 expands the closed semantic vocabulary and creates
+normalized immutable analysis-ledger, segment, evidence, output, active-pointer,
+and event records. Existing schema-v3 semantic payload bytes remain unchanged;
+the verified pre-migration online backup is the rollback anchor. Repository
+publication validates the exact input revisions, graph, normalized indexes,
+and ledger/object equality in one transaction.
+
 ## Active revision and deterministic stale planning
 
 `ActivePublishedRevisionSelection` is a storage-neutral explicit pointer. The
@@ -219,8 +302,11 @@ Tagged invalidation reasons retain the exact replaced or invalidated root.
 `DeterministicStalePlanner` is a side-effect-free planner: it validates an
 acyclic, duplicate-free graph, walks the transitive dependency closure in
 stable order, emits each affected revision once with a causal path and an
-explicit handling action, and rejects a replacement that depends on what it
-replaces. Initial publication and idempotent reselection produce an empty plan.
+explicit handling action, and rejects cycles plus indirect replacement
+dependencies. A direct same-logical-object `.input` edge from an immutable
+prior revision to its human correction is edit lineage, not a downstream
+object to stale, and is excluded from replacement traversal. Initial
+publication and idempotent reselection produce an empty plan.
 Task 004A now persists pointer changes, exact dependency edges, stale events,
 and current stale state atomically. The planner remains pure; recomputation and
 the full invalidation executor belong to later tasks.
@@ -279,11 +365,56 @@ real-world attribution or policy change.
 | --- | --- |
 | 003A | Stable IDs, revision envelope, schema/lifecycle/validation types, data classification, provenance metadata, `SourceAsset.v1`, `EvidenceRef.v1` |
 | 003B | `MeetingProfile.v1`, `TranscriptSegment.v1`, `TranslationSegment.v1`, `Actor.v1`, `SpeakingCapacity.v1`, `SpeakerAssignment.v1`, dependency and stale-plan contracts |
-| 006A | `InterventionCard.v1`, `DelegationPositionCard.v1` |
-| 006B | `IssuePositionGraph.v1`, `BriefingSection.v1`, `ValidationReport.v1`, `FinalBriefing.v1` |
-| 010 | `HistoricalComparison.v1` |
+| 005B | Implemented transcript coverage, edit-lineage, and stable transcript-set/manifest identity contracts outside the closed semantic-object vocabulary |
+| 006A | Implemented independent `Participant.v1`, `Organization.v1`, `Issue.v1`, `Position.v1`, `Commitment.v1`, `Decision.v1`, `InterventionCard.v1`, `DelegationPositionCard.v1` |
+| 006B | Implemented structured `MeetingTemplate.v1`, `IssuePositionGraph.v1`, `BriefingSection.v1`, `ValidationReport.v1`, `FinalBriefing.v1` |
+| 007 | Implemented independent `SensitivityLabel.v1` and `AccessPolicy.v1` on the accepted classification/policy foundations |
+| 010 | Implemented `HistoricalComparison.v1`, deterministic historical query/index contracts, exact evidence-admission descriptors, and seven typed learned-preference values |
+| 011 | No new semantic object or schema; audited exact coverage, evidence, migration, recovery, and release boundaries |
 
 No later-task object is to be added early merely to complete this catalog.
+
+Each owning task must migrate the currently closed semantic-object vocabulary
+and SQLite constraint through an ordered, backward-compatible migration with
+repository, prior-state, backup/rollback, failure-injection, close/reopen, and
+recovery-manifest tests. Later objects must not be hidden in generic JSON or
+summary prose merely to avoid that migration.
+
+## Evidence-linked meeting intelligence
+
+Meeting, Participant, Organization, TranscriptSegment, Issue, Position,
+Commitment, Decision, and Evidence are now independently addressable.
+`MeetingProfile.v1` realizes Meeting and `EvidenceRef.v1` realizes the common
+Evidence entity; existing Actor/SpeakingCapacity contracts are preserved as
+identity foundations. SensitivityLabel and AccessPolicy are independent Task
+007 contracts, and a separate Utterance type is not introduced merely as an
+alias for a reviewed TranscriptSegment.
+
+A Commitment retains actor, recipient, content, conditions, deadline, status,
+exact evidence, confidence, and human-confirmation state. A Position retains
+actor, Issue, content, effective time, source, confidence, and a comparison
+state. Task 010 implements a separate immutable comparison that can record only
+insufficient, no-confirmed-difference, or possible states automatically; a
+confirmed difference requires a user-authored superseding comparison revision.
+Exact `SourceAsset` integrity descriptors now cover already-authorized
+versioned documents, bounded local email imports, and approved public sources
+without granting adapter authority.
+
+Derived claims explicitly distinguish source material, machine transcription,
+human correction, AI extraction, AI inference, and human-confirmed fact.
+Briefing sections and Markdown are views over these entities, not their only
+authoritative representation.
+
+## Structured meeting templates
+
+Task 006B implements a versioned template foundation defining meeting type,
+input schema compatibility, required entities and evidence, blocking validation
+rules, independent section inputs/prompts/schemas/byte bounds, and versioned
+rendering. The initial implementation contains only one multilateral diplomatic
+template and three sections needed by the approved vertical slice. A broader
+bilateral, multilateral, internal-
+coordination, negotiation, board, project, or investor template catalog remains
+post-MVP and unnumbered until explicitly promoted.
 
 ## Evidence and provenance
 
@@ -355,7 +486,7 @@ general migration framework.
 
 ## Implementation status
 
-Tasks 003A, 003B, and 004A are accepted. Task 004A realizes their semantic
+Tasks 001 through 011 are accepted. Task 004A realizes the foundational semantic
 persistence contract behind separate application and concrete SQLite/filesystem
 modules. Task 004B adds a deliberately separate mutable operational `JobRecord`
 contract: jobs reference exact immutable semantic input/output revisions, and a
@@ -367,7 +498,46 @@ job payloads, exact 16 kHz half-open frame ranges, deterministic chunk plans,
 range issues, and persistent original/generated `SourceAsset.v1` revisions.
 The first production executors perform task-managed local acquisition and
 canonical conversion; the native SwiftUI executable exposes source and status
-review without changing domain dependency direction. Full-Xcode build, test,
-sandbox, workspace-panel, and scoped-bookmark evidence passes. There is still
-no provider call, transcript/translation executor, stale recomputation
-executor, or briefing analysis.
+review without changing domain dependency direction. Task 005B adds the
+accepted transcript/translation route and coverage contract. The accepted Task
+006A implementation adds eight evidence-linked intelligence contracts,
+deterministic graph/coverage validation, immutable user correction, and
+schema-v4 repositories. Task 006B adds the five independently revisioned
+template/matrix/briefing contracts above, exact input/evidence closure, a
+zero-source-text-overlap coverage ledger, immutable manual section lineage,
+deterministic validation/assembly/Markdown, and schema-v5 repositories. Exact
+v1 details and limitations are in
+[`BRIEFING_FOUNDATION.md`](BRIEFING_FOUNDATION.md).
+
+Task 009A deliberately adds no semantic object type. Its command, caller,
+permission, policy-evidence, audit, settings, and result DTOs live in
+`MeetingBuddyApplication`: they reference exact semantic revisions but do not
+become or mutate semantic revisions. The SQLite v8 command/settings history is
+operational authority with separate immutability and recovery rules. Task 009A
+is accepted and frozen; its closed contract is documented in
+[`TASK_009A_AUTOMATION.md`](TASK_009A_AUTOMATION.md).
+
+Task 010 adds `HistoricalComparison.v1` as an independent semantic object. Its
+revision envelope contains the deduplicated exact current/historical Position,
+Meeting, Actor, Issue, SensitivityLabel, and AccessPolicy inputs plus both exact
+Evidence trails. Content stores effective dates, media-relative effective
+ranges, confidence, a closed qualified finding/state pair, review state, and
+optional confirmation lineage. Automatic revisions are application-authored
+and never user-confirmed. Only a `possible_difference` can be superseded by a
+user-authored, confirmed, hash-valid revision citing that exact candidate.
+
+Historical query/index and learned-preference DTOs remain application contracts,
+not generic semantic blobs. The index is a disposable normalized projection;
+preference values use the closed seven-type vocabulary and bounded explicit
+user-action provenance. Neither may modify source semantic revisions, security
+policy, provider routing, or protected diplomatic validation. Exact behavior is
+documented in [`HISTORICAL_REVIEW.md`](HISTORICAL_REVIEW.md).
+
+Task 011 adds no semantic type, provider route, or schema migration. Its fresh
+v10 and supported v1-v9 migration/recovery matrix passes, as do structural
+transcript and hierarchical coverage fault-injection gates. The accepted audit
+also leaves four medium evidence-integrity findings open: provider output can
+reach analysis or briefing publication without application-owned semantic
+entailment, and provider-only `nonSubstantive` or `noSpeech` classifications can
+close coverage. All derived intelligence therefore remains subject to human
+review inside the INTERNAL ALPHA boundary.

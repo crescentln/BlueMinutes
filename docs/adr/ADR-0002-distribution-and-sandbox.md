@@ -20,9 +20,10 @@ telemetry authority merely to make local media intake work.
 ## Decision: Option A
 
 - The initial distribution direction is an independently distributed,
-  Developer ID-signed and notarized macOS application. A release still requires
-  its separately authorized Task 011 signing, notarization, clean-machine, and
-  rollback gates.
+  Developer ID-signed and notarized macOS application. The accepted Task 011
+  audit does not satisfy that direction: the current INTERNAL ALPHA is ad-hoc
+  signed and still lacks Developer ID/Team ID, notarization, Gatekeeper,
+  clean-machine, and rollback evidence required for distribution.
 - The application uses App Sandbox.
 - A user-selected MeetingBuddy workspace receives read/write authority. The app
   may persist exactly one app-scoped security-scoped bookmark for that selected
@@ -38,8 +39,17 @@ telemetry authority merely to make local media intake work.
 - Updates are manual for the initial implementation. No automatic updater is
   approved.
 - Telemetry and third-party crash reporting remain disabled.
+- Any future telemetry is opt-in, fully disableable, compatible with no-
+  outbound-network mode, and excludes meeting/transcript/document/derived
+  content, credentials, meeting titles, filenames, sensitive paths, and
+  identifiable meeting metadata. Organization-controlled or self-hosted
+  telemetry requires a later accepted ADR.
 - No network-client, microphone, screen-recording, or application-audio capture
   entitlement is approved by Task 005A.
+- Task 008B later adds only audio input and network client authority for visible
+  audio-only capture and exact-host UN Web TV metadata. Screen recording,
+  arbitrary-host networking, automatic media acquisition, and hidden capture
+  remain unapproved.
 - Domain, application, media, and feature contracts remain independent of
   signing identities and distribution mechanics.
 
@@ -53,10 +63,12 @@ persisted exactly one app-scoped bookmark for a synthetic workspace, and
 restored scoped authority after relaunch. The single purpose-routed importer is
 regression-tested for both workspace and approved-media content types.
 
-This is local development evidence only; it is not Developer ID, provisioning,
-notarization, Gatekeeper, or clean-machine distribution evidence. Those release
-gates remain separately authorized Task 011 work and do not justify weakening
-the sandbox or adding a broader file entitlement.
+Task 011 extends this only to verified local internal-alpha evidence: one arm64
+bundle with ad-hoc Hardened Runtime, the exact five accepted entitlements,
+closed layout, privacy/license resources, coherent hash-bound archive, and a
+bounded local launch. It is not Developer ID, provisioning, notarization,
+Gatekeeper, or clean-machine distribution evidence and does not justify
+weakening the sandbox or adding a broader entitlement.
 
 ## Consequences
 
@@ -64,7 +76,11 @@ the sandbox or adding a broader file entitlement.
   retaining arbitrary source-file authority.
 - A source must be selected again after a launch-interrupted intake because its
   authority is deliberately not durable.
-- Mac App Store distribution, automatic updates, capture permissions, external
-  executables, telemetry, and crash-report vendors require later explicit ADRs
-  and task authorization if proposed.
+- Mac App Store distribution, automatic updates, additional capture
+  permissions, external executables, telemetry destinations, and crash-report
+  vendors require later explicit ADRs and task authorization if proposed.
 - The user accepted Task 005A after the full-Xcode native gate passed.
+- Task 011 audited signing and update boundaries but found no valid signing
+  identity, Team ID, notarization ticket, affirmative Gatekeeper distribution
+  result, clean-machine proof, or approved updater. No publication or
+  distribution authority follows from the accepted internal-alpha audit.

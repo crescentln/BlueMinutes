@@ -1,6 +1,6 @@
 # ADR-0010: Task 006A Local Analysis Route
 
-Status: Accepted for Task 006A implementation; task acceptance remains user-gated
+Status: Accepted; Task 006A is accepted and frozen
 Date: 2026-07-18
 Decision owners: Codex under the user's Task 006A authorization
 Applies from: Task 006A
@@ -87,8 +87,9 @@ or advanced reasoning.
   and fail-closed coverage remain authoritative.
 - No dependency, credential, network implementation, entitlement, telemetry,
   capture authority, or external retention policy is added.
-- Optional independent review-provider selection remains a separate Task 006B
-  decision if that route is later authorized.
+- ADR-0011 resolves the Task 006B review boundary without authorizing an
+  independent reviewing provider; deterministic validation and manual review
+  remain authoritative.
 
 ## Validation required before Task 006A completion
 

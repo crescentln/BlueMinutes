@@ -6,19 +6,23 @@ MeetingBuddy — Codex Handoff Quick Start
 
 2. Open the repository in Codex.
 
-3. For the first run, select GPT-5.6 Sol with max effort.
+3. Select the model/effort appropriate for the explicitly authorized task,
+   using the controller's recommendations.
 
 4. Send this message to Codex:
 
 Read MeetingBuddy_Codex_Master_Spec_v1.0.md and
 MeetingBuddy_Codex_Stepwise_Controller_Prompt_v1.0.md in full.
 Follow the controller prompt as the execution protocol.
-Task 001 is the only currently authorized task.
-Begin Task 001 now, return the complete read-only audit report, and stop.
+Read AGENTS.md and docs/CODEX_EXECUTION_STATE.md, reconcile them with Git, and
+follow only the task explicitly authorized by the user. Tasks 001 through 011
+are accepted, the canonical MVP sequence is complete, and there is no next
+eligible numbered task. Do not reopen accepted work from this handoff file.
 
-5. After Task 001, review the report. To move forward, use:
-
-PROCEED TO TASK 002
+5. Current ledger state: Task 011 is accepted with an INTERNAL ALPHA
+   classification. The application is not a distributable release candidate.
+   Post-MVP capability work and any commit, push, tag, notarization, release,
+   upload, install, or distribution action require separate explicit authority.
 
 6. Thereafter, use the exact next eligible command printed by Codex, or natural Chinese equivalents. Useful commands include:
 
@@ -39,3 +43,5 @@ Important:
 - Do not tell Codex to “build the whole app.”
 - Do not authorize the next task until the current task report and tests are acceptable.
 - A normal question does not authorize file changes; the controller keeps Codex in discussion mode unless execution is clear.
+- Task 001 bootstrap instructions are historical. The execution ledger is the
+  current task-status authority.

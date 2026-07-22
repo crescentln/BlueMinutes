@@ -1,7 +1,7 @@
 # MeetingBuddy — Codex Stepwise Execution Controller
 
-**Version:** 1.0  
-**Date:** 2026-07-18  
+**Version:** 1.1 (stable filename retained)
+**Date:** 2026-07-22
 **Purpose:** Control the implementation of MeetingBuddy through explicit, reviewable, user-authorized stages.  
 **Companion specification:** `MeetingBuddy_Codex_Master_Spec_v1.0.md`
 
@@ -41,7 +41,11 @@ The master specification defines the product, architecture, security, quality, a
 
 This controller defines **how work is authorized and sequenced**.
 
-The controller does not itself authorize every later task. It authorizes only **Task 001** initially. A later task becomes authorized only when the user explicitly tells you to proceed to that task or clearly says to begin the next eligible stage.
+The controller does not itself authorize a task. Task 001 was the historical
+initial authorization; current accepted status and the next eligible task come
+from `docs/CODEX_EXECUTION_STATE.md`, reconciled with Git. A later task becomes
+authorized only when the user explicitly tells you to proceed to that task or
+clearly says to begin the next eligible stage.
 
 If the companion specification is missing or unreadable, stop and report the blocker. Do not reconstruct it from memory.
 
@@ -66,11 +70,15 @@ Do not silently resolve a material conflict. Report it, explain the impact, reco
 
 # 4. Authorization Model
 
-## 4.1 Initial authorization
+## 4.1 Historical initial authorization and current state
 
-This prompt authorizes **Task 001 — Read-Only Repository and Architecture Audit** only.
-
-Begin Task 001 after reading the required files. Do not ask the user to authorize Task 001 again.
+Task 001 was the initial read-only authorization and is now accepted history.
+Do not reopen it merely because its original task specification remains below.
+At every new session, use the execution ledger and repository truth to identify
+accepted tasks and the next eligible task. Tasks 001 through 011 are accepted,
+the canonical MVP sequence is complete, and there is no next eligible numbered
+task. A deferred post-MVP capability becomes executable only after the user
+explicitly promotes it into a new numbered task.
 
 ## 4.2 Later authorization
 
@@ -79,7 +87,7 @@ Do not begin a later task merely because it appears in this controller or the ma
 A later task is authorized only by a clear user instruction such as:
 
 ```text
-PROCEED TO TASK 002
+PROCEED TO TASK <id>
 ```
 
 or a clear natural-language equivalent such as:
@@ -390,11 +398,11 @@ State exactly one recommended next task or blocker-resolution action.
 End with one or more exact commands, for example:
 
 ```text
-ACCEPT TASK 003A
-REVISE TASK 003A: <instructions>
-SHOW DIFF FOR TASK 003A
+ACCEPT TASK <id>
+REVISE TASK <id>: <instructions>
+SHOW DIFF FOR TASK <id>
 RUN ADDITIONAL CHECKS: <checks>
-ACCEPT AND COMMIT TASK 003A
+ACCEPT AND COMMIT TASK <id>
 PAUSE
 ```
 
@@ -538,6 +546,12 @@ Task 009B  MCP and additional/experimental providers
 Task 010   Historical review and learned preferences
 Task 011   Release-candidate audit, packaging, and final hardening
 ```
+
+After Task 011, the post-MVP deferred-capability register in
+`docs/IMPLEMENTATION_PLAN.md` remains non-executable until the user promotes one
+capability into a new numbered task. The controller does not silently promise a
+relationship graph, enterprise administration, organization synchronization,
+full named-speaker identification, or real-time coaching.
 
 Codex may recommend splitting a task into smaller subtasks if repository reality requires it. Codex must not merge tasks or broaden scope without user authorization.
 
@@ -973,6 +987,10 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 005A
 
 # 18. Task 005A — Local Media Intake, Canonical Audio, and Chunking
 
+**Status:** Accepted and frozen at commit
+`287f4aa14070c8de9ea48cea22c7119ef9fe93e5`; retained as historical scope and
+not to be reopened by later planning.
+
 **Prerequisite:** Task 004B accepted.  
 **Recommended model setting:** GPT-5.6 Sol, high effort; use max for material media-tooling or sandbox decisions.
 
@@ -1040,62 +1058,163 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 005B
 
 # 19. Task 005B — Transcription, Translation, Transcript Review, and Speaker Review
 
-**Prerequisite:** Task 005A accepted.  
+**Prerequisite:** Task 005A accepted; ledger and Git reconciled; no open P0
+decision. Provider selection is the first in-task decision gate before any real
+provider call and does not block starting Task 005B.
+
 **Recommended model setting:** GPT-5.6 Sol, high effort; use max for provider/privacy architecture changes.
 
 ## Objective
 
 Complete the input-understanding portion of the local recorded-meeting vertical slice using one approved transcription route and one approved translation route.
 
+## Rationale
+
+Task 005A already supplies deterministic canonical audio and chunks. Task 005B
+must turn those inputs into a complete, reviewable, provenance-preserving
+transcript without coupling the domain to one vendor or allowing provider
+preference to bypass local-first policy.
+
 ## Included scope
 
 Implement:
 
 - transcription provider interface;
-- one approved provider implementation or deterministic test provider plus one production-capable route authorized by the user;
+- one deterministic test provider and one production-capable route authorized
+  through the in-task provider decision gate;
 - translation provider interface;
-- one approved provider implementation or deterministic test provider plus one production-capable route authorized by the user;
+- one deterministic test provider and one production-capable route authorized
+  through the same policy gate;
+- an application-owned model-policy router covering sensitivity, offline/no-
+  outbound mode, organization policy, deployment environment, permitted data
+  destination, provider retention, bounded data categories, and visible user
+  authorization;
+- a provider-route decision record before any real external adapter or meeting-
+  data transmission; starting the task does not authorize outbound transfer;
+- an operating-system Secret Store port backed by macOS Keychain for production
+  credentials, with no plaintext configuration fallback;
 - structured output validation;
 - chunk-level progress, retry, and recovery;
-- transcript persistence;
+- a durable transcript-set/coverage manifest bound to the exact canonical-
+  audio revision, chunk-plan version, core/physical ranges, provider result,
+  and stable segment IDs;
+- deterministic overlap handling, explicit no-speech versus missing/failed
+  outcomes, measurable forward progress, and fail-closed 100 percent eligible-
+  range coverage verification before publication;
+- transcript persistence with immutable original ASR text, exact audio/time/
+  language/provider/model/version/confidence provenance, semantic/source
+  integrity references, and edit lineage;
 - translation persistence without overwriting source text;
 - provider/model/prompt/schema version metadata;
 - transcript review UI;
 - basic speaker-assignment workflow;
 - uncertain-speaker review queue;
-- user correction that creates a new revision and marks dependents stale;
-- privacy-route display sufficient for the implemented providers;
+- user correction that creates a new revision linked to the exact original
+  machine transcript and marks dependents stale;
+- speaker identity/confidence through exact `SpeakerAssignment` revisions rather
+  than untraceable transcript fields;
+- privacy-route display showing local/cloud status, data categories,
+  destination, retention, policy authority, and user authorization;
+- a usable local/offline path through an approved local provider or validated
+  manual transcript/translation intake and review; a disabled cloud button or
+  deterministic test provider alone is not the production fallback;
 - integration and Golden fixture tests.
 
-## Required design rules
-
-- no provider receives direct SQLite access;
-- only minimum necessary job material is exposed;
-- cloud processing requires classification and routing checks;
-- original, interpreted, and translated text are visibly distinct;
-- invalid structured output is rejected;
-- user corrections are versioned, not destructive overwrites;
-- subscription-backed providers remain experimental and are not required in this task unless separately authorized.
-
-## Explicit exclusions
+## Explicit non-goals
 
 - Intervention Cards;
-- delegation positions;
-- Position Graph;
+- Issue, Position, Commitment, Decision, and delegation-position intelligence;
 - briefing generation;
+- structured meeting-template implementation;
+- live recording or audio-capture providers;
 - UN Web TV;
 - MCP;
 - historical comparison.
+- telemetry implementation, application-level encryption redesign, full
+  organization synchronization, relationship graph UI, named-speaker
+  identification, or real-time coaching.
+
+## Affected components
+
+`MeetingBuddyApplication` provider/secret/policy ports, a new authorized
+`MeetingBuddyAI` adapter boundary, `MeetingBuddyTasks` execution and checkpoints,
+`MeetingBuddyPersistence` repositories/migrations, `MeetingBuddyFeatures`
+review UI, `MeetingBuddyApp` composition, and focused test targets.
+
+## Data-model impact and migration considerations
+
+Preserve the accepted `TranscriptSegment.v1`, `TranslationSegment.v1`,
+`SpeakerAssignment.v1`, immutable revision, and exact-dependency contracts.
+Before adding a durable coverage manifest or new revision type, define an
+additive semantic contract and an ordered schema-v2-to-next migration. The
+migration must create an online backup/rollback anchor, preserve all accepted
+v2 data byte-for-byte where unchanged, open supported prior workspaces, reject
+unknown future schemas, and pass failure-injection plus close/reopen recovery
+tests. No migration is authorized by this planning integration.
+
+## Security and privacy implications
+
+No provider receives direct SQLite or unrestricted filesystem access. Only the
+minimum versioned semantic package and bounded audio ranges are exposed. Every
+external call must pass the local-first policy intersection and be recorded in
+task history. A deny or missing policy fact blocks the call; fallback never
+weakens policy. Credentials remain in Keychain and are excluded from logs,
+task directories, exports, and crash diagnostics. Subscription-backed routes
+remain experimental and out of scope unless separately authorized.
+
+## Required tests
+
+- deterministic provider-fake and approved-route integration tests;
+- policy allow/deny, offline/no-outbound, destination/retention, and missing-
+  authorization tests;
+- Keychain fake/integration tests plus plaintext and log-leak negative scans;
+- malformed/partial structured output rejection;
+- injected missing chunk, duplicate overlap, bounded-overlap merge, verified
+  no-speech, retry, cancellation, restart, stale-input, and provider-failure
+  cases;
+- proof that eligible core-range coverage is exactly 100 percent or publication
+  fails with exact missing ranges;
+- immutable edit lineage, translation separation, speaker uncertainty,
+  correction/stale propagation, serialization, migration, rollback, and
+  supported-prior-state compatibility tests;
+- Golden fixture and native review-route checks.
 
 ## Acceptance criteria
 
 - one local recording can reach a reviewable transcript and translation;
 - chunk failure can be retried without repeating completed chunks unnecessarily;
+- deterministic coverage proves every eligible canonical core range is
+  accounted for; unprovable coverage blocks publication and no segment is
+  silently omitted;
 - interpretation provenance cannot be mislabeled;
 - speaker uncertainty and user corrections behave correctly;
 - stale propagation is visible in stored state;
-- provider route and cloud status are clear;
+- original machine text, edited revisions, provider/model/version, source
+  audio/time/language/confidence, speaker assignment, and integrity references
+  remain traceable;
+- the policy router, Keychain boundary, local/offline path, provider route,
+  exact outbound categories, destination, retention, and authorization are
+  enforced and visible;
+- with every external provider disabled, the user can still create/review a
+  meeting and complete the documented local/manual transcript path;
 - relevant Golden tests pass.
+
+## Completion evidence
+
+Provide debug/release build results, all unit/integration/Golden test counts,
+the disposable migration/rollback matrix, one local/offline end-to-end run, one
+approved production-route run using non-sensitive test data, route-history and
+coverage-manifest evidence, Keychain/secret scans, manual review verification,
+and a documentation/status reconciliation. Real user meeting content is not
+required or permitted as completion evidence.
+
+## Rollback and compatibility
+
+The accepted Task 005A commit is the rollback anchor. Keep the new schema
+forward-only in production but prove restoration from the pre-migration online
+backup in disposable workspaces. Disabling or removing a provider adapter must
+leave local data readable and the local/offline route usable. Never roll back
+by deleting accepted user transcripts or the Task 005A baseline.
 
 ## Stop condition
 
@@ -1118,10 +1237,20 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 006A
 
 Implement evidence-linked diplomatic extraction from reviewed transcript, translation, speaker, and document objects.
 
+## Rationale
+
+Derived intelligence must be queryable, reviewable, and attributable. It cannot
+collapse source text, extraction, inference, and human confirmation into one
+untyped summary string.
+
 ## Included scope
 
 Implement:
 
+- independent, revisioned `Participant.v1` and `Organization.v1` contracts
+  built compatibly on the accepted Actor/Capacity identity foundation;
+- independent `Issue.v1`, `Position.v1`, `Commitment.v1`, and `Decision.v1`
+  semantic objects;
 - `InterventionCard.v1`;
 - `DelegationPositionCard.v1`;
 - prompt modules and protected diplomatic rules;
@@ -1132,6 +1261,8 @@ Implement:
 - reservation, condition, support, opposition, request, and proposal preservation;
 - review states and user confirmation;
 - revision and stale propagation;
+- a deterministic segment/evidence coverage ledger proving that hierarchical
+  extraction accounts for every eligible reviewed transcript segment;
 - UI sufficient to inspect and correct cards;
 - Golden Test evaluation for invented positions, omitted reservations, uncertain speakers, and group-versus-position confusion.
 
@@ -1151,6 +1282,50 @@ Implement:
 - final briefing sections;
 - historical comparison;
 - broad autonomous political assessment.
+- historical claims that a position changed; full relationship graph UI;
+  organization synchronization; enterprise administration; named-speaker
+  identification; real-time coaching or response recommendations.
+
+## Affected components
+
+`MeetingBuddyDomain`, application inference and repository ports,
+`MeetingBuddyAI`, persistence schema/repositories, Task Manager nodes,
+review features, Golden fixtures, and migration/recovery tests.
+
+## Data-model impact and migration considerations
+
+Commitment must retain actor, recipient, content, conditions, deadline, status,
+source evidence, confidence, and human-confirmation state. Position must retain
+actor, issue, content, effective time, source, confidence, and an explicit
+comparison state that cannot assert change without Task 010 evidence. Decision
+and Issue remain independent objects. `EvidenceRef` is the common Evidence
+entity and may be extended compatibly for email and permitted public sources.
+
+Adding object types requires an ordered migration from the current closed
+semantic-object schema, repository support, exact dependency/stale edges,
+online rollback backup, supported-prior-state and unknown-future rejection
+tests, and recovery-manifest verification. Do not hide these objects inside
+JSON blobs or briefing text to avoid a migration.
+
+## Security and privacy implications
+
+Use the Task 005B model-policy router and bounded semantic packages. Derived
+objects inherit the most restrictive input classification and access policy.
+Source material remains untrusted; prompt modules cannot alter routing or
+protected claim rules. Unsupported or policy-denied output is rejected before
+persistence.
+
+## Required tests
+
+- schema, enum, evidence, claim-taxonomy, and provider-output validation;
+- exact evidence links for every material field and explicit unsupported states;
+- reservations, conditions, uncertainty, actor/capacity, recipient, deadline,
+  and human-confirmation behavior;
+- complete segment coverage with injected omission/duplication/failure;
+- immutable revision, user correction, stale propagation, migration,
+  rollback/recovery, serialization, and prior-state compatibility;
+- Golden cases for invented positions, group-versus-position confusion,
+  omitted reservations, and unconfirmed commitments/decisions.
 
 ## Acceptance criteria
 
@@ -1161,6 +1336,23 @@ Implement:
 - user corrections produce new revisions and stale downstream objects;
 - Golden tests show no P0 invented position;
 - analysis is reproducible from exact input revisions.
+- every eligible reviewed transcript segment is accounted for by the extraction
+  coverage ledger or explicitly marked non-substantive; coverage failure blocks
+  publication.
+
+## Completion evidence
+
+Report the domain and migration matrix, provider-fake and approved-route test
+results, Golden scores, evidence/coverage validation, manual card review, route
+history, dependency/stale graph checks, and exact changed schema/repository
+files. No real sensitive meeting is required.
+
+## Rollback and compatibility
+
+Preserve all Task 005B transcript/translation revisions. Restore only from the
+verified pre-migration backup in a disposable proof; adapter rollback must not
+erase derived history. Older supported workspaces remain readable or fail with
+an explicit version error and recovery path.
 
 ## Stop condition
 
@@ -1183,12 +1375,21 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 006B
 
 Complete the first usable local recorded-meeting vertical slice.
 
+## Rationale
+
+The first briefing must be assembled from typed, evidence-linked objects and
+structured meeting templates, with deterministic source coverage and no opaque
+full-transcript rewrite at final assembly.
+
 ## Included scope
 
 Implement:
 
 - `IssuePositionGraph.v1` as a reviewable typed structure or matrix, not a graph database;
-- initial briefing template model;
+- an initial versioned structured meeting-template model defining meeting type,
+  extraction schemas, required entities/evidence links, validation rules,
+  section inputs, and renderings rather than only Markdown formatting;
+- only the smallest approved template types needed for the vertical slice;
 - independent generation of two or three approved sections, initially:
   - Meeting Overview;
   - Major Issues;
@@ -1201,6 +1402,9 @@ Implement:
 - `FinalBriefing.v1` assembly from current validated section revisions;
 - Markdown export;
 - evidence navigation from briefing to source object/time range;
+- a hierarchical-processing coverage ledger that consumes the Task 005B
+  coverage-proven transcript set, accounts for every eligible source segment,
+  uses bounded documented overlap, and fails on any silent gap;
 - end-to-end integration tests on small Golden fixtures.
 
 ## Required design rules
@@ -1221,6 +1425,43 @@ Implement:
 - live capture;
 - MCP;
 - production release claim.
+- the full catalog of bilateral, multilateral, internal-coordination,
+  negotiation, board, project, and investor templates; full relationship graph
+  UI; enterprise organization/access features; real-time coaching.
+
+## Affected components
+
+Domain objects, application briefing/template ports, inference adapters,
+persistence schema/repositories, Task Manager nodes, briefing/review features,
+Markdown export, Golden fixtures, and migration/recovery tests.
+
+## Data-model impact and migration considerations
+
+Add independently revisioned IssuePositionGraph, BriefingSection,
+ValidationReport, FinalBriefing, and template contracts with exact input,
+evidence, schema, prompt, and template revisions. Adding each closed object type
+requires an ordered migration, repositories, backup/rollback anchor,
+supported-prior-state tests, and recovery-manifest coverage. Templates evolve
+by immutable revisions and compatibility ranges; a render-only Markdown file
+is never the authoritative template or semantic object.
+
+## Security and privacy implications
+
+All inference uses the Task 005B policy router and minimum semantic packages.
+Export is an explicit user action, preserves classification/evidence metadata
+as policy permits, rejects path escapes, and never silently transmits content.
+Template or source text is untrusted and cannot weaken protected rules.
+
+## Required tests
+
+- template schema/evidence/validation and incompatible-version rejection;
+- deterministic hierarchical coverage, bounded overlap, forward progress,
+  omission/duplication injection, and exact segment-to-conclusion traceability;
+- independent section generation/regeneration, locks, manual edits, stale
+  blocking, contradiction/evidence validation, and deterministic assembly;
+- controlled export/path/classification tests;
+- migration, rollback/recovery, supported-prior-state compatibility, provider
+  denial/failure, and end-to-end Golden fixtures.
 
 ## Acceptance criteria
 
@@ -1232,6 +1473,22 @@ Implement:
 - Markdown export is deterministic and tested;
 - relevant quality gates pass;
 - known limitations are documented.
+- template validation and 100 percent eligible-segment coverage are proven;
+  inability to prove either blocks final briefing publication.
+
+## Completion evidence
+
+Provide the end-to-end local fixture run, exact template/schema versions,
+coverage/evidence ledgers, section and final-assembly hashes, export comparison,
+Golden results, migration/rollback matrix, privacy route, manual review, and
+quality-gate assessment.
+
+## Rollback and compatibility
+
+Preserve Task 006A objects and all locked/manual section revisions. A rollback
+may disable new generation or restore the verified database backup but never
+replace current sections with stale data or delete evidence history. Older
+template revisions remain readable within declared compatibility ranges.
 
 ## Stop condition
 
@@ -1254,22 +1511,42 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 007
 
 Harden the local recorded-meeting product path before expanding to external sources and automation.
 
+## Rationale
+
+Provider, transcript, and briefing behavior must survive realistic failure,
+privacy, storage, and scale conditions before live capture or higher-risk
+capabilities are added.
+
 ## Included scope
 
 - crash and interrupted-job recovery;
 - chunk retry and resumability;
 - data-classification inheritance;
 - cloud-routing enforcement;
+- model-policy routing across sensitivity, offline/no-outbound mode,
+  organization policy, deployment environment, destination/retention, and user
+  authorization;
 - prompt-injection isolation tests;
 - secrets and Keychain review;
+- an explicit application-level encryption decision/ADR if required, including
+  key recovery, rotation, backup, corruption, and migration behavior;
 - log redaction and retention;
+- telemetry default-off/full-disable/no-outbound enforcement and negative tests
+  proving no meeting/transcript content, credentials, titles, filenames,
+  sensitive paths, or identifiable meeting metadata can be emitted;
 - storage dashboard;
 - Trash recovery and retention;
+- controlled export, minimum filesystem permissions, realistic secure-deletion
+  semantics, and retention-policy enforcement;
+- independent `SensitivityLabel.v1` and `AccessPolicy.v1` contracts built
+  compatibly on accepted classification and meeting-policy foundations;
 - stale-propagation UI;
 - provider-failure handling;
 - disk-space handling;
 - destructive-operation confirmations;
 - long-meeting performance tests using bounded fixtures or approved test assets;
+- injected long-transcript omission/overlap/retry/restart tests that re-prove
+  100 percent coverage and source-segment traceability;
 - expanded Golden Test Set;
 - privacy, recovery, migration, and storage-growth tests;
 - accessibility and keyboard review of the implemented vertical slice;
@@ -1282,6 +1559,46 @@ Harden the local recorded-meeting product path before expanding to external sour
 - MCP;
 - historical knowledge features;
 - broad UI redesign unrelated to verified usability problems.
+- telemetry vendor/self-hosted implementation, live recording, organization
+  synchronization, enterprise administration, relationship graph UI, named-
+  speaker identification, or real-time coaching.
+
+## Affected components
+
+Security/privacy policy services, model-policy router, Keychain secret store,
+persistence/storage/recovery, export and Trash services, task/logging runtime,
+features/accessibility, provider adapters, schema/migrations where required,
+and the expanded quality/Golden suites.
+
+## Data-model impact and migration considerations
+
+Any SensitivityLabel/AccessPolicy object, retention metadata, or encrypted
+format must use an additive ordered migration with an online backup, explicit
+key/version metadata, supported-prior-state and partial-failure tests, and a
+documented downgrade/readability boundary. Do not introduce encryption without
+an accepted ADR, and do not claim Workspace Trash or file unlink guarantees
+forensic erasure on APFS/SSD.
+
+## Security and privacy implications
+
+This task owns the dedicated threat-model review for the implemented vertical
+slice. Meeting data remains local by default; a no-outbound mode blocks all
+provider and telemetry traffic. Exports and deletion require visible user
+control. Diagnostics remain bounded and redacted. An organization/self-hosted
+telemetry destination remains a separately approved future capability.
+
+## Required tests
+
+- route-policy matrix, deny/fallback, offline/no-outbound, organization and
+  deployment-environment cases;
+- Keychain, log/diagnostic, telemetry, secret-pattern, path/permission,
+  controlled-export, retention/Trash, and deletion-semantics tests;
+- encryption migration/key-loss/backup/rollback tests if encryption is adopted;
+- provider failure, disk-full, cancellation/restart, stale propagation,
+  destructive confirmation, and prompt-injection isolation;
+- multi-hour performance plus coverage omission/duplication/retry injection;
+- accessibility, keyboard, dependency/license, Golden, migration/recovery, and
+  storage-growth tests.
 
 ## Acceptance criteria
 
@@ -1294,6 +1611,25 @@ Harden the local recorded-meeting product path before expanding to external sour
 - destructive actions require confirmation;
 - Golden tests meet the agreed threshold;
 - the app remains usable with cloud providers disabled for supported local paths.
+- telemetry is fully disabled by default, no-outbound mode emits no network
+  traffic, and negative fixtures prove excluded content/metadata never appears;
+- complete transcript and derived coverage remains proven under long-meeting
+  failures.
+
+## Completion evidence
+
+Provide the threat-model and quality-gate matrix, no-outbound network evidence,
+telemetry/log scans, model-policy results, storage-growth and retention report,
+export/deletion behavior, long-meeting coverage proof, accessibility review,
+migration/rollback results, dependency/license inventory, and residual risks.
+
+## Rollback and compatibility
+
+Security hardening must be feature-reversible without weakening stored-data
+integrity. Preserve pre-migration backups and prior readable formats. Disabling
+telemetry/providers must never disable local operation. Encryption rollback is
+permitted only through the accepted ADR's tested recovery path, never by
+discarding keys or user data.
 
 ## Stop condition
 
@@ -1316,6 +1652,12 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 008A
 
 Determine what can be implemented reliably, safely, and lawfully before writing production UN Web TV or live-capture code.
 
+## Rationale
+
+Live recording changes permission, storage, crash-recovery, and legal risk.
+Task 008B must not invent capture durability or entitlement behavior while
+writing production code.
+
 ## Included scope
 
 Investigate and document:
@@ -1330,13 +1672,20 @@ Investigate and document:
 - redirect, domain allow-list, and SSRF risks;
 - native live application-audio capture capabilities and permission behavior;
 - macOS version and entitlement constraints;
+- a recording/capture state model covering preparing, recording, interrupted,
+  recovering, stopping, finalizing, completed, incomplete, and failed states;
+- incremental persistence/checkpoint format, ownership, flush bounds, source-
+  device provenance, incomplete-recording detection, and recovery behavior;
+- microphone/system-audio device disconnect/change, permission loss, OS
+  interruption, disk-full, app crash, process kill, restart, and cancellation
+  behavior;
 - fallback paths when direct processing is unavailable;
 - a proposed adapter contract;
 - test strategy using approved public or synthetic materials.
 
 Use current primary sources for external technical and legal facts. Clearly separate technical observation, product policy, and legal uncertainty. Do not provide legal conclusions beyond available evidence.
 
-## Prohibited work
+## Explicit non-goals and prohibited work
 
 - no production scraper/downloader;
 - no bypass of access controls;
@@ -1345,6 +1694,36 @@ Use current primary sources for external technical and legal facts. Clearly sepa
 - no redistribution feature;
 - no broad live-capture implementation;
 - no new dependency installation.
+- no real recording, entitlement change, schema migration, or production source
+  modification.
+
+## Affected components
+
+Architecture/ADR documents for capture, storage/recovery, entitlements,
+provenance, and test strategy. Any proposed future application, media, task,
+persistence, UI, or configuration changes remain Task 008B work.
+
+## Data-model impact and migration considerations
+
+Specify proposed recording-session/checkpoint/incomplete-state contracts,
+source-device provenance, durable asset publication, and any schema migration.
+The spike must define backup, rollback, compatibility, partial-file, and
+unknown-future-state behavior but must run no migration.
+
+## Security and privacy implications
+
+No hidden recording. Capture requires direct user awareness, platform
+permission, explicit source choice, local-first storage, least entitlements,
+and truthful incomplete/missing-range display. Web-source research must use
+permitted methods and avoid access-control bypass.
+
+## Required tests
+
+Produce an executable Task 008B test design for abnormal termination, crash,
+restart, checkpoint truncation/corruption, disk-full, permission loss, device
+disconnect/change, source provenance, cancellation/finalization races, and
+volatile-memory-only regression prevention. Spike probes remain read-only or
+use disposable synthetic data.
 
 ## Required output
 
@@ -1355,6 +1734,35 @@ Use current primary sources for external technical and legal facts. Clearly sepa
 - adapter and fallback design;
 - dependencies/entitlements requiring approval;
 - go/no-go decision requests for Task 008B.
+- explicit recording state/storage contract, migration/rollback plan, abnormal-
+  termination test matrix, and proof gaps.
+
+## Acceptance criteria
+
+- current primary sources support every technical/legal fact or uncertainty is
+  explicit;
+- the recording state, incremental checkpoint, recovery, device-loss,
+  incomplete-state, migration, rollback, and abnormal-termination contracts are
+  implementable and testable;
+- accepted, rejected, and user-decision-gated capabilities are distinct;
+- manual local-import fallback and local-first/no-hidden-recording boundaries
+  are preserved;
+- no production code, entitlement, dependency, migration, or real user data is
+  changed.
+
+## Completion evidence
+
+Provide current primary-source citations, bounded technical probes, entitlement
+and permission observations, the accepted/rejected capability matrix, recording
+state/checkpoint design, migration/rollback/test plan, manual fallback, and
+exact user decisions required for 008B.
+
+## Rollback and compatibility
+
+This task is documentation/research only and creates no runtime rollback need.
+Any experimental files stay outside production paths and are removed or kept as
+explicitly approved fixtures. Task 008B may implement only the user-accepted
+design and must preserve imported-media behavior.
 
 ## Stop condition
 
@@ -1383,6 +1791,12 @@ BLOCKED: USER DECISION REQUIRED BEFORE TASK 008B
 
 Implement only the capabilities approved after the spike.
 
+## Rationale
+
+Approved capture/web-source capabilities must reuse the local-media vertical
+slice while adding durable, truthful recording behavior rather than a second
+volatile or feature-specific pipeline.
+
 ## Included scope
 
 As authorized:
@@ -1396,6 +1810,12 @@ As authorized:
 - application-audio capture through approved native APIs;
 - in-room microphone capture;
 - visible recording state;
+- incremental bounded recording persistence while capture is active;
+- durable recording checkpoints and restart recovery;
+- explicit capture/persistence states and visible incomplete-recording status;
+- microphone/system-audio device disconnection/change, permission loss, OS
+  interruption, disk-full, crash, abnormal termination, and finalization-race
+  handling;
 - permission and entitlement handling;
 - task progress, cancellation, recovery, and storage lifecycle;
 - integration with the existing local-media vertical slice;
@@ -1410,10 +1830,77 @@ As authorized:
 - no capture without direct user awareness and platform permission;
 - no broad arbitrary-URL downloader;
 - page/stream failures degrade safely.
+- no complete meeting exists only in volatile memory until recording stops;
+- recording reliability/evidence gates must pass before any future real-time
+  coaching or response-recommendation work.
+
+## Explicit non-goals
+
+Universal UN Web TV support, DRM/access-control bypass, redistribution,
+background/hidden recording, relationship intelligence expansion, full named-
+speaker identification, enterprise access management, real-time coaching, or
+automatic response recommendations.
+
+## Affected components
+
+Approved application capture ports, media/capture adapters, Task Manager,
+persistence/storage/recovery schema and repositories, SourceAsset provenance,
+permissions/entitlements, recording UI, local-media integration, and focused
+test fixtures.
+
+## Data-model impact and migration considerations
+
+Implement the accepted recording-session/checkpoint/state and source-device
+provenance contracts. Any new object type or durable job/checkpoint field
+requires an ordered migration, online backup/rollback anchor, prior-state and
+unknown-future-state tests, partial-file reconciliation, and recovery-manifest
+coverage. Completed and incomplete recordings remain distinguishable and
+auditable.
+
+## Security and privacy implications
+
+Capture is local by default, source-scoped, permissioned, and visibly active.
+No capture entitlement or network source broadens provider authorization.
+Captured material inherits meeting classification/access policy, uses minimum
+filesystem permissions, and enters external processing only through the
+existing model-policy router and explicit user authorization.
+
+## Required tests
+
+- incremental durability and bounded checkpoint/flush behavior;
+- app crash/process kill/restart, checkpoint corruption/truncation, disk-full,
+  device disconnect/change, permission loss, OS interruption, cancellation,
+  stop/finalize race, and incomplete-state detection;
+- no-volatile-only recording regression;
+- source/track provenance, hidden-recording prevention, entitlement denial,
+  local-media reuse, migration/rollback/recovery, and accepted web-source
+  failure/fallback cases.
 
 ## Acceptance criteria
 
-Use only the accepted scope and criteria from Task 008A. Do not claim universal UN Web TV support.
+Use only the accepted scope and criteria from Task 008A. In addition:
+
+- every active recording persists incrementally and reaches an explicit durable
+  checkpoint or visible incomplete/failed state;
+- abnormal termination and device loss recover usable data when possible and
+  never label unverified data complete;
+- missing ranges and source-device provenance remain exact;
+- all recording, permission, migration, recovery, and local-first tests pass;
+- universal UN Web TV support is not claimed.
+
+## Completion evidence
+
+Provide accepted-capability traceability to 008A, recording state/checkpoint
+logs using synthetic media, abnormal-termination recovery results, incomplete-
+recording UI evidence, device/permission matrix, migration/rollback proof,
+source provenance, storage lifecycle, and manual native verification.
+
+## Rollback and compatibility
+
+Preserve Task 005A imported-media behavior and all recorded bytes. Disable new
+capture routes or restore the verified pre-migration backup rather than deleting
+incomplete/user recordings. Entitlement rollback must not strand existing
+workspace data; unsupported web sources continue to offer manual local import.
 
 ## Stop condition
 
@@ -1436,11 +1923,19 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 009A
 
 Expose a safe, typed, auditable command surface without allowing agents to bypass application services.
 
+## Rationale
+
+Future organization/access capabilities require one command boundary that
+enforces the same sensitivity, access, model-route, export, and confirmation
+rules as the UI before MCP or enterprise administration is considered.
+
 ## Included scope
 
 - shared Automation Command Layer;
 - typed commands and validation;
 - permission levels;
+- enforcement of current SensitivityLabel/AccessPolicy and model-route
+  decisions for every command;
 - confirmation requirements;
 - audit records and rollback metadata;
 - safe settings patches;
@@ -1458,6 +1953,36 @@ Expose a safe, typed, auditable command surface without allowing agents to bypas
 - arbitrary database or filesystem commands;
 - remote network control;
 - subscription-provider implementation unless separately required for a tested command.
+- organization synchronization, enterprise administration, complex cross-
+  organization access management, or real-time coaching.
+
+## Affected components
+
+Application command/use-case ports, authorization/audit services, CLI adapter,
+Task Manager, policy and persistence repositories, settings patches, and command
+tests. No provider, UI, or database bypass is added.
+
+## Data-model impact and migration considerations
+
+Command/audit records must reference exact actor/origin, policy version,
+authorization, input revisions, and reversible change metadata. Any new durable
+record uses an ordered migration with backup/rollback and prior-state tests;
+commands do not mutate semantic revisions in place.
+
+## Security and privacy implications
+
+Read and operational authority are least-privilege and fail closed. Sensitive
+exports, provider calls, recording, deletion, credential changes, and access-
+policy changes require the same visible confirmations as the UI. CLI output and
+audit records exclude secrets and meeting content unless the exact authorized
+command requires a bounded rendering.
+
+## Required tests
+
+Permission/policy matrix, malformed and replayed input, confirmation,
+attribution/audit, reversible settings patches, path confinement, sensitive
+export, provider/recording denial, recursion prevention, partial-transaction
+rollback, migration/prior-state compatibility, and CLI/application parity.
 
 ## Acceptance criteria
 
@@ -1467,6 +1992,21 @@ Expose a safe, typed, auditable command surface without allowing agents to bypas
 - settings changes are typed, validated, and reversible;
 - malformed input cannot produce partial state changes;
 - recursive MeetingBuddy calls are blocked by default.
+- no command bypasses SensitivityLabel/AccessPolicy, model policy, export, or
+  local-first restrictions.
+
+## Completion evidence
+
+Provide the typed command catalog, permission/policy matrix, CLI/application
+parity tests, audit/rollback examples with synthetic data, migration results,
+secret/content scans, recursion tests, and exact exclusions.
+
+## Rollback and compatibility
+
+The CLI is an adapter and can be disabled without changing stored semantic
+data. Restore only from the verified pre-migration backup if durable audit
+schema rollback is required. Previously accepted UI behavior remains the
+reference path.
 
 ## Stop condition
 
@@ -1489,12 +2029,21 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 009B
 
 Add narrowly scoped adapters over already-tested internal boundaries.
 
+## Rationale
+
+Additional local, organization-hosted, approved-cloud, subscription, and MCP
+routes are safe only after provider/model policy and the command layer are
+proven independently of vendor SDKs.
+
 ## Included scope
 
 As explicitly approved:
 
 - MCP adapter over the shared command layer;
 - one API or local-model fallback provider if not already present;
+- separately approved organization-hosted and cloud-provider adapters only
+  when their destination, retention, deployment, and data-policy contracts are
+  documented;
 - experimental Codex subscription adapter using the official local client only;
 - experimental Claude Code subscription adapter using the official local client only;
 - capability detection;
@@ -1508,6 +2057,13 @@ As explicitly approved:
 
 Local HTTP API is excluded unless a concrete client requirement has been documented and separately approved.
 
+## Explicit non-goals
+
+Organization synchronization, enterprise administration, complex cross-
+organization access management, unrestricted remote control, telemetry vendor
+integration, relationship graph UI, named-speaker identification, or real-time
+coaching/recommendations. No adapter may become the only supported route.
+
 ## Required design rules
 
 - subscriptions are not represented as APIs;
@@ -1516,6 +2072,36 @@ Local HTTP API is excluded unless a concrete client requirement has been documen
 - provider-specific behavior does not leak into the domain layer;
 - experimental providers are feature-flagged and nonessential;
 - the app retains a supported fallback path.
+- provider/model implementation details do not leak into domain logic, and a
+  dropdown cannot select a policy-ineligible route.
+
+## Affected components
+
+`MeetingBuddyAI` provider adapters, application provider/model-policy ports,
+Keychain Secret Store, restricted task directories, command-layer MCP adapter,
+composition/feature flags, usage metadata, and adapter tests.
+
+## Data-model impact and migration considerations
+
+Prefer no semantic schema change. New provider capability/data-policy metadata
+must be versioned and backward compatible; any durable schema addition requires
+an ordered migration, online backup/rollback, prior-state tests, and removal
+strategy. Experimental adapter data must not become required to read meetings.
+
+## Security and privacy implications
+
+Every route must pass sensitivity, offline/no-outbound, organization,
+deployment, destination/retention, and user-authorization policy. Credentials
+remain in Keychain. Restricted directories expose minimum material. No adapter
+extracts another application's credentials or weakens policy on quota/failure.
+
+## Required tests
+
+Provider capability and policy eligibility, local/offline fallback,
+destination/retention denial, quota/login/version/failure/cancellation,
+structured-output validation, restricted-directory cleanup, credential/log
+scans, feature-flag removal, MCP permission/recursion, migration/prior-state
+compatibility, and adapter substitution.
 
 ## Acceptance criteria
 
@@ -1526,6 +2112,21 @@ Local HTTP API is excluded unless a concrete client requirement has been documen
 - recursive calls are blocked;
 - experimental status is clear;
 - no credential-handling violation exists.
+- local/offline operation survives removal or denial of every optional adapter.
+
+## Completion evidence
+
+Provide adapter capability/data-policy records, policy-router decisions,
+fake/non-sensitive integration results, Keychain and restricted-directory
+evidence, quota/failure behavior, recursion tests, fallback proof, migration
+results if any, and feature/removal status.
+
+## Rollback and compatibility
+
+Each adapter is independently disableable/removable. Removing it leaves stored
+semantic objects readable and a supported local/offline path available. Any
+schema rollback uses the verified backup; credentials are deleted only through
+an explicit separately authorized action.
 
 ## Stop condition
 
@@ -1548,12 +2149,23 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 010
 
 Add transparent, evidence-based historical retrieval and limited preference learning without creating opaque memory or autonomous policy-change claims.
 
+## Rationale
+
+Position differences, relationship history, and preferences become useful only
+after current meeting entities are published, evidence-linked, and protected
+by explicit review state.
+
 ## Included scope
 
 - deterministic historical search by actor/country, topic, date, body, and meeting type;
 - retrieval from confirmed published semantic objects;
 - `HistoricalComparison.v1`;
 - exact evidence and revision references;
+- Position effective-time/source/confidence comparison and explicit
+  `differs_from_previous` states that remain `unknown` or `insufficient_evidence`
+  unless exact published evidence supports a change;
+- Evidence support for versioned documents, permitted email imports, and
+  permitted public sources with integrity metadata;
 - qualified comparison language;
 - user confirmation of possible changes;
 - visible, editable, disableable, removable, and resettable learned preferences;
@@ -1569,6 +2181,42 @@ Add transparent, evidence-based historical retrieval and limited preference lear
 - preferences never alter protected diplomatic rules;
 - formal group membership is not inferred as a current position.
 
+## Explicit non-goals
+
+Full relationship graph UI, organization synchronization, enterprise
+administration, complex cross-organization access control, hidden memory,
+automatic policy-change claims, full named-speaker identification, or real-time
+coaching/recommendations.
+
+## Affected components
+
+HistoricalComparison and search domain contracts, persistence schema/indexes,
+application query services, review/preferences UI, evidence adapters already
+approved for local import, and performance/Golden tests.
+
+## Data-model impact and migration considerations
+
+Add `HistoricalComparison.v1` and any normalized search/index metadata through
+an ordered migration from the closed current semantic-object schema. Preserve
+exact current/historical Position and Evidence revisions, immutable preference
+provenance, online backup/rollback, supported-prior-state tests, rebuildable
+index semantics, and unknown-future rejection.
+
+## Security and privacy implications
+
+Search and comparison operate locally by default and honor SensitivityLabel and
+AccessPolicy. Email/public-source evidence is imported only through separately
+approved bounded adapters, is treated as untrusted data, and never grants
+network or instruction authority. Preferences are visible and removable.
+
+## Required tests
+
+Deterministic filters/search, exact evidence/revision links, insufficient-
+evidence and wording-only cases, effective-time ordering, preference
+visibility/reset/removal, classification/access enforcement, local/no-outbound
+behavior, index rebuild, historical scale, migration/rollback/recovery, and
+Golden false-change regressions.
+
 ## Acceptance criteria
 
 - search results are reproducible;
@@ -1576,6 +2224,19 @@ Add transparent, evidence-based historical retrieval and limited preference lear
 - users can inspect and reverse learned preferences;
 - no silent policy-change assertion occurs;
 - historical growth remains within tested performance limits.
+
+## Completion evidence
+
+Provide deterministic query fixtures/results, exact comparison/evidence trails,
+false-change Golden results, preference reset/removal proof, local/no-outbound
+evidence, scale measurements, index rebuild, and migration/rollback matrix.
+
+## Rollback and compatibility
+
+Historical indexes and learned preferences can be disabled or rebuilt without
+deleting published meeting objects. Rollback preserves current/historical
+revisions and uses the verified database backup for schema changes. No hidden
+state remains after an explicit preference reset.
 
 ## Stop condition
 
@@ -1591,12 +2252,19 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 011
 
 # 28. Task 011 — Release-Candidate Audit, Packaging, and Final Hardening
 
-**Prerequisite:** All release-target tasks accepted or explicitly deferred with documented limitations.  
+**Prerequisite:** Task 007 accepted; Tasks 008A, 008B, 009A, 009B, and 010 each accepted or explicitly deferred with documented limitations.
 **Recommended model setting:** GPT-5.6 Sol, max effort. Ultra may be used only if the user explicitly authorizes independent parallel audit workstreams.
 
 ## Objective
 
 Determine whether the selected release scope is safe, coherent, testable, distributable, and professionally usable.
+
+## Rationale
+
+Release evidence must verify the complete selected runtime path, including
+local-first routing, transcript coverage, recording durability when included,
+secure storage, migrations, telemetry absence, and signed update/distribution
+boundaries—not only a successful build.
 
 ## Included scope
 
@@ -1609,7 +2277,18 @@ Determine whether the selected release scope is safe, coherent, testable, distri
 - long-meeting and failure-mode tests;
 - accessibility and keyboard audit;
 - macOS signing, notarization, sandbox, entitlement, and permission review;
+- signed and verified update-path review; automatic updates remain unapproved
+  unless separately authorized by ADR;
 - dependency, license, binary-size, and update review;
+- no-outbound-network, provider-destination/retention, Keychain, telemetry-
+  exclusion, controlled-export, filesystem-permission, retention/deletion, and
+  encryption-policy verification;
+- deterministic 100 percent transcript/hierarchical coverage audit with
+  injected omission/retry/restart cases;
+- incremental recording/checkpoint/interruption/device-loss audit when Task
+  008B capture is in the selected release scope;
+- schema migration, supported-prior-state, rollback-backup, and recovery audit
+  for every semantic object added after Task 005A;
 - clean-machine build/install test;
 - release notes and known limitations;
 - user-data backup and rollback instructions;
@@ -1628,12 +2307,71 @@ RELEASE CANDIDATE
 
 Do not classify the product as release candidate when a relevant P0 defect, untested migration, privacy violation, or evidence-integrity failure remains.
 
+## Acceptance criteria
+
+- every selected release task is accepted or explicitly deferred with a visible
+  limitation and no undefined prerequisite;
+- no relevant P0 data-loss, privacy, security, migration, recording,
+  transcript-coverage, or evidence-integrity defect remains;
+- clean-machine, signing/notarization/update, build/test, migration/recovery,
+  no-outbound/telemetry, provider, export/storage, accessibility, Golden, and
+  long-meeting gates pass for the selected scope;
+- rollback and user-data backup instructions are tested;
+- the release classification is supported by the full evidence matrix and no
+  publication/distribution action occurs without separate authorization.
+
 ## Explicit exclusions
 
 - opportunistic new features;
 - broad redesign;
 - hiding known limitations to meet a date;
 - publishing or distributing without explicit user authorization.
+
+## Affected components
+
+The entire selected release scope, packaging/signing/notarization/update
+artifacts, dependencies/licenses, storage/migrations/recovery, providers/model
+policy, capture if included, telemetry/network/export surfaces, accessibility,
+Golden fixtures, and operator rollback documentation.
+
+## Data-model impact and migration considerations
+
+Task 011 should not invent feature schemas. It must test clean creation and
+every supported upgrade path, pre-migration backup, interruption/failure,
+rollback restore, unknown-future rejection, and recovery-manifest integrity.
+Any discovered schema fix remains separately scoped and revalidated.
+
+## Security and privacy implications
+
+Release classification fails on any meeting-content egress without an approved
+route, telemetry/sensitive-metadata leak, plaintext secret, broken no-outbound
+mode, unverified update artifact, overbroad entitlement, unbounded export, or
+unresolved P0 data-loss/evidence defect.
+
+## Required tests
+
+Full build/unit/integration/Golden suites; clean install; signing/notarization/
+Gatekeeper/update verification; all supported migrations and rollback;
+recovery/crash/disk/provider/capture failure; no-outbound packet evidence;
+telemetry/log/secret/content scans; transcript coverage fault injection;
+recording abnormal termination when applicable; export/retention/deletion;
+accessibility/keyboard; dependency/license/binary-size; and long-meeting scale.
+
+## Completion evidence
+
+Provide the release classification and full gate matrix, exact binaries/signing
+identities/notarization status, update verification, clean-machine results,
+migration/rollback/recovery matrix, provider/network/telemetry evidence,
+coverage and recording results, dependency/license inventory, backup/rollback
+instructions, known limitations, and unverified facts.
+
+## Rollback and compatibility
+
+Define tested user-data backup and application rollback paths before any
+distribution. Rollback must preserve newer user data or explicitly block with a
+safe compatibility explanation. Publishing, tagging, notarizing, updating, or
+distributing remains separately authorized; this audit alone performs none of
+those actions.
 
 ## Stop condition
 
@@ -1688,20 +2426,24 @@ A partially completed task remains the active task until the user accepts a revi
 
 ---
 
-# 31. First Response Required from Codex
+# 31. New-Session Startup Required from Codex
 
 After reading this controller and the master specification:
 
-1. state that Task 001 is the only currently authorized task;
-2. identify the repository root and governing files found;
-3. state that Task 001 is read-only;
-4. begin the Task 001 audit immediately;
-5. return the full Task 001 report;
-6. stop.
+1. read `AGENTS.md` and `docs/CODEX_EXECUTION_STATE.md`;
+2. inspect Git status and HEAD;
+3. reconcile the working tree with the accepted-task ledger;
+4. identify the user's authorized task and verify it is the next eligible task;
+5. report material drift, unresolved P0 decisions, or missing authority before
+   editing;
+6. execute only the authorized task and stop at its boundary.
 
-Do not ask the user to repeat the project requirements.
-
-Do not begin Task 002.
+Task 001 is accepted history, not a default restart instruction. At the end of
+the one-time post-005A roadmap integration, Task 005B became the next executable
+task but remained separately gated. Tasks 005B through 011 were subsequently
+authorized and accepted. The canonical MVP sequence is now complete; do not
+invent a next task or ask the user to repeat project requirements already
+present in the governing files.
 
 ---
 
@@ -1714,17 +2456,21 @@ STATUS
 SHOW DIFF
 SHOW RISKS
 EXPLAIN <topic>
-PROCEED TO TASK 002
+PROCEED TO TASK <id>
 START NEXT ELIGIBLE TASK
-REVISE TASK 003A: <instructions>
+REVISE TASK <id>: <instructions>
 RUN ADDITIONAL CHECKS: <checks>
-ACCEPT TASK 003A
-ACCEPT AND COMMIT TASK 003A
-ACCEPT AND PROCEED TO TASK 003B
+ACCEPT TASK <id>
+ACCEPT AND COMMIT TASK <id>
+ACCEPT TASK <id> AND PROCEED TO TASK <next-id>
 PAUSE
 ABORT CURRENT TASK
 PREPARE ROLLBACK PLAN
 ```
+
+There is no current next eligible numbered task. Use `STATUS` to reconcile live
+state. Post-MVP capability work and every commit, push, tag, notarization,
+release, upload, install, or distribution action remain separately authorized.
 
 Natural Chinese equivalents are acceptable when intent is clear.
 

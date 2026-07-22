@@ -29,6 +29,19 @@ Before changing the repository:
 4. compare the working tree with the ledger;
 5. report material drift or unresolved P0 decisions before editing.
 
+## Task sequence and accepted baseline
+
+- Every task listed in the execution ledger's `accepted_tasks` is a frozen
+  baseline. Do not reopen, redo, or modify accepted behavior unless a later
+  explicitly authorized task requires a compatible change.
+- Follow the canonical numbered sequence in the controller and
+  `docs/IMPLEMENTATION_PLAN.md`. Implement only the requested task, do not
+  silently expand its scope, and stop at each task boundary.
+- The execution ledger is the live task-status authority. Historical bootstrap
+  text does not supersede an accepted ledger state.
+- Schema changes require an ordered backward-compatible migration, a rollback
+  anchor, supported-prior-state tests, and explicit compatibility evidence.
+
 ## Architecture invariants
 
 - Production code uses Swift 6 language mode and native macOS frameworks.
@@ -45,6 +58,23 @@ Before changing the repository:
   exact input revisions and become stale when those inputs are superseded.
 - Original speech, simultaneous interpretation, machine translation, and user
   edits retain distinct provenance.
+- Meeting audio, transcripts, metadata, and derived intelligence remain local
+  by default. No meeting content leaves the device without an explicit
+  approved path that identifies data categories, destination, retention,
+  provider authority, visible user authorization, and a local or offline
+  alternative.
+- ASR, translation, extraction, summarization, and LLM implementations use
+  provider interfaces and an application-owned model-policy router. A provider
+  or model dropdown never overrides sensitivity, offline mode, organization
+  policy, deployment environment, destination policy, or user authorization.
+- Derived claims remain typed as source material, machine transcription,
+  human correction, AI extraction, AI inference, or human-confirmed fact and
+  retain exact evidence links.
+- Transcript and hierarchical processing must prove deterministic 100 percent
+  source-segment coverage. Missing or unprovable coverage fails closed; no
+  segment may be silently omitted.
+- Recording reliability and evidence integrity precede any real-time coaching
+  or response-recommendation capability.
 
 ## Safety and privacy
 
@@ -58,6 +88,17 @@ Before changing the repository:
 - Destructive or sensitive operations require explicit user confirmation.
 - Do not add or upgrade a dependency without the dependency note required by
   the controller and master specification.
+- Secrets are stored only in operating-system secure storage and never in
+  plaintext configuration or logs.
+- Telemetry is disabled by default, can be fully disabled, supports a
+  no-outbound-network mode, and never includes meeting or transcript content,
+  credentials, meeting titles, filenames, sensitive paths, or identifiable
+  meeting metadata.
+- Do not copy code from an external repository merely to reproduce another
+  product. Independently implement only the authorized MeetingBuddy behavior
+  under reviewed dependencies and licenses.
+- Preserve existing accepted behavior unless the active task explicitly and
+  compatibly changes it.
 
 ## Change and verification rules
 
@@ -80,5 +121,7 @@ Before changing the repository:
 - Storage and recovery: `docs/STORAGE_POLICY.md`
 - Task sequence: `docs/IMPLEMENTATION_PLAN.md`
 - Acceptance gates: `docs/MVP_ACCEPTANCE.md`
+- Task 006B briefing proof: `docs/BRIEFING_FOUNDATION.md`
+- Accepted Task 011 release audit: `docs/TASK_011_RELEASE_CANDIDATE_AUDIT.md`
 - Decision records: `docs/adr/README.md`
 - Operational state: `docs/CODEX_EXECUTION_STATE.md`

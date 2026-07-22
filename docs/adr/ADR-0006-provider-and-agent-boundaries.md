@@ -25,6 +25,17 @@ or agent to bypass domain validation, privacy policy, and storage services.
 - Provider-specific SDK types do not enter the domain layer.
 - Subscription-backed clients remain experimental, use official local clients
   only, and never expose or extract account credentials.
+- Application-owned ports separately cover authorized audio capture,
+  speech-to-text, translation, extraction/summarization/validation models,
+  semantic/asset storage, and operating-system secret storage. Storage and
+  Secret Store are infrastructure boundaries, not inference providers.
+- One model-policy router filters local, organization-hosted, approved-cloud,
+  and experimental routes by sensitivity/access policy, offline/no-outbound
+  mode, organization policy, deployment environment, destination/retention,
+  task data categories, and visible user authorization.
+- A provider/model dropdown can select only among eligible routes. Failure or
+  fallback never weakens policy, and supported workflows retain a local/offline
+  path.
 
 ## Consequences
 
@@ -36,3 +47,8 @@ or agent to bypass domain validation, privacy policy, and storage services.
   separately reviewed workflow permits them.
 - No local HTTP API is created without a concrete, separately approved client
   need.
+- Accepted Task 005B establishes transcription/translation, Secret Store, and
+  model-policy interfaces; Tasks 006A/006B reuse them; Task 008B owns capture;
+  Task 009A adds the closed command/CLI boundary; and Task 009B adds only the
+  local seven-read-tool stdio MCP adapter. No additional provider or network
+  route was approved through Task 011.
