@@ -1,6 +1,7 @@
 # Current Architecture
 
-Status: Tasks 001 through 011 accepted; selected release classified INTERNAL ALPHA
+Status: Tasks 001 through 011 accepted; source repository PUBLIC; selected app
+classified INTERNAL ALPHA
 Owner: Codex
 Last updated: 2026-07-22
 Purpose: Record the observed repository state only; target design belongs in
@@ -23,15 +24,18 @@ INTERNAL ALPHA, not a release candidate or distributable build.
 
 ## Repository state
 
-- Git repository: private `crescentln/BlueMinutes`; local `main` tracks
-  `origin/main`. Private source publication began at `5733eb7`, and the current
-  pre-status-sync baseline is `4c8025a` after Dependabot PR #1 updated the
-  pinned official checkout Action. Accepted Task 011 status baseline is
-  `d31b9aa`, Task 011 implementation is `852257c`, and accepted Task 010 commit
-  `f371faa` is the pre-Task-011 rollback anchor. These are the current reachable
-  equivalents after the authorized private-path and GitHub-noreply history
-  sanitizations. No public conversion, tag, notarization submission, binary
-  upload, installation, or distribution is authorized.
+- Git repository: public [`crescentln/BlueMinutes`](https://github.com/crescentln/BlueMinutes);
+  local `main` tracks `origin/main`. Initial private source publication began at
+  `5733eb7`; the objective public README from Issue #4 and PR #5 was rebased at
+  public baseline `e621537`. Signed-out page, raw-file, API, and anonymous Git
+  checks resolve that exact SHA. `main` requires Pull Requests and the strict
+  `Swift build and test` check, applies protection to administrators, requires
+  linear history and resolved conversations, and rejects force-push and branch
+  deletion. Accepted Task 011 status baseline remains `d31b9aa`, Task 011
+  implementation remains `852257c`, and accepted Task 010 commit `f371faa`
+  remains the pre-Task-011 rollback anchor. No tag, GitHub Release,
+  notarization submission, binary upload, installation, or distribution was
+  authorized by the public source conversion.
 - Product source files: `Sources/MeetingBuddyDomain/`,
   `Sources/MeetingBuddyApplication/`, `Sources/MeetingBuddyPersistence/`, and
   `Sources/MeetingBuddyTasks/`, `Sources/MeetingBuddyMedia/`,
@@ -442,6 +446,7 @@ and [`audits/TASK-012_SECURITY_REMEDIATION.md`](audits/TASK-012_SECURITY_REMEDIA
 ## Next permitted transition
 
 Tasks 001 through 011 are accepted, and there is no next eligible numbered MVP
-task. Any post-MVP capability must be explicitly promoted into a new numbered
-task. Commit, push, tag, notarization, release, upload, installation, and
-distribution remain separate user-authorized actions.
+task. Public source maintenance follows the Issue/short-branch/Pull Request
+workflow. Any post-MVP product capability must be explicitly promoted into a
+new numbered task, while every tag, GitHub Release, notarization, binary upload,
+installation, and distribution remains a separate user-authorized action.
