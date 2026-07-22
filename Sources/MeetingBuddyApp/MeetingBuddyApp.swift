@@ -40,7 +40,7 @@ private final class MeetingBuddyApplicationDelegate: NSObject, NSApplicationDele
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Finish the visible recording before quitting?"
-        alert.informativeText = "MeetingBuddy will stop packet admission, seal verified local audio, and finish or retain an explicit incomplete result before it quits. Force-quitting may leave the session for restart recovery."
+        alert.informativeText = "BlueMinutes will stop packet admission, seal verified local audio, and finish or retain an explicit incomplete result before it quits. Force-quitting may leave the session for restart recovery."
         alert.addButton(withTitle: "Stop, Finalize, and Quit")
         alert.addButton(withTitle: "Keep Recording")
         guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
@@ -57,7 +57,7 @@ private final class MeetingBuddyApplicationDelegate: NSObject, NSApplicationDele
                 let failure = NSAlert()
                 failure.alertStyle = .critical
                 failure.messageText = "Recording finalization is not finished"
-                failure.informativeText = "MeetingBuddy remains open so retained local audio is not silently abandoned. Stop or finish the recording from the visible recording controls, then quit again."
+                failure.informativeText = "BlueMinutes remains open so retained local audio is not silently abandoned. Stop or finish the recording from the visible recording controls, then quit again."
                 failure.runModal()
             }
             self?.terminationTask = nil

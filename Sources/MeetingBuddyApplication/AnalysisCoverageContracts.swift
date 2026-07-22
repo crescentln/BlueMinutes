@@ -20,6 +20,49 @@ public enum AnalysisSegmentDisposition: String, Codable, Hashable, Sendable {
     case missing
 }
 
+public enum AnalysisOmissionVerificationMethod: String, Codable, Hashable, Sendable {
+    case exactNonSemanticMarker = "exact_non_semantic_marker"
+}
+
+/// Application-owned proof binding an omission to the exact transcript and,
+/// when present, translation text. A provider-supplied reason code is not
+/// authoritative.
+public struct AnalysisOmissionConfirmation: Codable, Hashable, Sendable {
+    public static let verifierVersion: UInt32 = 1
+
+    public let segmentRevision: SemanticRevisionReference
+    public let sourceTextDigest: ContentDigest
+    public let translationRevision: SemanticRevisionReference?
+    public let translationTextDigest: ContentDigest?
+    public let method: AnalysisOmissionVerificationMethod
+    public let verifierVersion: UInt32
+
+    public init(
+        segmentRevision: SemanticRevisionReference,
+        sourceTextDigest: ContentDigest,
+        translationRevision: SemanticRevisionReference? = nil,
+        translationTextDigest: ContentDigest? = nil,
+        method: AnalysisOmissionVerificationMethod = .exactNonSemanticMarker,
+        verifierVersion: UInt32 = Self.verifierVersion
+    ) throws {
+        guard segmentRevision.objectType == .transcriptSegment,
+              translationRevision.map({ $0.objectType == .translationSegment }) ?? true,
+              (translationRevision == nil) == (translationTextDigest == nil),
+              verifierVersion == Self.verifierVersion
+        else {
+            throw AnalysisCoverageError.invalidLedger(
+                "The analysis omission confirmation is malformed or unsupported."
+            )
+        }
+        self.segmentRevision = segmentRevision
+        self.sourceTextDigest = sourceTextDigest
+        self.translationRevision = translationRevision
+        self.translationTextDigest = translationTextDigest
+        self.method = method
+        self.verifierVersion = verifierVersion
+    }
+}
+
 public struct AnalysisRuntimeEvidence: Codable, Hashable, Sendable {
     public let operatingSystemVersion: String
     public let frameworkIdentifier: String
@@ -135,6 +178,32 @@ public struct AnalysisFixtureProvenance: Codable, Hashable, Sendable {
     }
 }
 
+/// Explicit user confirmation of the exact quarantined analysis candidate.
+/// It binds the confirmation to both the prior ledger identity and content.
+public struct AnalysisReviewConfirmation: Codable, Hashable, Sendable {
+    public let candidateLedgerID: AnalysisCoverageLedgerID
+    public let candidateContentHash: ContentDigest
+    public let confirmedAt: UTCInstant
+    public let confirmsEveryClaim: Bool
+
+    public init(
+        candidateLedgerID: AnalysisCoverageLedgerID,
+        candidateContentHash: ContentDigest,
+        confirmedAt: UTCInstant,
+        confirmsEveryClaim: Bool
+    ) throws {
+        guard confirmsEveryClaim else {
+            throw AnalysisCoverageError.invalidLedger(
+                "Analysis confirmation must explicitly cover every candidate claim."
+            )
+        }
+        self.candidateLedgerID = candidateLedgerID
+        self.candidateContentHash = candidateContentHash
+        self.confirmedAt = confirmedAt
+        self.confirmsEveryClaim = confirmsEveryClaim
+    }
+}
+
 public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
     public let segmentRevision: SemanticRevisionReference
     public let translationRevision: SemanticRevisionReference?
@@ -145,6 +214,7 @@ public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
     public let evidenceRevisions: [SemanticRevisionReference]
     public let outputRevisions: [SemanticRevisionReference]
     public let safeReasonCode: String?
+    public let omissionConfirmation: AnalysisOmissionConfirmation?
 
     public init(
         segmentRevision: SemanticRevisionReference,
@@ -155,7 +225,8 @@ public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
         provider: ProviderMetadata? = nil,
         evidenceRevisions: [SemanticRevisionReference] = [],
         outputRevisions: [SemanticRevisionReference] = [],
-        safeReasonCode: String? = nil
+        safeReasonCode: String? = nil,
+        omissionConfirmation: AnalysisOmissionConfirmation? = nil
     ) throws {
         let evidence = evidenceRevisions.sorted()
         let outputs = outputRevisions.sorted()
@@ -167,7 +238,11 @@ public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
               outputs.allSatisfy({ Self.allowedOutputTypes.contains($0.objectType) }),
               Set(outputs).count == outputs.count,
               attemptCount <= 100,
-              safeReasonCode.map(Self.validReason) ?? true
+              safeReasonCode.map(Self.validReason) ?? true,
+              omissionConfirmation.map({ confirmation in
+                  confirmation.segmentRevision == segmentRevision
+                      && confirmation.translationRevision == translationRevision
+              }) ?? true
         else {
             throw AnalysisCoverageError.invalidLedger("An analysis segment coverage record is malformed.")
         }
@@ -177,6 +252,7 @@ public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
                   !outputs.isEmpty,
                   outputs.contains(where: { $0.objectType == .interventionCard }),
                   safeReasonCode == nil,
+                  omissionConfirmation == nil,
                   (attemptCount == 0) == (provider == nil)
             else {
                 throw AnalysisCoverageError.invalidLedger("Substantive coverage requires evidence, typed outputs, and a consistent route attempt.")
@@ -193,7 +269,8 @@ public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
             guard attemptCount > 0,
                   provider != nil,
                   outputs.isEmpty,
-                  safeReasonCode != nil
+                  safeReasonCode != nil,
+                  omissionConfirmation == nil
             else {
                 throw AnalysisCoverageError.invalidLedger("A failed analysis unit needs provider history and a safe code.")
             }
@@ -202,7 +279,8 @@ public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
                   provider == nil,
                   evidence.isEmpty,
                   outputs.isEmpty,
-                  safeReasonCode == nil
+                  safeReasonCode == nil,
+                  omissionConfirmation == nil
             else {
                 throw AnalysisCoverageError.invalidLedger("A missing unit has no attempted result.")
             }
@@ -216,6 +294,7 @@ public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
         self.evidenceRevisions = evidence
         self.outputRevisions = outputs
         self.safeReasonCode = safeReasonCode
+        self.omissionConfirmation = omissionConfirmation
     }
 
     public init(from decoder: Decoder) throws {
@@ -244,7 +323,11 @@ public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
                 [SemanticRevisionReference].self,
                 forKey: .outputRevisions
             ),
-            safeReasonCode: container.decodeIfPresent(String.self, forKey: .safeReasonCode)
+            safeReasonCode: container.decodeIfPresent(String.self, forKey: .safeReasonCode),
+            omissionConfirmation: container.decodeIfPresent(
+                AnalysisOmissionConfirmation.self,
+                forKey: .omissionConfirmation
+            )
         )
     }
 
@@ -282,6 +365,7 @@ public struct AnalysisSegmentCoverage: Codable, Hashable, Sendable, Comparable {
         case evidenceRevisions
         case outputRevisions
         case safeReasonCode
+        case omissionConfirmation
     }
 }
 
@@ -302,6 +386,7 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
     public let outputSchemaVersion: SchemaVersion
     public let inputPackageDigest: ContentDigest
     public let fixtureProvenance: AnalysisFixtureProvenance?
+    public let reviewConfirmation: AnalysisReviewConfirmation?
     public let status: AnalysisLedgerStatus
     public let segments: [AnalysisSegmentCoverage]
     public let createdAt: UTCInstant
@@ -321,6 +406,7 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
         outputSchemaVersion: SchemaVersion = .v1,
         inputPackageDigest: ContentDigest,
         fixtureProvenance: AnalysisFixtureProvenance? = nil,
+        reviewConfirmation: AnalysisReviewConfirmation? = nil,
         status: AnalysisLedgerStatus,
         segments: [AnalysisSegmentCoverage],
         createdAt: UTCInstant,
@@ -339,6 +425,7 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
         self.outputSchemaVersion = outputSchemaVersion
         self.inputPackageDigest = inputPackageDigest
         self.fixtureProvenance = fixtureProvenance
+        self.reviewConfirmation = reviewConfirmation
         self.status = status
         self.segments = segments.sorted()
         self.createdAt = createdAt
@@ -357,6 +444,7 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
                 outputSchemaVersion: outputSchemaVersion,
                 inputPackageDigest: inputPackageDigest,
                 fixtureProvenance: fixtureProvenance,
+                reviewConfirmation: reviewConfirmation,
                 status: status,
                 segments: segments.sorted(),
                 createdAt: createdAt
@@ -402,6 +490,10 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
                 AnalysisFixtureProvenance.self,
                 forKey: .fixtureProvenance
             ),
+            reviewConfirmation: container.decodeIfPresent(
+                AnalysisReviewConfirmation.self,
+                forKey: .reviewConfirmation
+            ),
             status: container.decode(AnalysisLedgerStatus.self, forKey: .status),
             segments: container.decode([AnalysisSegmentCoverage].self, forKey: .segments),
             createdAt: container.decode(UTCInstant.self, forKey: .createdAt),
@@ -441,6 +533,17 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
               contentHash == (try Self.hash(projection))
         else {
             throw AnalysisCoverageError.invalidLedger("The analysis ledger identity, route, prompt history, or content hash is invalid.")
+        }
+        if let reviewConfirmation {
+            guard status == .published,
+                  supersedesLedgerID == reviewConfirmation.candidateLedgerID,
+                  createdAt == reviewConfirmation.confirmedAt,
+                  reviewConfirmation.confirmsEveryClaim
+            else {
+                throw AnalysisCoverageError.invalidLedger(
+                    "A confirmed analysis must bind one exact superseded candidate."
+                )
+            }
         }
         switch analysisRoute.route {
         case .appleOnDevice, .deterministicTest:
@@ -482,6 +585,8 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
         Array(Set(segments.flatMap(\.evidenceRevisions))).sorted()
     }
 
+    public var isHumanConfirmed: Bool { reviewConfirmation != nil }
+
     private var projection: Projection {
         Projection(
             ledgerID: ledgerID,
@@ -497,6 +602,7 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
             outputSchemaVersion: outputSchemaVersion,
             inputPackageDigest: inputPackageDigest,
             fixtureProvenance: fixtureProvenance,
+            reviewConfirmation: reviewConfirmation,
             status: status,
             segments: segments,
             createdAt: createdAt
@@ -527,6 +633,7 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
         let outputSchemaVersion: SchemaVersion
         let inputPackageDigest: ContentDigest
         let fixtureProvenance: AnalysisFixtureProvenance?
+        let reviewConfirmation: AnalysisReviewConfirmation?
         let status: AnalysisLedgerStatus
         let segments: [AnalysisSegmentCoverage]
         let createdAt: UTCInstant
@@ -546,6 +653,7 @@ public struct AnalysisCoverageLedger: Codable, Hashable, Sendable {
         case outputSchemaVersion
         case inputPackageDigest
         case fixtureProvenance
+        case reviewConfirmation
         case status
         case segments
         case createdAt
@@ -599,6 +707,10 @@ public struct AnalysisPublication: Sendable {
         ).sorted()
         let evidenceReferences = try Self.references(evidence)
         guard ledger.status == .published,
+              ledger.segments.allSatisfy({ segment in
+                  segment.disposition != .nonSubstantive
+                      || segment.omissionConfirmation != nil
+              }),
               outputReferences == ledger.outputRevisionReferences,
               Set(ledger.evidenceRevisionReferences).isSubset(of: Set(evidenceReferences))
         else {
@@ -694,6 +806,8 @@ public struct AnalysisReviewBundle: Sendable {
         self.interventionCards = interventionCards
         self.delegationPositionCards = delegationPositionCards
     }
+
+    public var isHumanConfirmed: Bool { ledger.isHumanConfirmed }
 }
 
 public struct AnalysisSourceBundle: Sendable {
@@ -723,6 +837,9 @@ public struct AnalysisSourceBundle: Sendable {
                 + transcriptReview.translations.flatMap(\.revision.sourceAssetRevisions)
         )
         guard meeting.meetingID == transcriptReview.manifest.meetingID,
+              transcriptReview.manifest.chunks.allSatisfy({ chunk in
+                  chunk.disposition != .noSpeech || chunk.noSpeechConfirmation != nil
+              }),
               Set(sourceReferences) == requiredSourceReferences,
               Set(sourceReferences).count == sourceReferences.count,
               Set(actorReferences).count == actorReferences.count,

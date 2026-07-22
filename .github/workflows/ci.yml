@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Swift build and test
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      MEETINGBUDDY_RUN_LIVE_APPLE_MODELS: "0"
+      MEETINGBUDDY_RUN_LIVE_APPLE_ANALYSIS: "0"
+      MEETINGBUDDY_RUN_LIVE_APPLE_BRIEFING: "0"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Resolve exact dependencies
+        run: |
+          swift package resolve
+          git diff --exit-code -- Package.resolved
+
+      - name: Build without code signing
+        run: swift build -Xswiftc -warnings-as-errors
+
+      - name: Validate public brand metadata and icon
+        run: |
+          plutil -lint Configuration/MeetingBuddy-Info.plist
+          swift test -Xswiftc -warnings-as-errors --filter PublicBrandPresentationTests
+          icon_dir="$(mktemp -d "$RUNNER_TEMP/blueminutes-icon.XXXXXX")"
+          iconutil -c iconset Configuration/Branding/BlueMinutes.icns \
+            -o "$icon_dir/BlueMinutes.iconset"
+          test -f "$icon_dir/BlueMinutes.iconset/icon_512x512@2x.png"
+
+      - name: Validate schema and serialization
+        run: |
+          swift test -Xswiftc -warnings-as-errors --filter CanonicalAndCompatibilityTests
+          swift test -Xswiftc -warnings-as-errors --filter RepositoryRoundTripTests
+
+      - name: Validate database migrations
+        run: swift test -Xswiftc -warnings-as-errors --filter WorkspaceAndMigrationTests
+
+      - name: Validate recovery
+        run: swift test -Xswiftc -warnings-as-errors --filter RecoveryAndTrashTests
+
+      - name: Validate evidence-linked integrations
+        run: |
+          swift test -Xswiftc -warnings-as-errors --filter TranscriptPipelineIntegrationTests
+          swift test -Xswiftc -warnings-as-errors --filter AnalysisPipelineIntegrationTests
+          swift test -Xswiftc -warnings-as-errors --filter BriefingPipelineIntegrationTests
+          swift test -Xswiftc -warnings-as-errors --filter ProviderContractTests
+
+      - name: Run bounded Golden smoke tests
+        run: |
+          swift test -Xswiftc -warnings-as-errors --filter GoldenFixtureTests
+          swift test -Xswiftc -warnings-as-errors --filter Task010HistoricalComparisonGoldenTests
+
+      - name: Run complete synthetic-safe suite
+        run: swift test -Xswiftc -warnings-as-errors

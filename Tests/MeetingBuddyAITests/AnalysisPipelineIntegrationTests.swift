@@ -10,6 +10,32 @@ import Testing
 @Suite(.serialized)
 struct AnalysisPipelineIntegrationTests {
     @Test
+    func providerOnlyNonSubstantiveCannotOmitMeaningfulSourceText() async throws {
+        let workspace = try AIWorkspace()
+        defer { workspace.cleanup() }
+        let source = try prepareAnalysisSource(workspace)
+        let provider = DeterministicAnalysisProvider(mode: .nonSubstantive)
+        let plan = try analysisPlan(source: source)
+        let manager = try workspace.manager(
+            executor: AnalysisPipelineJobExecutor(
+                provider: provider,
+                repository: workspace.store
+            )
+        )
+        let request = try AnalysisPipelineJobFactory().request(
+            plan: plan,
+            jobID: aiID(59, JobID.self),
+            requestedBy: JobRequester("task012-non-substantive-regression")
+        )
+
+        _ = try await manager.enqueue(request)
+        let failed = try await waitForAnalysisJob(manager, request.jobID, state: .failed)
+
+        #expect(failed.errorRecord?.code == "provider_output_invalid")
+        #expect(try workspace.store.activeAnalysisReview(meetingID: workspace.meetingID) == nil)
+    }
+
+    @Test
     func deterministicAnalysisPublishesExactRouteCoverageAndAllReviewObjects() async throws {
         let workspace = try AIWorkspace()
         defer { workspace.cleanup() }
@@ -141,9 +167,75 @@ struct AnalysisPipelineIntegrationTests {
             == ["provided reporting remains voluntary"])
         #expect(review.positions[0].revision.dataClassification == .internal)
         #expect(review.ledger.outputRevisionReferences.count == 7)
+        #expect(!review.isHumanConfirmed)
         #expect(succeeded.outputRevisionIDs.count
             == review.ledger.evidenceRevisionReferences.count
                 + review.ledger.outputRevisionReferences.count)
+
+        let template = try BriefingSemanticFactory.builtInTemplate(createdAt: plan.createdAt)
+        #expect(throws: BriefingCoverageError.self) {
+            _ = try BriefingSourceBundle(
+                meeting: source.meeting,
+                template: template,
+                transcriptReview: source.transcriptReview,
+                analysis: review
+            )
+        }
+
+        let reviewService = AnalysisManualReviewService(repository: workspace.store)
+        #expect(throws: AnalysisCoverageError.self) {
+            _ = try reviewService.confirmCurrent(
+                meetingID: workspace.meetingID,
+                confirmsEveryClaim: false,
+                confirmedAt: aiInstant(1_900_000_000_243)
+            )
+        }
+        let forgedConfirmation = try AnalysisReviewConfirmation(
+            candidateLedgerID: review.ledger.ledgerID,
+            candidateContentHash: ContentDigest.sha256(ofUTF8Text: "forged-candidate"),
+            confirmedAt: aiInstant(1_900_000_000_244),
+            confirmsEveryClaim: true
+        )
+        let forgedLedger = try AnalysisCoverageLedger(
+            ledgerID: aiID(62, AnalysisCoverageLedgerID.self),
+            supersedesLedgerID: review.ledger.ledgerID,
+            meetingID: review.ledger.meetingID,
+            transcriptManifestID: review.ledger.transcriptManifestID,
+            transcriptManifestHash: review.ledger.transcriptManifestHash,
+            eligibleSegmentRevisions: review.ledger.eligibleSegmentRevisions,
+            analysisRoute: review.ledger.analysisRoute,
+            runtimeEvidence: review.ledger.runtimeEvidence,
+            promptModules: review.ledger.promptModules,
+            protectedRulesDigest: review.ledger.protectedRulesDigest,
+            outputSchemaVersion: review.ledger.outputSchemaVersion,
+            inputPackageDigest: review.ledger.inputPackageDigest,
+            fixtureProvenance: review.ledger.fixtureProvenance,
+            reviewConfirmation: forgedConfirmation,
+            status: review.ledger.status,
+            segments: review.ledger.segments,
+            createdAt: forgedConfirmation.confirmedAt
+        )
+        let forgedPublication = try AnalysisPublication(
+            ledger: forgedLedger,
+            evidence: review.evidence,
+            participants: review.participants,
+            organizations: review.organizations,
+            issues: review.issues,
+            positions: review.positions,
+            commitments: review.commitments,
+            decisions: review.decisions,
+            interventionCards: review.interventionCards,
+            delegationPositionCards: review.delegationPositionCards
+        )
+        #expect(throws: AnalysisCoverageError.self) {
+            try workspace.store.publishAnalysis(
+                forgedPublication,
+                validatingInputRevisions: []
+            )
+        }
+        #expect(try workspace.store.activeAnalysisReview(
+            meetingID: workspace.meetingID
+        )?.ledger.ledgerID == review.ledger.ledgerID)
 
         let originalPosition = review.positions[0]
         let originalCard = review.delegationPositionCards[0]
@@ -156,6 +248,33 @@ struct AnalysisPipelineIntegrationTests {
             reservations: ["without prejudice to future negotiations"],
             conditions: [],
             changedAt: changedAt
+        )
+        #expect(throws: AnalysisCoverageError.self) {
+            try workspace.store.savePositionCorrection(
+                correction,
+                replacing: originalPosition.revision.revisionID,
+                changedAt: changedAt
+            )
+        }
+        let confirmedReview = try reviewService.confirmCurrent(
+            meetingID: workspace.meetingID,
+            confirmsEveryClaim: true,
+            confirmedAt: aiInstant(1_900_000_000_245)
+        )
+        #expect(confirmedReview.isHumanConfirmed)
+        #expect(confirmedReview.ledger.supersedesLedgerID == review.ledger.ledgerID)
+        #expect(throws: AnalysisCoverageError.self) {
+            _ = try reviewService.confirmCurrent(
+                meetingID: workspace.meetingID,
+                confirmsEveryClaim: true,
+                confirmedAt: aiInstant(1_900_000_000_246)
+            )
+        }
+        _ = try BriefingSourceBundle(
+            meeting: source.meeting,
+            template: template,
+            transcriptReview: source.transcriptReview,
+            analysis: confirmedReview
         )
         try workspace.store.savePositionCorrection(
             correction,
@@ -198,10 +317,11 @@ struct AnalysisPipelineIntegrationTests {
             meetingID: workspace.meetingID
         )
         let reopenedReview = try #require(loadedReopenedReview)
-        #expect(reopenedReview.ledger == review.ledger)
+        #expect(reopenedReview.ledger == confirmedReview.ledger)
+        #expect(reopenedReview.isHumanConfirmed)
         #expect(reopenedReview.positions[0] == correction)
         #expect(try reopened.analysisCoverageLedgers(meetingID: workspace.meetingID)
-            == [review.ledger])
+            == [review.ledger, confirmedReview.ledger])
         try reopened.close()
     }
 
@@ -697,6 +817,7 @@ struct AnalysisPipelineIntegrationTests {
 
 enum AnalysisProviderMode: Sendable {
     case valid
+    case nonSubstantive
     case fail
 }
 
@@ -723,6 +844,13 @@ actor DeterministicAnalysisProvider: AnalysisProvider {
 
     func analyze(_ request: AnalysisRequest) async throws -> AnalysisOutputCandidate {
         callCount += 1
+        if mode == .nonSubstantive {
+            return try AnalysisOutputCandidate(
+                substantive: false,
+                nonSubstantiveReasonCode: "provider_claimed_procedural",
+                confidence: ConfidenceScore(millionths: 900_000)
+            )
+        }
         guard mode == .valid else {
             throw AIProviderContractError.invalidResponse("Injected synthetic provider failure.")
         }

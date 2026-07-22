@@ -125,3 +125,24 @@ Before changing the repository:
 - Accepted Task 011 release audit: `docs/TASK_011_RELEASE_CANDIDATE_AUDIT.md`
 - Decision records: `docs/adr/README.md`
 - Operational state: `docs/CODEX_EXECUTION_STATE.md`
+
+## GitHub maintenance rules
+
+After the initial private publication, never implement directly on `main`.
+Read the active GitHub Issue and relevant ADRs, create one short-lived branch,
+and make the smallest change that satisfies the acceptance criteria. Do not
+expand scope opportunistically.
+
+- Preserve user data, backward compatibility, diplomatic accuracy, and exact
+  evidence lineage.
+- Persistent schema changes require a migration, supported-prior-state tests,
+  a backup plan, and a tested rollback plan.
+- Route persistent file writes through the Storage Service, long-running work
+  through the Task Manager, and AI inference through approved provider
+  interfaces. AI providers never query database tables directly.
+- Never log credentials or full sensitive meeting content, and never silently
+  accept invalid structured AI output.
+- Add regression tests for bug fixes and run all required checks before
+  claiming completion.
+- Create a Pull Request for every future change. Never merge a Pull Request or
+  publish a release without explicit user authorization.

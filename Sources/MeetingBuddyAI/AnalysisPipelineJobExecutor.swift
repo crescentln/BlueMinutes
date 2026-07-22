@@ -170,6 +170,20 @@ public final class AnalysisPipelineJobExecutor: TaskJobExecutor, @unchecked Send
                     )
                 )
             } else {
+                guard let confirmation = try AnalysisNonSubstantiveVerifier.confirmation(
+                    for: package.request
+                ) else {
+                    try? recordIncomplete(
+                        plan: plan,
+                        packages: packages,
+                        failedIndex: index,
+                        reasonCode: "provider_output_invalid",
+                        modelAvailable: true
+                    )
+                    throw AIProviderContractError.invalidResponse(
+                        "Provider-only non-substantive output cannot omit meaningful source text."
+                    )
+                }
                 entries.append(
                     try AnalysisSegmentCoverage(
                         segmentRevision: package.request.transcriptRevision,
@@ -180,7 +194,8 @@ public final class AnalysisPipelineJobExecutor: TaskJobExecutor, @unchecked Send
                         provider: provider.metadata,
                         evidenceRevisions: package.resolved.speakerAssignment.revision
                             .evidenceRevisions,
-                        safeReasonCode: candidate.nonSubstantiveReasonCode
+                        safeReasonCode: "application_verified_non_semantic_marker",
+                        omissionConfirmation: confirmation
                     )
                 )
             }
@@ -225,7 +240,8 @@ public final class AnalysisPipelineJobExecutor: TaskJobExecutor, @unchecked Send
                 attemptCount: entry.attemptCount,
                 provider: entry.provider,
                 evidenceRevisions: entry.evidenceRevisions,
-                outputRevisions: entry.outputRevisions + [cardReference]
+                outputRevisions: entry.outputRevisions + [cardReference],
+                omissionConfirmation: entry.omissionConfirmation
             )
         }
 

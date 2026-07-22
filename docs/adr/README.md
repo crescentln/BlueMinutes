@@ -84,6 +84,12 @@ accepted source but await follow-up validation. There is no next eligible
 numbered task; any post-MVP capability or publication action requires separate
 explicit user authorization.
 
+The separately authorized post-MVP security-remediation task adds
+[ADR-0017](ADR-0017-evidence-integrity-publication-boundaries.md). It records
+application-owned transcript/analysis omission verification and exact human
+confirmation gates for consequential analysis and briefing export while
+preserving schema v10 and immutable historical payloads.
+
 Some individual ADR headers retain their original in-task acceptance wording
 as historical context. This index and `../CODEX_EXECUTION_STATE.md` report the
 current binding/accepted state; neither document authorizes a new task.

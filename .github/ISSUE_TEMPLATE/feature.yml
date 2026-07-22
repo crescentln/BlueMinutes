@@ -1,0 +1,95 @@
+name: Feature proposal
+description: Propose a narrowly scoped, evidence-linked workflow improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start with the user problem, not a preferred implementation. Do not
+        attach real meeting material or other sensitive data.
+  - type: textarea
+    id: background
+    attributes:
+      label: Background and user need
+      description: Who has this problem, and what safe evidence shows it exists?
+    validations:
+      required: true
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current behavior
+      description: How is the workflow handled today?
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: Describe the smallest useful outcome, including user control.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: List objective, testable conditions.
+    validations:
+      required: true
+  - type: textarea
+    id: excluded_scope
+    attributes:
+      label: Excluded scope
+      description: Identify adjacent features, providers, platforms, or automation that remain excluded.
+    validations:
+      required: true
+  - type: textarea
+    id: affected_data
+    attributes:
+      label: Affected data
+      description: Identify data categories, classifications, persistence, retention, and export implications.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy_security
+    attributes:
+      label: Privacy and security impact
+      description: Include external destinations, credentials, permissions, logging, and threat-model changes.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence_traceability
+    attributes:
+      label: Evidence-traceability impact
+      description: Explain provenance, uncertainty, coverage, review, and stale-input behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: database_migration
+    attributes:
+      label: Database or migration impact
+      description: State "None" or describe schema, compatibility, backup, and recovery requirements.
+    validations:
+      required: true
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback impact
+      description: Describe a safe code and user-data rollback.
+    validations:
+      required: true
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Test plan
+      description: Include contract, integration, migration/recovery, Golden, UI, and full-suite checks as applicable.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety_confirmation
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: This proposal contains no credentials, private records, or real meeting content.
+          required: true

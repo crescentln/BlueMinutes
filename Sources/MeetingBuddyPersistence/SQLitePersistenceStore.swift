@@ -855,7 +855,9 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
         guard correction.revision.supersedesRevisionID == expectedRevisionID,
               correction.revision.createdBy == .user,
               correction.reviewStatus == .confirmed,
-              correction.userConfirmed
+              correction.userConfirmed,
+              let analysis = try activeAnalysisReview(meetingID: correction.meetingID),
+              analysis.isHumanConfirmed
         else { throw AnalysisCoverageError.publicationConflict }
         try insert(correction)
         _ = try activate(
@@ -1570,6 +1572,42 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
             transcriptRow["meeting_id"] == ledger.meetingID.canonicalString,
             transcriptRow["content_hash_hex"] == ledger.transcriptManifestHash.lowercaseHex
         else { throw AnalysisCoverageError.publicationConflict }
+
+        if let confirmation = ledger.reviewConfirmation {
+            guard activate,
+                  ledger.supersedesLedgerID == confirmation.candidateLedgerID,
+                  let activeID: String = try String.fetchOne(
+                      db,
+                      sql: "SELECT ledger_id FROM active_analysis_ledgers WHERE meeting_id = ?",
+                      arguments: [ledger.meetingID.canonicalString]
+                  ),
+                  activeID == confirmation.candidateLedgerID.canonicalString,
+                  let candidateRow = try Row.fetchOne(
+                      db,
+                      sql: "SELECT * FROM analysis_coverage_ledgers WHERE ledger_id = ?",
+                      arguments: [confirmation.candidateLedgerID.canonicalString]
+                  )
+            else { throw AnalysisCoverageError.publicationConflict }
+            let candidate = try decodeAnalysisLedger(candidateRow, in: db)
+            guard candidate.reviewConfirmation == nil,
+                  candidate.status == .published,
+                  candidate.contentHash == confirmation.candidateContentHash,
+                  confirmation.confirmedAt >= candidate.createdAt,
+                  candidate.meetingID == ledger.meetingID,
+                  candidate.transcriptManifestID == ledger.transcriptManifestID,
+                  candidate.transcriptManifestHash == ledger.transcriptManifestHash,
+                  candidate.eligibleSegmentRevisions == ledger.eligibleSegmentRevisions,
+                  candidate.analysisRoute == ledger.analysisRoute,
+                  candidate.runtimeEvidence == ledger.runtimeEvidence,
+                  candidate.promptModules == ledger.promptModules,
+                  candidate.protectedRulesDigest == ledger.protectedRulesDigest,
+                  candidate.outputSchemaVersion == ledger.outputSchemaVersion,
+                  candidate.inputPackageDigest == ledger.inputPackageDigest,
+                  candidate.fixtureProvenance == ledger.fixtureProvenance,
+                  candidate.status == ledger.status,
+                  candidate.segments == ledger.segments
+            else { throw AnalysisCoverageError.publicationConflict }
+        }
 
         let payload = try SQLitePayloadCodec.canonicalData(ledger)
         let digest = SQLitePayloadCodec.sha256(payload)

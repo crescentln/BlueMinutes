@@ -546,6 +546,17 @@ public struct BriefingReviewBundle: Sendable {
     }
 
     public var isCurrent: Bool { staleMarks.isEmpty }
+
+    public var isHumanConfirmed: Bool {
+        publication.sections.allSatisfy { section in
+            section.revision.createdBy == .user
+                && section.reviewStatus == .confirmed
+                && section.userConfirmed
+        }
+            && publication.finalBriefing.revision.createdBy == .user
+            && publication.finalBriefing.reviewStatus == .confirmed
+            && publication.finalBriefing.userConfirmed
+    }
 }
 
 public struct BriefingSourceBundle: Sendable {
@@ -564,7 +575,47 @@ public struct BriefingSourceBundle: Sendable {
         try template.validate()
         try transcriptReview.manifest.validate()
         try analysis.ledger.validate()
+        let transcriptByRevision = Dictionary(
+            uniqueKeysWithValues: transcriptReview.transcriptSegments.map {
+                ($0.revision.revisionID, $0)
+            }
+        )
+        let translationByRevision = Dictionary(
+            uniqueKeysWithValues: transcriptReview.translations.map {
+                ($0.revision.revisionID, $0)
+            }
+        )
+        let omissionsAreVerified = try analysis.ledger.segments.allSatisfy { segment in
+            guard segment.disposition == .nonSubstantive else { return true }
+            guard let confirmation = segment.omissionConfirmation,
+                  let transcript = transcriptByRevision[
+                      segment.segmentRevision.revisionID
+                  ],
+                  transcript.segmentID.canonicalString
+                    == segment.segmentRevision.logicalID.canonicalString
+            else { return false }
+            let sourceTextDigest = try ContentDigest.sha256(
+                ofUTF8Text: transcript.text
+            )
+            guard confirmation.segmentRevision == segment.segmentRevision,
+                  confirmation.sourceTextDigest == sourceTextDigest,
+                  confirmation.translationRevision == segment.translationRevision
+            else { return false }
+            guard let translationRevision = segment.translationRevision else {
+                return confirmation.translationTextDigest == nil
+            }
+            guard let translation = translationByRevision[translationRevision.revisionID],
+                  translation.translationID.canonicalString
+                    == translationRevision.logicalID.canonicalString,
+                  let translationTextDigest = confirmation.translationTextDigest
+            else { return false }
+            return translationTextDigest == (try ContentDigest.sha256(
+                ofUTF8Text: translation.translatedText
+            ))
+        }
         guard analysis.ledger.status == .published,
+              analysis.isHumanConfirmed,
+              omissionsAreVerified,
               analysis.ledger.meetingID == meeting.meetingID,
               transcriptReview.manifest.meetingID == meeting.meetingID,
               transcriptReview.manifest.manifestID == analysis.ledger.transcriptManifestID,

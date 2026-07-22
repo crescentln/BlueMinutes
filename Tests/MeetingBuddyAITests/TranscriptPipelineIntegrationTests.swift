@@ -10,6 +10,42 @@ import Testing
 @Suite(.serialized)
 struct TranscriptPipelineIntegrationTests {
     @Test
+    func providerOnlyNoSpeechCannotPublishAChunkWithoutIndependentConfirmation() async throws {
+        let workspace = try AIWorkspace()
+        defer { workspace.cleanup() }
+        let source = try workspace.installCanonicalSource(totalFrames: 300_000)
+        let speech = DeterministicSpeechProvider(noSpeechIndices: [0])
+        let plan = try transcriptPlan(
+            workspace: workspace,
+            source: source,
+            totalFrames: 300_000,
+            targetLanguage: nil
+        )
+        let manager = try workspace.manager(
+            executor: TranscriptPipelineJobExecutor(
+                transcriptionProvider: speech,
+                translationProvider: nil,
+                processor: SyntheticTranscriptMediaProcessor(),
+                catalog: workspace.store,
+                fileAccess: workspace.fileAccess,
+                repository: workspace.store,
+                noSpeechVerifier: DeterministicNoSpeechVerifier(confirmedIndices: [])
+            )
+        )
+        let request = try TranscriptPipelineJobFactory().request(
+            plan: plan,
+            jobID: aiID(29, JobID.self),
+            requestedBy: JobRequester("task012-no-speech-regression")
+        )
+
+        _ = try await manager.enqueue(request)
+        let failed = try await waitForAIJob(manager, request.jobID, state: .failed)
+
+        #expect(failed.errorRecord?.code == "provider_output_invalid")
+        #expect(try workspace.store.activeTranscriptReview(meetingID: workspace.meetingID) == nil)
+    }
+
+    @Test
     func deterministicPipelinePublishesExactCoverageAndSurvivesReopen() async throws {
         let workspace = try AIWorkspace()
         defer { workspace.cleanup() }
@@ -30,7 +66,8 @@ struct TranscriptPipelineIntegrationTests {
                 processor: processor,
                 catalog: workspace.store,
                 fileAccess: workspace.fileAccess,
-                repository: workspace.store
+                repository: workspace.store,
+                noSpeechVerifier: DeterministicNoSpeechVerifier(confirmedIndices: [1])
             )
         )
         let request = try TranscriptPipelineJobFactory().request(
@@ -269,7 +306,8 @@ struct TranscriptPipelineIntegrationTests {
                 processor: SyntheticTranscriptMediaProcessor(),
                 catalog: workspace.store,
                 fileAccess: workspace.fileAccess,
-                repository: workspace.store
+                repository: workspace.store,
+                noSpeechVerifier: DeterministicNoSpeechVerifier(confirmedIndices: [0])
             )
         )
         let request = try TranscriptPipelineJobFactory().request(
@@ -352,7 +390,8 @@ struct TranscriptPipelineIntegrationTests {
                 processor: SyntheticTranscriptMediaProcessor(),
                 catalog: workspace.store,
                 fileAccess: workspace.fileAccess,
-                repository: workspace.store
+                repository: workspace.store,
+                noSpeechVerifier: DeterministicNoSpeechVerifier(confirmedIndices: [0, 1])
             )
         )
         let request = try TranscriptPipelineJobFactory().request(
@@ -776,6 +815,19 @@ private actor SyntheticTranscriptMediaProcessor: NativeMediaProcessing {
         callCount += 1
         try Data(repeating: UInt8(truncatingIfNeeded: range.startFrame / 16_000), count: 256)
             .write(to: destinationURL, options: [.atomic])
+    }
+}
+
+private struct DeterministicNoSpeechVerifier: TranscriptNoSpeechVerifying {
+    let confirmedIndices: Set<UInt32>
+
+    func confirmation(
+        for audio: TaskOwnedAudioChunk
+    ) async -> TranscriptNoSpeechConfirmation? {
+        guard confirmedIndices.contains(audio.plan.index) else { return nil }
+        return try? TranscriptNoSpeechConfirmation(
+            verifiedCoreRange: audio.plan.coreRange
+        )
     }
 }
 

@@ -424,10 +424,10 @@ public actor AutomationMCPAdapter {
             ]),
             "serverInfo": .object([
                 "name": .string("meetingbuddy"),
-                "title": .string("MeetingBuddy Local MCP"),
+                "title": .string("BlueMinutes Local MCP"),
                 "version": .string(AutomationMCPProtocol.adapterVersion),
                 "description": .string(
-                    "Local read-only access to bounded MeetingBuddy status metadata."
+                    "Local read-only access to bounded BlueMinutes status metadata."
                 )
             ]),
             "instructions": .string(
@@ -449,7 +449,7 @@ public actor AutomationMCPAdapter {
         switch command {
         case .getCommandCatalog:
             title = "Get Command Catalog"
-            description = "Lists MeetingBuddy's typed command policy without exposing meeting content. The call writes bounded local audit metadata."
+            description = "Lists BlueMinutes' typed command policy without exposing meeting content. The call writes bounded local audit metadata."
             schema = emptyObjectSchema
         case .getWorkspaceStatus:
             title = "Get Workspace Status"

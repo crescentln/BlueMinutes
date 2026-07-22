@@ -1,11 +1,86 @@
+# macOS and editors
 .DS_Store
+*.swp
+*.swo
+
+# Swift Package Manager and Xcode
 .build/
 .swiftpm/
 DerivedData/
 **/xcuserdata/
 *.xcuserstate
+*.xcresult
+coverage/
+
+# Local configuration and credentials
 .env
 .env.*
 !.env.example
+*.p12
+*.pfx
+*.cer
+*.crt
+*.der
+*.mobileprovision
+*.key
+*.pem
+*.p8
+
+# Databases, journals, and logs
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+*.db-wal
+*.db-shm
 *.log
+*.crash
+Logs/
+crash-reports/
+
+# Workspace data. These rules are root-anchored so source directories with
+# similar names remain eligible for version control.
+/MeetingBuddyWorkspace/
+/Meetings/
+/Documents/
+/Database/
+/Indexes/
+/Models/
+/Backups/
+/Exports/
+/.temp/
+/.Trash/
+
+# Local packaging and generated output
 dist/
+*.app
+*.dmg
+*.pkg
+*.xcarchive
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+# Meeting media and downloaded model payloads are never source by default.
+# A future small synthetic/licensed fixture requires explicit review and a
+# narrow force-add with documented provenance.
+*.wav
+*.mp3
+*.m4a
+*.mov
+*.mp4
+*.caf
+*.aif
+*.aiff
+*.mlmodel
+*.mlmodelc
+*.mlpackage/
+*.gguf
+*.safetensors
+*.onnx
+model-cache/

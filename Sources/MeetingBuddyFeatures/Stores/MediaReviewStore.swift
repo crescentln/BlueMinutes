@@ -43,6 +43,7 @@ public final class MediaReviewStore {
     public var manualTranscriptText = ""
     public var manualTranslationText = ""
     public var manualCoverageConfirmed = false
+    public var analysisClaimsConfirmed = false
     public var briefingExportFileName = "meeting-briefing"
     public var captureMode: CaptureMode = .microphoneOnly
     public var selectedMicrophoneDeviceID: String?
@@ -487,6 +488,7 @@ public final class MediaReviewStore {
                 safeErrorMessage = "The Apple on-device analysis model is unavailable for this meeting language. Existing local review data remains available."
                 return
             }
+            analysisClaimsConfirmed = false
             analysisJob = try await workflow.startAnalysis(canonicalJobID: job.jobID)
             if let analysisJob { beginAnalysisPolling(jobID: analysisJob.jobID) }
         }
@@ -496,6 +498,19 @@ public final class MediaReviewStore {
         guard let job, job.state == .succeeded else { return }
         await perform {
             analysisReview = try await workflow.analysisReview(canonicalJobID: job.jobID)
+        }
+    }
+
+    public func confirmAnalysisReview() async {
+        guard let job, analysisClaimsConfirmed else {
+            safeErrorMessage = "Confirm that you reviewed every analysis claim before continuing."
+            return
+        }
+        await perform {
+            analysisReview = try await workflow.confirmAnalysisReview(
+                canonicalJobID: job.jobID,
+                confirmsEveryClaim: analysisClaimsConfirmed
+            )
         }
     }
 
@@ -854,6 +869,7 @@ public final class MediaReviewStore {
         reviewedUNProductionDate = ""
         reviewedUNLanguageAvailability = ""
         manualCoverageConfirmed = false
+        analysisClaimsConfirmed = false
         historyActorOrCountry = ""
         historyTopic = ""
         historyBody = ""

@@ -33,7 +33,7 @@ struct RecordingCaptureView: View {
                         ? "Available with system picker" : "Unavailable on this macOS build"
                 )
                 Text(
-                    "Audio only. MeetingBuddy never requests a screen track, all-system audio, multiple applications, hidden capture, or persistent capture authority."
+                    "Audio only. BlueMinutes never requests a screen track, all-system audio, multiple applications, hidden capture, or persistent capture authority."
                 )
                 .font(.callout)
                 .foregroundStyle(.secondary)

@@ -119,6 +119,14 @@ struct BriefingReviewView: View {
                     .foregroundStyle(.orange)
                     .accessibilityLabel("Stale briefing warning")
                 }
+                if !review.isHumanConfirmed {
+                    Label(
+                        "Quarantined generated briefing — review and confirm every section before export.",
+                        systemImage: "exclamationmark.shield.fill"
+                    )
+                    .foregroundStyle(.orange)
+                    .accessibilityLabel("Unconfirmed briefing warning")
+                }
                 publicationProof(review)
                 sectionEditor(review)
                 markdownPreview(review)
@@ -155,6 +163,10 @@ struct BriefingReviewView: View {
                 GridRow {
                     Text("Current")
                     Text(review.isCurrent ? "yes" : "no")
+                }
+                GridRow {
+                    Text("Human confirmation")
+                    Text(review.isHumanConfirmed ? "all sections confirmed" : "incomplete")
                 }
                 GridRow {
                     Text("Markdown digest")
@@ -199,7 +211,7 @@ struct BriefingReviewView: View {
                         }
                     }
                     HStack {
-                        Button("Save Manual Revision") {
+                        Button("Save and Confirm Section") {
                             Task {
                                 await store.updateBriefingSection(
                                     section.sectionType,
@@ -231,7 +243,11 @@ struct BriefingReviewView: View {
     }
 
     private func markdownPreview(_ review: BriefingReviewBundle) -> some View {
-        GroupBox("Deterministic Markdown preview") {
+        GroupBox(
+            review.isHumanConfirmed
+                ? "Human-confirmed Markdown preview"
+                : "Quarantined Markdown preview"
+        ) {
             ScrollView(.horizontal) {
                 Text(review.publication.finalBriefing.markdown)
                     .textSelection(.enabled)
@@ -255,7 +271,12 @@ struct BriefingReviewView: View {
                     Task { await store.exportBriefing() }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!review.isCurrent || store.isWorking)
+                .disabled(!review.isCurrent || !review.isHumanConfirmed || store.isWorking)
+                if !review.isHumanConfirmed {
+                    Text("Export remains disabled until all three sections have explicit user-confirmed revisions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let record = store.lastBriefingExport {
                     Label(record.relativePath.rawValue, systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)

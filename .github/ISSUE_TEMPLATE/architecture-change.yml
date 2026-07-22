@@ -1,0 +1,124 @@
+name: Architecture change
+description: Propose a change to system boundaries, persistent data, providers, storage, security, or distribution.
+title: "[Architecture]: "
+labels:
+  - architecture
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Architecture changes require current implementation evidence and an ADR.
+        Do not include sensitive data or credentials.
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: What bounded problem requires an architecture change?
+    validations:
+      required: true
+  - type: textarea
+    id: current_evidence
+    attributes:
+      label: Current implementation evidence
+      description: Cite exact modules, contracts, tests, ADRs, and runtime evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_architecture
+    attributes:
+      label: Proposed architecture
+      description: Define components, authority, data flow, trust boundaries, and failure behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Compare at least the status quo and the smallest viable alternative.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: State objective architecture and verification outcomes.
+    validations:
+      required: true
+  - type: textarea
+    id: excluded_scope
+    attributes:
+      label: Excluded scope
+      description: What must not be implemented as part of this change?
+    validations:
+      required: true
+  - type: textarea
+    id: persistent_data
+    attributes:
+      label: Persistent-data impact
+      description: Identify authoritative data, ownership, formats, retention, compatibility, and recovery.
+    validations:
+      required: true
+  - type: textarea
+    id: migration_plan
+    attributes:
+      label: Migration plan
+      description: Include ordered versions, supported prior states, backup, failure injection, and integrity checks, or state "None."
+    validations:
+      required: true
+  - type: textarea
+    id: rollback_plan
+    attributes:
+      label: Rollback plan
+      description: Define source and user-data rollback anchors without destructive reset.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy_security
+    attributes:
+      label: Privacy and security analysis
+      description: Cover classifications, trust boundaries, provider/network authority, credentials, logs, abuse, and threat-model changes.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence_traceability
+    attributes:
+      label: Evidence-traceability impact
+      description: Explain exact provenance, coverage, uncertainty, review, currentness, and invalidation behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: performance
+    attributes:
+      label: Performance impact
+      description: Identify budgets, scale assumptions, measurements, and failure ceilings.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependency impact
+      description: Identify additions/upgrades, licenses, supply-chain review, version policy, and removal plan, or state "None."
+    validations:
+      required: true
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Test plan
+      description: Include focused, migration/recovery, adversarial, Golden, performance, and full-suite gates.
+    validations:
+      required: true
+  - type: input
+    id: adr
+    attributes:
+      label: ADR requirement
+      description: Link the proposed or accepted ADR; architecture implementation cannot proceed without one.
+      placeholder: docs/adr/ADR-XXXX-short-title.md
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety_confirmation
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: This proposal contains no credentials, private records, or real meeting content.
+          required: true

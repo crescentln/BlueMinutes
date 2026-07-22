@@ -8,8 +8,9 @@ Purpose: Record the observed repository state only; target design belongs in
 
 ## Executive state
 
-MeetingBuddy began as a confirmed greenfield project. The user accepted the
-Task 001 audit on 2026-07-17 and confirmed this directory as the canonical root.
+BlueMinutes, whose compatibility-sensitive internal name remains MeetingBuddy,
+began as a confirmed greenfield project. The user accepted the Task 001 audit
+on 2026-07-17 and confirmed this directory as the canonical root.
 
 The repository contains accepted work through Task 011. Task 010 supplies
 deterministic local Meeting History, evidence-qualified immutable comparison,
@@ -23,10 +24,11 @@ INTERNAL ALPHA, not a release candidate or distributable build.
 ## Repository state
 
 - Git repository: local `main`; accepted Task 011 status baseline is
-  `33e49bc`, Task 011 implementation is `56deadc`, and accepted Task 010 commit
-  `2a0d7fe` is the pre-Task-011 rollback anchor. Documentation reconciliation
-  does not alter those historical anchors. No push, tag, notarization
-  submission, upload, installation, or distribution was authorized.
+  `d31b9aa`, Task 011 implementation is `852257c`, and accepted Task 010 commit
+  `f371faa` is the pre-Task-011 rollback anchor. These are the current reachable
+  equivalents after the authorized private-path and GitHub-noreply history
+  sanitizations. No push, tag, notarization submission, upload, installation,
+  or distribution was authorized.
 - Product source files: `Sources/MeetingBuddyDomain/`,
   `Sources/MeetingBuddyApplication/`, `Sources/MeetingBuddyPersistence/`, and
   `Sources/MeetingBuddyTasks/`, `Sources/MeetingBuddyMedia/`,
@@ -366,13 +368,35 @@ bundle layout, ad-hoc Hardened Runtime, exact-entitlement, local launch, idle
 network, privacy, dependency, license, and synthetic backup gates. It remains
 INTERNAL ALPHA because Developer ID/Team ID, notarization/stapling, affirmative
 Gatekeeper distribution approval, clean-machine install/update/rollback,
-approved icon/localization, manual accessibility, intended-OS live TCC/capture,
-and four medium evidence-integrity findings remain unresolved. Three low scan
-findings are mitigated in accepted source but require a follow-up scan.
+approved icon/localization, manual accessibility, and intended-OS live
+TCC/capture remain unresolved. At the Task 011 gate, four medium
+evidence-integrity findings also remained unresolved; the later post-MVP
+remediation is recorded separately below. Three low scan findings are mitigated
+in accepted source but require a follow-up scan.
 
 Exact gate results and residual constraints are recorded in
 [`TASK_011_RELEASE_CANDIDATE_AUDIT.md`](TASK_011_RELEASE_CANDIDATE_AUDIT.md)
 and [`audits/TASK-011_VERIFICATION_EVIDENCE.md`](audits/TASK-011_VERIFICATION_EVIDENCE.md).
+
+## Post-MVP evidence-integrity remediation
+
+The separately authorized remediation adds no schema migration, provider,
+network route, dependency, or product capability. It closes the four Task 011
+medium paths through conservative publication boundaries:
+
+- provider-only `noSpeech` cannot close transcript coverage without
+  application-owned exact-digital-silence confirmation over the exact core;
+- provider-only `nonSubstantive` cannot omit meaningful text and requires an
+  exact revision/text-digest confirmation under a closed marker policy;
+- analysis candidates remain quarantined until the user confirms the exact
+  active candidate ledger ID, hash, and every claim; and
+- local briefing export requires all exact current sections and the final to be
+  user-created and confirmed.
+
+The current full suite passes 248 tests in 43 suites with zero failures; the
+three installed Apple-model tests remain opt-in. Exact contracts, compatibility,
+and residual risk are recorded in [ADR-0017](adr/ADR-0017-evidence-integrity-publication-boundaries.md)
+and [`audits/TASK-012_SECURITY_REMEDIATION.md`](audits/TASK-012_SECURITY_REMEDIATION.md).
 
 ## Known limitations
 
@@ -389,8 +413,9 @@ and [`audits/TASK-011_VERIFICATION_EVIDENCE.md`](audits/TASK-011_VERIFICATION_EV
   internal-alpha evidence only. Task 011 confirms that no valid Developer ID,
   Team ID, notarization ticket, affirmative Gatekeeper distribution result, or
   clean-machine proof exists.
-- Accepted Task 011 status is `33e49bc`; implementation is `56deadc`, and
-  `2a0d7fe` is the pre-Task-011 rollback anchor.
+- Accepted Task 011 status is `d31b9aa`; implementation is `852257c`, and
+  `f371faa` is the pre-Task-011 rollback anchor after the authorized
+  private-path and GitHub-noreply history sanitizations.
 - The semantic JSONL recovery artifact is deliberately export-only; exact
   operational recovery relies on the verified SQLite online backup. A user-
   facing restore workflow is not implemented.
@@ -405,9 +430,9 @@ and [`audits/TASK-011_VERIFICATION_EVIDENCE.md`](audits/TASK-011_VERIFICATION_EV
   briefing refresh action, no independent truth-review provider, and
   conservative lexical/exact-qualification contradiction checks. Task 010
   retrieval is likewise conservative lexical/exact identity rather than fuzzy
-  geopolitical inference. The accepted Task 011 audit leaves four medium
-  evidence-integrity findings open and requires human review of all derived
-  intelligence.
+  geopolitical inference. The post-MVP controls require exact human
+  confirmation for consequential analysis and briefing export, but human review
+  remains fallible and is not automatic truth verification.
 
 ## Next permitted transition
 

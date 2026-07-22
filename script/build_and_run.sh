@@ -10,9 +10,11 @@ DIST_DIR="$ROOT_DIR/dist"
 APP_BUNDLE="$DIST_DIR/MeetingBuddy.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
+APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST_SOURCE="$ROOT_DIR/Configuration/MeetingBuddy-Info.plist"
 ENTITLEMENTS_SOURCE="$ROOT_DIR/Configuration/MeetingBuddy.entitlements"
+ICON_SOURCE="$ROOT_DIR/Configuration/Branding/BlueMinutes.icns"
 MEETINGBUDDY_SIGN_IDENTITY="${MEETINGBUDDY_SIGN_IDENTITY:--}"
 
 cd "$ROOT_DIR"
@@ -21,9 +23,10 @@ swift build --configuration debug --product "$APP_NAME" -Xswiftc -warnings-as-er
 BUILD_DIRECTORY="$(swift build --configuration debug --show-bin-path)"
 BUILD_BINARY="$BUILD_DIRECTORY/$APP_NAME"
 
-/usr/bin/install -d -m 0755 "$APP_MACOS"
+/usr/bin/install -d -m 0755 "$APP_MACOS" "$APP_RESOURCES"
 /usr/bin/install -m 0755 "$BUILD_BINARY" "$APP_BINARY"
 /usr/bin/install -m 0644 "$INFO_PLIST_SOURCE" "$APP_CONTENTS/Info.plist"
+/usr/bin/install -m 0644 "$ICON_SOURCE" "$APP_RESOURCES/BlueMinutes.icns"
 /usr/bin/codesign \
   --force \
   --sign "$MEETINGBUDDY_SIGN_IDENTITY" \
@@ -51,7 +54,7 @@ case "$MODE" in
     ;;
   --telemetry|telemetry)
     open_app
-    # This is a local unified-log stream only; MeetingBuddy sends no telemetry.
+    # This is a local unified-log stream only; BlueMinutes sends no telemetry.
     /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\""
     ;;
   --verify|verify)

@@ -1,5 +1,18 @@
 # Task 011 Release-Candidate Audit
 
+> Historical status note (2026-07-22): this accepted Task 011 document remains
+> an immutable snapshot of the findings at that gate. The later remediation is
+> documented in `docs/audits/TASK-012_SECURITY_REMEDIATION.md` and ADR-0017; the
+> original Task 011 results below are intentionally not rewritten.
+>
+> Later authorized pre-publication privacy sanitizations removed the private
+> local path and replaced commit emails with the authenticated GitHub noreply
+> identity. They rewrote reachable `main` commit IDs without changing the Task
+> 011 artifact bytes. The current equivalents are Task 010 `f371faa`, Task 011
+> implementation `852257c`, and Task 011 acceptance `d31b9aa`; exact historical
+> manifests below retain their original local commit IDs as part of the
+> immutable audit snapshot.
+
 Status: Accepted
 Release classification: **INTERNAL ALPHA**
 Selected product: `MeetingBuddy.app` for Apple Silicon, macOS 15 or later

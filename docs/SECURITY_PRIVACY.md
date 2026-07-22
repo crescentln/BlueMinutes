@@ -1,6 +1,7 @@
 # Security and Privacy Baseline
 
-Status: Tasks 001 through 011 accepted; INTERNAL ALPHA security boundary
+Status: Tasks 001 through 011 accepted; post-MVP evidence-integrity remediation
+implemented locally; INTERNAL ALPHA distribution boundary
 Owner: Codex
 Last updated: 2026-07-22
 Purpose: Define classification, routing, secret, logging, and trust-boundary
@@ -282,6 +283,21 @@ and deterministic coverage/evidence/contradiction validation all fail closed.
 No independent reviewing provider, external fallback, credential, dependency,
 network implementation, model download, telemetry, or entitlement is added.
 
+The post-MVP remediation in ADR-0017 treats structurally valid provider output
+as quarantined rather than trusted. A provider `noSpeech` result can publish
+only with application-owned exact-digital-silence confirmation over the exact
+canonical core range. A provider `nonSubstantive` result can omit a segment only
+when application code recognizes punctuation/symbol-only text or a closed
+non-semantic marker and binds the exact segment revision and text digest.
+
+Consequential analysis use requires explicit user confirmation of the exact
+active candidate ledger ID, content hash, and every claim. Persistence rejects
+confirmation if the candidate was superseded or if route, runtime, prompts,
+inputs, eligible segments, or outputs differ. Briefing export separately
+requires every current section and the final briefing to be user-created and
+confirmed. These gates preserve accountability and provenance; they do not
+claim that a human-confirmed statement is objectively true.
+
 Task 009A adds only a local closed automation surface. Caller permission is a
 trusted composition-root capability and cannot be raised through argv or a
 command payload. Every accepted request claims a durable replay nonce before
@@ -344,9 +360,10 @@ read or changed.
 External release remains blocked by missing Developer ID/Team ID,
 notarization/stapling, affirmative Gatekeeper distribution approval,
 clean-machine validation, manual accessibility/localization/icon review, and
-intended-OS live TCC/capture evidence. Four medium evidence-integrity findings
-remain open at analysis/briefing grounding and provider-only coverage
-classification boundaries; all derived intelligence requires human review.
+intended-OS live TCC/capture evidence. The four medium evidence-integrity
+findings that were open at Task 011 are addressed by the later ADR-0017
+application-owned omission and exact human-confirmation gates; all derived
+intelligence still requires careful evidence review.
 Three low resource findings are mitigated in accepted source but await a
 follow-up security scan. No tag, push, notarization submission, upload,
 installation, or distribution is authorized or claimed.

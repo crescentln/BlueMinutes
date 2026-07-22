@@ -11,6 +11,7 @@ DIST_DIR="$ROOT_DIR/dist"
 INFO_PLIST="$ROOT_DIR/Configuration/MeetingBuddy-Info.plist"
 ENTITLEMENTS="$ROOT_DIR/Configuration/MeetingBuddy.entitlements"
 PRIVACY_MANIFEST="$ROOT_DIR/Configuration/PrivacyInfo.xcprivacy"
+APP_ICON="$ROOT_DIR/Configuration/Branding/BlueMinutes.icns"
 GRDB_LICENSE="$ROOT_DIR/ThirdPartyNotices/GRDB-LICENSE.txt"
 PACKAGE_RESOLVED="$ROOT_DIR/Package.resolved"
 VERIFY_SCRIPT="$ROOT_DIR/script/verify_release_candidate.sh"
@@ -43,7 +44,7 @@ verify_release() {
 [[ "$(uname -s)" == "Darwin" ]] || fail "macOS is required"
 [[ "$(uname -m)" == "arm64" ]] || fail "Task 011 initial packaging is Apple Silicon only"
 for required in \
-    "$INFO_PLIST" "$ENTITLEMENTS" "$PRIVACY_MANIFEST" "$GRDB_LICENSE" \
+    "$INFO_PLIST" "$ENTITLEMENTS" "$PRIVACY_MANIFEST" "$APP_ICON" "$GRDB_LICENSE" \
     "$PACKAGE_RESOLVED" "$VERIFY_SCRIPT"; do
     [[ -f "$required" && ! -L "$required" ]] || fail "missing or linked release input: $required"
 done
@@ -127,6 +128,7 @@ CONTENTS="$STAGED_APP/Contents"
     "$CONTENTS/Resources/ThirdPartyNotices"
 /usr/bin/install -m 0755 "$APP_BINARY" "$CONTENTS/MacOS/$APP_PRODUCT"
 /usr/bin/install -m 0644 "$INFO_PLIST" "$CONTENTS/Info.plist"
+/usr/bin/install -m 0644 "$APP_ICON" "$CONTENTS/Resources/BlueMinutes.icns"
 /usr/bin/install -m 0644 "$PRIVACY_MANIFEST" "$CONTENTS/Resources/PrivacyInfo.xcprivacy"
 /usr/bin/install -m 0644 "$GRDB_LICENSE" \
     "$CONTENTS/Resources/ThirdPartyNotices/GRDB-LICENSE.txt"

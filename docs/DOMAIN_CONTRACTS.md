@@ -536,8 +536,15 @@ documented in [`HISTORICAL_REVIEW.md`](HISTORICAL_REVIEW.md).
 Task 011 adds no semantic type, provider route, or schema migration. Its fresh
 v10 and supported v1-v9 migration/recovery matrix passes, as do structural
 transcript and hierarchical coverage fault-injection gates. The accepted audit
-also leaves four medium evidence-integrity findings open: provider output can
-reach analysis or briefing publication without application-owned semantic
-entailment, and provider-only `nonSubstantive` or `noSpeech` classifications can
-close coverage. All derived intelligence therefore remains subject to human
-review inside the INTERNAL ALPHA boundary.
+recorded four medium evidence-integrity findings at that historical gate.
+
+The separately authorized post-MVP remediation in ADR-0017 preserves schema
+v10 while adding versioned application-owned confirmations. `noSpeech` requires
+exact-digital-silence proof over the exact canonical core range;
+`nonSubstantive` requires an exact transcript revision and source-text digest
+matching a closed application marker policy. Structurally valid provider
+analysis remains a quarantined candidate until a superseding immutable ledger
+binds explicit user confirmation to the exact active candidate ID, content
+hash, and every claim. Briefing export requires every exact current section and
+the final briefing to be user-created and confirmed. Historical payloads remain
+readable and immutable but cannot bypass the new downstream gates.

@@ -32,15 +32,15 @@ enum AppWorkflowError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .workspaceRequired:
-            "Choose a local MeetingBuddy workspace first."
+            "Choose a local BlueMinutes workspace first."
         case .workspaceAuthorizationFailed:
-            "MeetingBuddy could not retain access to the selected workspace."
+            "BlueMinutes could not retain access to the selected workspace."
         case .workspaceOpenFailed:
-            "The selected folder is not an empty folder or a valid MeetingBuddy workspace."
+            "The selected folder is not an empty folder or a valid BlueMinutes workspace."
         case .workspaceHealthFailed:
             "The workspace did not pass its local database and recovery health checks."
         case .sourceAuthorizationFailed:
-            "MeetingBuddy could not read the user-selected source file."
+            "BlueMinutes could not read the user-selected source file."
         case .sourceSelectionExpired:
             "Choose the local source file again before importing it."
         case .sourceInspectionFailed:
@@ -774,6 +774,19 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         return try runtime.store.activeAnalysisReview(meetingID: context.plan.meetingID)
     }
 
+    func confirmAnalysisReview(
+        canonicalJobID: JobID,
+        confirmsEveryClaim: Bool
+    ) async throws -> AnalysisReviewBundle {
+        guard let runtime else { throw AppWorkflowError.workspaceRequired }
+        let context = try await canonicalContext(jobID: canonicalJobID)
+        return try AnalysisManualReviewService(repository: runtime.store).confirmCurrent(
+            meetingID: context.plan.meetingID,
+            confirmsEveryClaim: confirmsEveryClaim,
+            confirmedAt: try currentInstant()
+        )
+    }
+
     func correctPosition(
         canonicalJobID: JobID,
         revisionID: RevisionID,
@@ -787,6 +800,7 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         guard let review = try runtime.store.activeAnalysisReview(
             meetingID: context.plan.meetingID
         ),
+            review.isHumanConfirmed,
             let prior = review.positions.first(where: {
                 $0.revision.revisionID == revisionID
             })
@@ -2056,6 +2070,6 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
 
     private func displayName(for url: URL) -> String {
         let name = url.lastPathComponent
-        return name.isEmpty ? "MeetingBuddy Workspace" : name
+        return name.isEmpty ? "BlueMinutes Workspace" : name
     }
 }

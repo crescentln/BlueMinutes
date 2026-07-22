@@ -20,6 +20,35 @@ public enum TranscriptChunkDisposition: String, Codable, Hashable, Sendable {
     case missing
 }
 
+/// Application-owned proof for a no-speech disposition. Provider output alone
+/// is never sufficient because it could silently omit spoken source material.
+public enum TranscriptNoSpeechVerificationMethod: String, Codable, Hashable, Sendable {
+    case exactDigitalSilence = "exact_digital_silence"
+}
+
+public struct TranscriptNoSpeechConfirmation: Codable, Hashable, Sendable {
+    public static let verifierVersion: UInt32 = 1
+
+    public let method: TranscriptNoSpeechVerificationMethod
+    public let verifiedCoreRange: MediaFrameRange
+    public let verifierVersion: UInt32
+
+    public init(
+        method: TranscriptNoSpeechVerificationMethod = .exactDigitalSilence,
+        verifiedCoreRange: MediaFrameRange,
+        verifierVersion: UInt32 = Self.verifierVersion
+    ) throws {
+        guard verifierVersion == Self.verifierVersion else {
+            throw TranscriptCoverageError.invalidManifest(
+                "The no-speech verifier version is unsupported."
+            )
+        }
+        self.method = method
+        self.verifiedCoreRange = verifiedCoreRange
+        self.verifierVersion = verifierVersion
+    }
+}
+
 public struct TranscriptChunkCoverage: Codable, Hashable, Sendable, Comparable {
     public let index: UInt32
     public let coreRange: MediaFrameRange
@@ -31,6 +60,7 @@ public struct TranscriptChunkCoverage: Codable, Hashable, Sendable, Comparable {
     public let reviewedSegmentRevision: SemanticRevisionReference?
     public let translationRevision: SemanticRevisionReference?
     public let safeFailureCode: String?
+    public let noSpeechConfirmation: TranscriptNoSpeechConfirmation?
 
     public init(
         index: UInt32,
@@ -42,7 +72,8 @@ public struct TranscriptChunkCoverage: Codable, Hashable, Sendable, Comparable {
         machineSegmentRevision: SemanticRevisionReference? = nil,
         reviewedSegmentRevision: SemanticRevisionReference? = nil,
         translationRevision: SemanticRevisionReference? = nil,
-        safeFailureCode: String? = nil
+        safeFailureCode: String? = nil,
+        noSpeechConfirmation: TranscriptNoSpeechConfirmation? = nil
     ) throws {
         guard physicalRange.startFrame <= coreRange.startFrame,
               physicalRange.endFrame >= coreRange.endFrame,
@@ -50,7 +81,8 @@ public struct TranscriptChunkCoverage: Codable, Hashable, Sendable, Comparable {
               machineSegmentRevision.map({ $0.objectType == .transcriptSegment }) ?? true,
               reviewedSegmentRevision.map({ $0.objectType == .transcriptSegment }) ?? true,
               translationRevision.map({ $0.objectType == .translationSegment }) ?? true,
-              safeFailureCode.map({ !$0.isEmpty && $0.utf8.count <= 96 }) ?? true
+              safeFailureCode.map({ !$0.isEmpty && $0.utf8.count <= 96 }) ?? true,
+              noSpeechConfirmation.map({ $0.verifiedCoreRange == coreRange }) ?? true
         else {
             throw TranscriptCoverageError.invalidManifest("A chunk coverage record is malformed.")
         }
@@ -58,6 +90,7 @@ public struct TranscriptChunkCoverage: Codable, Hashable, Sendable, Comparable {
         case .transcribed:
             guard reviewedSegmentRevision != nil,
                   safeFailureCode == nil,
+                  noSpeechConfirmation == nil,
                   attemptCount > 0
             else { throw TranscriptCoverageError.invalidManifest("A transcribed chunk needs a reviewed segment and no failure code.") }
         case .noSpeech:
@@ -68,7 +101,10 @@ public struct TranscriptChunkCoverage: Codable, Hashable, Sendable, Comparable {
                   attemptCount > 0
             else { throw TranscriptCoverageError.invalidManifest("No-speech must be explicit and contain no semantic segment.") }
         case .failed:
-            guard safeFailureCode != nil, reviewedSegmentRevision == nil else {
+            guard safeFailureCode != nil,
+                  reviewedSegmentRevision == nil,
+                  noSpeechConfirmation == nil
+            else {
                 throw TranscriptCoverageError.invalidManifest("A failed chunk needs a safe code and no reviewed segment.")
             }
         case .missing:
@@ -76,7 +112,8 @@ public struct TranscriptChunkCoverage: Codable, Hashable, Sendable, Comparable {
                   provider == nil,
                   machineSegmentRevision == nil,
                   reviewedSegmentRevision == nil,
-                  translationRevision == nil
+                  translationRevision == nil,
+                  noSpeechConfirmation == nil
             else { throw TranscriptCoverageError.invalidManifest("A missing chunk has no provider result.") }
         }
         self.index = index
@@ -89,6 +126,7 @@ public struct TranscriptChunkCoverage: Codable, Hashable, Sendable, Comparable {
         self.reviewedSegmentRevision = reviewedSegmentRevision
         self.translationRevision = translationRevision
         self.safeFailureCode = safeFailureCode
+        self.noSpeechConfirmation = noSpeechConfirmation
     }
 
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.index < rhs.index }
@@ -268,6 +306,9 @@ public struct TranscriptPublication: Sendable {
             try SemanticRevisionReference(logicalID: $0.translationID, revisionID: $0.revision.revisionID)
         }.sorted()
         guard manifest.status == .published,
+              manifest.chunks.allSatisfy({ chunk in
+                  chunk.disposition != .noSpeech || chunk.noSpeechConfirmation != nil
+              }),
               transcriptReferences == manifest.transcriptRevisionReferences.sorted(),
               translationReferences == manifest.translationRevisionReferences.sorted(),
               transcriptSegments.allSatisfy({

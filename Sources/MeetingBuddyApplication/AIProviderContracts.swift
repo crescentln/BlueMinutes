@@ -444,6 +444,14 @@ public struct TaskOwnedAudioChunk: @unchecked Sendable {
     }
 }
 
+/// Independently evaluates the exact application-owned core range. A speech
+/// provider cannot authorize omission of audio from transcript coverage.
+public protocol TranscriptNoSpeechVerifying: Sendable {
+    func confirmation(
+        for audio: TaskOwnedAudioChunk
+    ) async -> TranscriptNoSpeechConfirmation?
+}
+
 public struct TranscriptionSpan: Codable, Hashable, Sendable, Comparable {
     public let startMilliseconds: Int64
     public let endMilliseconds: Int64

@@ -1,0 +1,114 @@
+name: Bug report
+description: Report a reproducible defect using synthetic or public evidence only.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, real meeting material, diplomatic records,
+        user workspaces, databases, logs, private paths, or generated briefings.
+        Report vulnerabilities privately through SECURITY.md.
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: What workflow and user need does this affect?
+    validations:
+      required: true
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current behavior
+      description: What happens now? Include a safe error code where applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: What should happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Use the smallest synthetic, anonymized, licensed, or public fixture.
+      placeholder: |
+        1. Start from...
+        2. Perform...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: List objective conditions that prove the bug is fixed.
+    validations:
+      required: true
+  - type: textarea
+    id: excluded_scope
+    attributes:
+      label: Excluded scope
+      description: What related work must this Issue not expand into?
+    validations:
+      required: true
+  - type: textarea
+    id: affected_data
+    attributes:
+      label: Affected data
+      description: Identify data types, classifications, revisions, and persistence locations without exposing content.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy_security
+    attributes:
+      label: Privacy and security impact
+      description: Address confidentiality, credentials, network routes, logs, permissions, and abuse cases.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence_traceability
+    attributes:
+      label: Evidence-traceability impact
+      description: Could this affect provenance, uncertainty, coverage, human confirmation, or active/stale revisions?
+    validations:
+      required: true
+  - type: textarea
+    id: database_migration
+    attributes:
+      label: Database or migration impact
+      description: State "None" or identify schema versions, compatibility, backup, and migration requirements.
+    validations:
+      required: true
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback impact
+      description: How can code and user data be returned safely to the prior state?
+    validations:
+      required: true
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Test plan
+      description: Name the regression, focused suites, and full gate.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Safe environment details
+      description: macOS, Xcode, Swift, architecture, and commit; do not include private account or path data.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety_confirmation
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I have not included credentials, private records, or real meeting content.
+          required: true

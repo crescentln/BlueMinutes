@@ -194,6 +194,7 @@ struct TranscriptPipelineChunkOutput: Codable, Hashable, Sendable {
     let confidence: ConfidenceScore?
     let translation: TranslationResponse?
     let attemptCount: UInt32
+    let noSpeechConfirmation: TranscriptNoSpeechConfirmation?
 
     init(
         index: UInt32,
@@ -201,13 +202,20 @@ struct TranscriptPipelineChunkOutput: Codable, Hashable, Sendable {
         text: String?,
         confidence: ConfidenceScore?,
         translation: TranslationResponse?,
-        attemptCount: UInt32
+        attemptCount: UInt32,
+        noSpeechConfirmation: TranscriptNoSpeechConfirmation? = nil
     ) throws {
         guard attemptCount > 0,
               attemptCount <= 100,
               (disposition == .transcribed)
-                ? (text?.isEmpty == false && confidence != nil)
-                : (disposition == .noSpeech && text == nil && confidence == nil && translation == nil)
+                ? (text?.isEmpty == false
+                    && confidence != nil
+                    && noSpeechConfirmation == nil)
+                : (disposition == .noSpeech
+                    && text == nil
+                    && confidence == nil
+                    && translation == nil
+                    && noSpeechConfirmation != nil)
         else { throw AIProviderContractError.invalidResponse("A validated pipeline chunk is internally inconsistent.") }
         self.index = index
         self.disposition = disposition
@@ -215,6 +223,7 @@ struct TranscriptPipelineChunkOutput: Codable, Hashable, Sendable {
         self.confidence = confidence
         self.translation = translation
         self.attemptCount = attemptCount
+        self.noSpeechConfirmation = noSpeechConfirmation
     }
 }
 

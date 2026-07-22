@@ -552,6 +552,11 @@ public extension BriefingSemanticFactory {
         let templateReference = try reference(source.template)
         let sectionReferences = try ordered.map(reference)
         let reportReference = try reference(report)
+        let everySectionConfirmed = ordered.allSatisfy { section in
+            section.revision.createdBy == .user
+                && section.reviewStatus == .confirmed
+                && section.userConfirmed
+        }
         let logicalID = prior?.finalBriefingID ?? FinalBriefingID(deterministicUUID(
             "task006b-final-v1:\(source.meeting.meetingID.canonicalString):logical"
         ))
@@ -565,7 +570,7 @@ public extension BriefingSemanticFactory {
                 lifecycleStatus: .draft,
                 validationState: .notValidated,
                 createdAt: createdAt,
-                createdBy: .application,
+                createdBy: everySectionConfirmed ? .user : .application,
                 supersedesRevisionID: prior?.revision.revisionID,
                 inputRevisions: [meetingReference, templateReference] + sectionReferences + [reportReference],
                 sourceAssetRevisions: sourceAssetReferences(source),
@@ -582,8 +587,8 @@ public extension BriefingSemanticFactory {
             markdown: markdown,
             markdownDigest: markdownDigest,
             manualSectionCount: UInt16(ordered.filter { $0.manualEditStatus == .userEdited }.count),
-            reviewStatus: .needsReview,
-            userConfirmed: false
+            reviewStatus: everySectionConfirmed ? .confirmed : .needsReview,
+            userConfirmed: everySectionConfirmed
         )
         return try publishedFinal(draft, at: createdAt)
     }

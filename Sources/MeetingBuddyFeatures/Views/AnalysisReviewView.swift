@@ -134,6 +134,7 @@ struct AnalysisReviewView: View {
     private func reviewWorkspace(_ review: AnalysisReviewBundle) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                analysisConfirmationCard(review)
                 coverageHeader(review)
                 delegationCards(review)
                 interventionCards(review)
@@ -144,8 +145,38 @@ struct AnalysisReviewView: View {
         }
     }
 
+    private func analysisConfirmationCard(_ review: AnalysisReviewBundle) -> some View {
+        GroupBox("Analysis review boundary") {
+            VStack(alignment: .leading, spacing: 10) {
+                if review.isHumanConfirmed {
+                    Label(
+                        "Every claim in this exact analysis ledger was explicitly confirmed by the user.",
+                        systemImage: "person.crop.circle.badge.checkmark"
+                    )
+                    .foregroundStyle(.green)
+                } else {
+                    Label(
+                        "Quarantined model candidate — not approved for briefing generation, position correction, history, or export.",
+                        systemImage: "exclamationmark.shield.fill"
+                    )
+                    .foregroundStyle(.orange)
+                    Toggle(
+                        "I reviewed every claim, qualification, speaker identity, and evidence link in this analysis.",
+                        isOn: $store.analysisClaimsConfirmed
+                    )
+                    Button("Confirm Exact Analysis Ledger") {
+                        Task { await store.confirmAnalysisReview() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!store.analysisClaimsConfirmed || store.isWorking)
+                }
+            }
+            .padding()
+        }
+    }
+
     private func coverageHeader(_ review: AnalysisReviewBundle) -> some View {
-        GroupBox("Published analysis proof") {
+        GroupBox("Analysis coverage proof") {
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
                 GridRow {
                     Text("Coverage")
@@ -164,6 +195,10 @@ struct AnalysisReviewView: View {
                     Text(String(review.ledger.segments.filter { $0.disposition == .nonSubstantive }.count))
                 }
                 GridRow { Text("Route"); Text(review.ledger.analysisRoute.route.rawValue) }
+                GridRow {
+                    Text("Human confirmation")
+                    Text(review.isHumanConfirmed ? "confirmed" : "quarantined candidate")
+                }
                 GridRow { Text("Prompt modules"); Text(review.ledger.promptModules.map { "\($0.identifier)@\($0.version)" }.joined(separator: ", ")) }
                 GridRow { Text("Input digest"); Text(short(review.ledger.inputPackageDigest.lowercaseHex)).monospaced() }
                 GridRow { Text("Ledger revision"); Text(short(review.ledger.ledgerID.canonicalString)).monospaced() }
@@ -298,6 +333,7 @@ struct AnalysisReviewView: View {
                             .buttonStyle(.borderedProminent)
                             .disabled(
                                 store.isWorking
+                                    || !review.isHumanConfirmed
                                     || statementDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             )
                         }

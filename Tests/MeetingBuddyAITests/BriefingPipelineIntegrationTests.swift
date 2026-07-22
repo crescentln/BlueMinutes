@@ -75,6 +75,25 @@ struct BriefingPipelineIntegrationTests {
                 ofUTF8Text: initial.publication.finalBriefing.markdown
             ) == initial.publication.finalBriefing.markdownDigest
         )
+        let unconfirmedExport = try BriefingMarkdownExportRequest(
+            meetingID: workspace.meetingID,
+            finalBriefingRevision: briefingReference(initial.publication.finalBriefing),
+            fileName: "unconfirmed-briefing.md",
+            expectedClassification: .internal,
+            explicitUserAuthorization: true,
+            requestedAt: aiInstant(1_900_000_000_231)
+        )
+        #expect(throws: BriefingExportError.self) {
+            _ = try LocalMarkdownExportService(store: workspace.store).exportMarkdown(
+                unconfirmedExport
+            )
+        }
+        #expect(try workspace.store.briefingExportRecords(
+            meetingID: workspace.meetingID
+        ).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: workspace.root.appendingPathComponent(
+            "Meetings/\(workspace.meetingID.canonicalString)/exports/unconfirmed-briefing.md"
+        ).path))
         let repeatedAssembly = try BriefingSemanticFactory.makePublication(
             source: source,
             graph: initial.publication.graph,
@@ -183,8 +202,32 @@ struct BriefingPipelineIntegrationTests {
                 .revision.revisionID == lockedOverview.revision.revisionID
         )
 
+        var fullyConfirmed = manuallyLocked
+        for (offset, sectionType) in [
+            BriefingSectionType.majorIssues,
+            .majorDelegations
+        ].enumerated() {
+            let section = try #require(fullyConfirmed.publication.sections.first {
+                $0.sectionType == sectionType
+            })
+            fullyConfirmed = try BriefingManualReviewService(
+                repository: workspace.store
+            ).updateSection(
+                meetingID: workspace.meetingID,
+                sectionType: sectionType,
+                editedTextByItemID: Dictionary(uniqueKeysWithValues: section.items.map {
+                    ($0.itemID, $0.claim.text)
+                }),
+                locked: false,
+                changedAt: aiInstant(1_900_000_000_265 + Int64(offset))
+            )
+        }
+        #expect(fullyConfirmed.isHumanConfirmed)
+        #expect(fullyConfirmed.publication.finalBriefing.reviewStatus == .confirmed)
+        #expect(fullyConfirmed.publication.finalBriefing.userConfirmed)
+
         let finalReference = try briefingReference(
-            manuallyLocked.publication.finalBriefing
+            fullyConfirmed.publication.finalBriefing
         )
         let exportService = LocalMarkdownExportService(store: workspace.store)
         let exportRequest = try BriefingMarkdownExportRequest(
@@ -205,35 +248,35 @@ struct BriefingPipelineIntegrationTests {
         )
         #expect(exportMode.intValue == 0o600)
         let exportedMarkdown = try String(contentsOf: exportURL, encoding: .utf8)
-        #expect(exportedMarkdown == manuallyLocked.publication.finalBriefing.markdown)
+        #expect(exportedMarkdown == fullyConfirmed.publication.finalBriefing.markdown)
         #expect(try ContentDigest.sha256(ofUTF8Text: exportedMarkdown)
             == export.markdownDigest)
-        #expect(manuallyLocked.publication.template.revision.semanticContentHash?.lowercaseHex
+        #expect(fullyConfirmed.publication.template.revision.semanticContentHash?.lowercaseHex
             == "17a42f2fac8f3cb7685f2d4be211131e91768971ff42cf899d25e06ee68e3883")
-        #expect(manuallyLocked.publication.graph.revision.semanticContentHash?.lowercaseHex
-            == "f6c716e181ed97a59255d386bc2ad94606e97960dc7a20e67b58d78514527773")
-        #expect(manuallyLocked.publication.sections.first {
+        #expect(fullyConfirmed.publication.graph.revision.semanticContentHash?.lowercaseHex
+            == "d5e144c4a7e42ddd1908318b133e2dd7f288265dc1ffcd5801692651ec71b966")
+        #expect(fullyConfirmed.publication.sections.first {
             $0.sectionType == .meetingOverview
         }?.revision.semanticContentHash?.lowercaseHex
-            == "727f22bc3ee915dcf5551216ba47ece6668e2235f8f61c6e2df91eaf0deed7e9")
-        #expect(manuallyLocked.publication.sections.first {
+            == "175b1cae3e82f3dfe1c679bc4daef7cc3d198a2418087eccf1af3b809ed64d43")
+        #expect(fullyConfirmed.publication.sections.first {
             $0.sectionType == .majorIssues
         }?.revision.semanticContentHash?.lowercaseHex
-            == "2da27c7031f978499fd4935a3565eadb61bde273177aa9bcd26949bc20da6fab")
-        #expect(manuallyLocked.publication.sections.first {
+            == "f20b5f9c6b82accfa5d89fba6c012cf9cc1a6b7605b46c47233b6c9a32122703")
+        #expect(fullyConfirmed.publication.sections.first {
             $0.sectionType == .majorDelegations
         }?.revision.semanticContentHash?.lowercaseHex
-            == "4c69cf4a41e243d5bc3403453a1120a576cbeb15d9465887688f9bd3b2d6c51e")
-        #expect(manuallyLocked.publication.ledger.contentHash.lowercaseHex
-            == "230f98cf14ff45cefba8589cfc0bd356eb7dc9d37e5c7431d2861d8f74f3bd21")
-        #expect(manuallyLocked.publication.validationReport.revision
+            == "296fdf29442a7a1f5cf0b16ba312d4447f1bde034f4cf659f2908b18c1713e10")
+        #expect(fullyConfirmed.publication.ledger.contentHash.lowercaseHex
+            == "323cd36681a0af665af4733707af9055ffcd7744e0f6059f6d724b521852b18d")
+        #expect(fullyConfirmed.publication.validationReport.revision
             .semanticContentHash?.lowercaseHex
-            == "295e50e59448ec08fff023838585051a2504b86b387c69da19ac7b067e36f144")
-        #expect(manuallyLocked.publication.finalBriefing.revision
+            == "6f6243d643444f7c9f2db4d7a25427a04701bf8a1e852051e383b147bf7bad20")
+        #expect(fullyConfirmed.publication.finalBriefing.revision
             .semanticContentHash?.lowercaseHex
-            == "80d21fcd8a03db1c0254179e328d0da323b3338e7b65c1503b5ea830863c2ee7")
+            == "7d617b2b523a58a006f33a787ccad3923c7078fbc2c0ee487b6b0d0e98bf2988")
         #expect(export.markdownDigest.lowercaseHex
-            == "5790be82852fd5b77fb061c541c7f913647cc3d55ae96b470824a42d92b4db1d")
+            == "2e67aebd99cd8ff727eefabc0087acec5faa638f7226ec23603d3a8c77747f35")
         #expect(try exportService.exportMarkdown(exportRequest) == export)
         #expect(try workspace.store.briefingExportRecords(
             meetingID: workspace.meetingID
@@ -267,15 +310,15 @@ struct BriefingPipelineIntegrationTests {
             )
         }
         if ProcessInfo.processInfo.environment["MEETINGBUDDY_REPORT_TASK006B_HASHES"] == "1" {
-            print("TASK006B_TEMPLATE_REVISION=\(manuallyLocked.publication.template.revision.revisionID.canonicalString)")
-            print("TASK006B_TEMPLATE_HASH=\(manuallyLocked.publication.template.revision.semanticContentHash!.lowercaseHex)")
-            print("TASK006B_GRAPH_HASH=\(manuallyLocked.publication.graph.revision.semanticContentHash!.lowercaseHex)")
-            for section in manuallyLocked.publication.sections {
+            print("TASK006B_TEMPLATE_REVISION=\(fullyConfirmed.publication.template.revision.revisionID.canonicalString)")
+            print("TASK006B_TEMPLATE_HASH=\(fullyConfirmed.publication.template.revision.semanticContentHash!.lowercaseHex)")
+            print("TASK006B_GRAPH_HASH=\(fullyConfirmed.publication.graph.revision.semanticContentHash!.lowercaseHex)")
+            for section in fullyConfirmed.publication.sections {
                 print("TASK006B_SECTION_\(section.sectionType.encodedValue.uppercased())_HASH=\(section.revision.semanticContentHash!.lowercaseHex)")
             }
-            print("TASK006B_LEDGER_HASH=\(manuallyLocked.publication.ledger.contentHash.lowercaseHex)")
-            print("TASK006B_VALIDATION_HASH=\(manuallyLocked.publication.validationReport.revision.semanticContentHash!.lowercaseHex)")
-            print("TASK006B_FINAL_HASH=\(manuallyLocked.publication.finalBriefing.revision.semanticContentHash!.lowercaseHex)")
+            print("TASK006B_LEDGER_HASH=\(fullyConfirmed.publication.ledger.contentHash.lowercaseHex)")
+            print("TASK006B_VALIDATION_HASH=\(fullyConfirmed.publication.validationReport.revision.semanticContentHash!.lowercaseHex)")
+            print("TASK006B_FINAL_HASH=\(fullyConfirmed.publication.finalBriefing.revision.semanticContentHash!.lowercaseHex)")
             print("TASK006B_MARKDOWN_SHA256=\(export.markdownDigest.lowercaseHex)")
         }
         #expect(throws: BriefingExportError.classificationMismatch) {
@@ -301,8 +344,8 @@ struct BriefingPipelineIntegrationTests {
             )
         }
 
-        let expectedLedger = manuallyLocked.publication.ledger
-        let expectedFinal = manuallyLocked.publication.finalBriefing
+        let expectedLedger = fullyConfirmed.publication.ledger
+        let expectedFinal = fullyConfirmed.publication.finalBriefing
         try workspace.store.close()
         let reopened = try SQLitePersistenceStore(workspace: workspace.descriptor)
         let loadedReopened = try reopened.activeBriefingReview(
@@ -853,7 +896,14 @@ private func prepareBriefingSource(
     let loadedAnalysis = try workspace.store.activeAnalysisReview(
         meetingID: workspace.meetingID
     )
-    let analysis = try #require(loadedAnalysis)
+    _ = try #require(loadedAnalysis)
+    let analysis = try AnalysisManualReviewService(
+        repository: workspace.store
+    ).confirmCurrent(
+        meetingID: workspace.meetingID,
+        confirmsEveryClaim: true,
+        confirmedAt: aiInstant(1_900_000_000_224)
+    )
     let template = try BriefingSemanticFactory.builtInTemplate(
         createdAt: aiInstant(1_900_000_000_225)
     )

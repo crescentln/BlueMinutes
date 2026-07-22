@@ -11,6 +11,7 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
     private let catalog: any MediaAssetCatalog
     private let fileAccess: any ManagedMediaFileAccess
     private let repository: any TranscriptReviewRepository
+    private let noSpeechVerifier: any TranscriptNoSpeechVerifying
 
     public init(
         transcriptionProvider: any TranscriptionProvider,
@@ -18,7 +19,8 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
         processor: any NativeMediaProcessing,
         catalog: any MediaAssetCatalog,
         fileAccess: any ManagedMediaFileAccess,
-        repository: any TranscriptReviewRepository
+        repository: any TranscriptReviewRepository,
+        noSpeechVerifier: any TranscriptNoSpeechVerifying = DigitalSilenceNoSpeechVerifier()
     ) {
         self.transcriptionProvider = transcriptionProvider
         self.translationProvider = translationProvider
@@ -26,6 +28,7 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
         self.catalog = catalog
         self.fileAccess = fileAccess
         self.repository = repository
+        self.noSpeechVerifier = noSpeechVerifier
     }
 
     public func execute(_ context: JobExecutionContext) async throws -> JobExecutionResult {
@@ -211,8 +214,9 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
         }
         defer { Task { try? await context.discardTemporaryFile(at: audioPath) } }
         let audioURL = try await context.verifiedTemporaryFileURL(for: descriptor)
+        let taskAudio = try TaskOwnedAudioChunk(fileURL: audioURL, plan: chunk)
         let request = try TranscriptionRequest(
-            audio: TaskOwnedAudioChunk(fileURL: audioURL, plan: chunk),
+            audio: taskAudio,
             canonicalSourceRevision: plan.canonicalSourceRevision,
             language: plan.sourceLanguage,
             dataClassification: plan.dataClassification
@@ -220,13 +224,21 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
         let providerResult = try await transcriptionProvider.transcribe(request)
         let owned = try ownedSpeech(from: providerResult, chunk: chunk)
         guard let owned else {
+            guard let confirmation = await noSpeechVerifier.confirmation(for: taskAudio),
+                  confirmation.verifiedCoreRange == chunk.coreRange
+            else {
+                throw AIProviderContractError.invalidResponse(
+                    "Provider-only no-speech cannot omit an unverified source range."
+                )
+            }
             return try TranscriptPipelineChunkOutput(
                 index: chunk.index,
                 disposition: .noSpeech,
                 text: nil,
                 confidence: nil,
                 translation: nil,
-                attemptCount: attemptCount
+                attemptCount: attemptCount,
+                noSpeechConfirmation: confirmation
             )
         }
         let translation: TranslationResponse?
@@ -304,8 +316,17 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
         else { return nil }
         let url = try await context.verifiedTemporaryFileURL(for: descriptor)
         let data = try Data(contentsOf: url, options: [.mappedIfSafe])
-        let output = try JSONDecoder().decode(TranscriptPipelineChunkOutput.self, from: data)
-        return output.index == chunk.index ? output : nil
+        let decoded = try JSONDecoder().decode(TranscriptPipelineChunkOutput.self, from: data)
+        guard decoded.index == chunk.index else { return nil }
+        return try? TranscriptPipelineChunkOutput(
+            index: decoded.index,
+            disposition: decoded.disposition,
+            text: decoded.text,
+            confidence: decoded.confidence,
+            translation: decoded.translation,
+            attemptCount: decoded.attemptCount,
+            noSpeechConfirmation: decoded.noSpeechConfirmation
+        )
     }
 
     private func outputPath(_ index: UInt32) throws -> WorkspaceRelativePath {
@@ -334,7 +355,8 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                         physicalRange: chunk.physicalRange,
                         disposition: .noSpeech,
                         attemptCount: output.attemptCount,
-                        provider: transcriptionProvider.metadata
+                        provider: transcriptionProvider.metadata,
+                        noSpeechConfirmation: output.noSpeechConfirmation
                     )
                 )
             case .transcribed:
@@ -442,7 +464,8 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                         physicalRange: chunk.physicalRange,
                         disposition: .noSpeech,
                         attemptCount: output.attemptCount,
-                        provider: transcriptionProvider.metadata
+                        provider: transcriptionProvider.metadata,
+                        noSpeechConfirmation: output.noSpeechConfirmation
                     )
                 }
                 guard let identity = identities[chunk.index] else {

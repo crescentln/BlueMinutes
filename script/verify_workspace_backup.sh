@@ -45,7 +45,7 @@ for root in "$SOURCE_ROOT" "$BACKUP_ROOT"; do
         || fail "workspace contains a non-file, non-directory entry: $root"
     [[ -z "$(/usr/bin/find "$root/Database" \
         \( -name '*-wal' -o -name '*-shm' -o -name '*-journal' \) -print -quit)" ]] \
-        || fail "workspace has live SQLite sidecars; quit MeetingBuddy and retry: $root"
+        || fail "workspace has live SQLite sidecars; quit BlueMinutes and retry: $root"
     while IFS= read -r -d '' path; do
         relative="${path#"$root"/}"
         [[ "$relative" != *$'\n'* && "$relative" != *$'\t'* ]] \
@@ -166,9 +166,9 @@ xattr_inventory "$SOURCE_ROOT" "$TEMP_DIR/source.final.xattrs"
 xattr_inventory "$BACKUP_ROOT" "$TEMP_DIR/backup.final.xattrs"
 for inventory in sha256 metadata xattrs; do
     /usr/bin/cmp -s "$TEMP_DIR/source.$inventory" "$TEMP_DIR/source.final.$inventory" \
-        || fail "source workspace changed during verification; quit MeetingBuddy and repeat a cold backup"
+        || fail "source workspace changed during verification; quit BlueMinutes and repeat a cold backup"
     /usr/bin/cmp -s "$TEMP_DIR/backup.$inventory" "$TEMP_DIR/backup.final.$inventory" \
-        || fail "backup workspace changed during verification; quit MeetingBuddy and repeat a cold backup"
+        || fail "backup workspace changed during verification; quit BlueMinutes and repeat a cold backup"
 done
 
 FILE_COUNT="$(/usr/bin/wc -l < "$TEMP_DIR/source.sha256" | /usr/bin/tr -d ' ')"

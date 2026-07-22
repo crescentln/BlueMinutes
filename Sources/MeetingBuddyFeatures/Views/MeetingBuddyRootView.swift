@@ -43,14 +43,14 @@ public struct MeetingBuddyRootView: View {
                         .disabled(store.transcriptReview == nil)
                     Label("Briefing", systemImage: "doc.text.magnifyingglass")
                         .tag(MediaReviewSection.briefing)
-                        .disabled(store.analysisReview == nil)
+                        .disabled(store.analysisReview?.isHumanConfirmed != true)
                     Label("Meeting History", systemImage: "clock.arrow.circlepath")
                         .tag(MediaReviewSection.history)
                     Label("Storage", systemImage: "externaldrive")
                         .tag(MediaReviewSection.storage)
                 }
             }
-            .navigationTitle("MeetingBuddy")
+            .navigationTitle("BlueMinutes")
             .listStyle(.sidebar)
         } detail: {
             detailContent
@@ -111,7 +111,7 @@ public struct MeetingBuddyRootView: View {
             }
         }
         .alert(
-            "MeetingBuddy",
+            "BlueMinutes",
             isPresented: Binding(
                 get: { store.safeErrorMessage != nil },
                 set: { if !$0 { store.clearError() } }
@@ -205,7 +205,7 @@ public struct MeetingBuddyRootView: View {
             Label("Choose a Workspace", systemImage: "folder.badge.plus")
         } description: {
             Text(
-                "Select an existing MeetingBuddy workspace or an empty folder for a new local workspace."
+                "Select an existing BlueMinutes workspace or an empty folder for a new local workspace."
             )
         } actions: {
             Button("Choose Workspace…") {

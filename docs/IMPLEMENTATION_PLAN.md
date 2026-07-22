@@ -309,3 +309,10 @@ localization, manual accessibility, intended-OS live TCC/capture proof, and
 four medium evidence-integrity findings remain open. There is no next eligible
 numbered MVP task; post-MVP promotion and every publication action require
 separate explicit user authorization.
+
+Historical note: the four medium findings were open at Task 011 acceptance.
+The separately authorized post-MVP security-remediation work implements the
+ADR-0017 application-owned omission and exact human-confirmation gates without
+reopening the numbered MVP sequence or adding a product feature, dependency,
+network route, provider, or schema migration. Private GitHub publication and
+any later public conversion remain separately authorized maintenance actions.

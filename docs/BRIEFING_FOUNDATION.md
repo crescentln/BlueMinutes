@@ -1,5 +1,10 @@
 # Task 006B Briefing Foundation
 
+> Historical status note (2026-07-22): ADR-0017 later strengthens this accepted
+> foundation. Generated briefing text now remains quarantined from local export
+> until every exact current section and the resulting final are user-created
+> and confirmed. The Task 006B evidence below is retained as its original gate.
+
 Status: Accepted
 Owner: Codex under the user's Task 006B authorization
 Last updated: 2026-07-18

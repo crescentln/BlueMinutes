@@ -118,6 +118,13 @@ not satisfy the separate external-distribution gates recorded below.
   localization, manual accessibility, and intended-OS live TCC/capture evidence
   remain incomplete.
 
+The bullets above preserve the historical Task 011 acceptance boundary. The
+separately authorized post-MVP remediation in ADR-0017 implements conservative
+application-owned `noSpeech`/`nonSubstantive` confirmation, exact-ledger human
+confirmation before consequential analysis use, and confirmation of every
+briefing section/final before export. It does not change the accepted MVP task
+sequence or satisfy the remaining binary-distribution gates.
+
 ## Quality-gate matrix
 
 | Gate | MVP evidence required |

@@ -39,6 +39,7 @@ public final class LocalMarkdownExportService: BriefingMarkdownExporting, @unche
               try store.staleMarks(for: request.finalBriefingRevision).isEmpty,
               let review = try store.activeBriefingReview(meetingID: request.meetingID),
               review.isCurrent,
+              review.isHumanConfirmed,
               review.publication.finalBriefing.revision.revisionID
                 == final.revision.revisionID
         else { throw BriefingExportError.staleOrInvalidFinal }

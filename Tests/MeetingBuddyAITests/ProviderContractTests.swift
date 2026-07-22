@@ -1,3 +1,4 @@
+@preconcurrency import AVFAudio
 import Foundation
 import MeetingBuddyAI
 import MeetingBuddyApplication
@@ -310,6 +311,98 @@ struct ProviderContractTests {
     }
 
     @Test
+    func productionNoSpeechVerifierAcceptsOnlyExactDigitalSilence() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "meetingbuddy-no-speech-\(UUID().uuidString.lowercased())",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let silentURL = directory.appendingPathComponent("silent.caf")
+        let nonSilentURL = directory.appendingPathComponent("non-silent.caf")
+        try writePCMFixture(to: silentURL, nonzeroSample: false)
+        try writePCMFixture(to: nonSilentURL, nonzeroSample: true)
+        let plan = try #require(CanonicalChunkPlanner.plan(totalFrameCount: 16_000).first)
+        let verifier = DigitalSilenceNoSpeechVerifier()
+
+        let silence = await verifier.confirmation(
+            for: try TaskOwnedAudioChunk(fileURL: silentURL, plan: plan)
+        )
+        let speech = await verifier.confirmation(
+            for: try TaskOwnedAudioChunk(fileURL: nonSilentURL, plan: plan)
+        )
+
+        #expect(silence?.verifiedCoreRange == plan.coreRange)
+        #expect(speech == nil)
+    }
+
+    @Test
+    func nonSubstantiveVerifierBindsOnlyClosedMarkersToExactText() throws {
+        let workspace = try AIWorkspace()
+        defer { workspace.cleanup() }
+        let source = try prepareAnalysisSource(workspace)
+        let original = try #require(
+            AnalysisPipelineJobPlan.requestPackages(from: source).first?.request
+        )
+        let translationRevision = try SemanticRevisionReference(
+            logicalID: aiID(70, TranslationSegmentID.self),
+            revisionID: aiID(71, RevisionID.self)
+        )
+        let marker: AnalysisRequest
+        do {
+            marker = try AnalysisRequest(
+                packageIdentifier: original.packageIdentifier,
+                transcriptRevision: original.transcriptRevision,
+                translationRevision: translationRevision,
+                speakerAssignmentRevision: original.speakerAssignmentRevision,
+                transcriptText: "[applause]",
+                translatedText: "[applause]",
+                speakerContext: original.speakerContext,
+                evidenceKeys: original.evidenceKeys,
+                dataClassification: original.dataClassification,
+                localeIdentifier: original.localeIdentifier
+            )
+        } catch {
+            Issue.record("Marker fixture construction failed: \(error)")
+            return
+        }
+
+        let markerConfirmation = try AnalysisNonSubstantiveVerifier.confirmation(for: marker)
+        let confirmation = try #require(markerConfirmation)
+        let markerDigest = try ContentDigest.sha256(ofUTF8Text: marker.transcriptText)
+        let translationDigest = try ContentDigest.sha256(ofUTF8Text: "[applause]")
+        let meaningfulConfirmation = try AnalysisNonSubstantiveVerifier.confirmation(
+            for: original
+        )
+        let mismatchedTranslation: AnalysisRequest
+        do {
+            mismatchedTranslation = try AnalysisRequest(
+                packageIdentifier: original.packageIdentifier,
+                transcriptRevision: original.transcriptRevision,
+                translationRevision: translationRevision,
+                speakerAssignmentRevision: original.speakerAssignmentRevision,
+                transcriptText: "[applause]",
+                translatedText: "The delegation supports the draft.",
+                speakerContext: original.speakerContext,
+                evidenceKeys: original.evidenceKeys,
+                dataClassification: original.dataClassification,
+                localeIdentifier: original.localeIdentifier
+            )
+        } catch {
+            Issue.record("Mismatched-translation fixture construction failed: \(error)")
+            return
+        }
+        #expect(confirmation.segmentRevision == marker.transcriptRevision)
+        #expect(confirmation.sourceTextDigest == markerDigest)
+        #expect(confirmation.translationRevision == marker.translationRevision)
+        #expect(confirmation.translationTextDigest == translationDigest)
+        #expect(meaningfulConfirmation == nil)
+        #expect(try AnalysisNonSubstantiveVerifier.confirmation(
+            for: mismatchedTranslation
+        ) == nil)
+    }
+
+    @Test
     func keychainRoundTripsOpaqueSecretWithoutFilesystemStorage() throws {
         let store = MacOSKeychainSecretStore()
         #expect(throws: AIProviderContractError.self) {
@@ -375,6 +468,28 @@ struct ProviderContractTests {
         #expect(!text.contains("path"))
         #expect(!text.contains("meeting_id"))
     }
+}
+
+private func writePCMFixture(to url: URL, nonzeroSample: Bool) throws {
+    let format = try #require(AVAudioFormat(
+        commonFormat: .pcmFormatInt16,
+        sampleRate: 16_000,
+        channels: 1,
+        interleaved: true
+    ))
+    var file: AVAudioFile? = try AVAudioFile(
+        forWriting: url,
+        settings: format.settings,
+        commonFormat: .pcmFormatInt16,
+        interleaved: true
+    )
+    let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16_000))
+    buffer.frameLength = 16_000
+    let samples = try #require(buffer.int16ChannelData?[0])
+    samples.initialize(repeating: 0, count: 16_000)
+    if nonzeroSample { samples[8_000] = 1 }
+    try file?.write(from: buffer)
+    file = nil
 }
 
 private func externalSecurityPolicy() throws -> ModelSecurityPolicySnapshot {

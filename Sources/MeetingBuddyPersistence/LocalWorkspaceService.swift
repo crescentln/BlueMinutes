@@ -46,7 +46,7 @@ public struct LocalWorkspaceService: WorkspaceService, @unchecked Sendable {
             }
             guard contents.isEmpty else {
                 throw WorkspaceContractError.invalidWorkspaceRoot(
-                    "A new workspace root must be empty or already contain a MeetingBuddy manifest."
+                    "A new workspace root must be empty or already contain a BlueMinutes manifest."
                 )
             }
         } else {

@@ -11,7 +11,7 @@ enum MeetingBuddyMCPEntry {
     private static let helpText = """
     meetingbuddy-mcp --workspace <absolute-path> --approve-read-tools-with-local-audit
 
-    Runs a local MCP 2025-11-25 stdio server with read-authority MeetingBuddy tools.
+    Runs a local MCP 2025-11-25 stdio server with read-authority BlueMinutes tools.
     Tool calls write bounded local audit metadata. Opening an accepted schema-v8
     workspace first creates its verified rollback backup and migrates it to v9.
     Configuration and launch of this exact command approve those local effects.

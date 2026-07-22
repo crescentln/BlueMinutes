@@ -72,6 +72,12 @@ speech outcome, retry, and missing/failed range. Publication requires a
 deterministic 100 percent eligible-range union; an incomplete or unprovable
 manifest remains failed/incomplete and cannot become the active transcript set.
 
+Under ADR-0017, a provider declaration is not a verified no-speech outcome.
+New publication requires an application-owned versioned confirmation that binds
+the exact deterministic core range and accepts only exact zero-valued canonical
+PCM. Historical manifests remain readable, but a legacy no-speech record
+without confirmation cannot enter a new analysis source bundle.
+
 Task 006A retains an immutable segment/evidence coverage ledger for
 hierarchical extraction. It binds the exact active transcript manifest and
 eligible reviewed segment revisions; every segment is substantive or explicitly
@@ -82,6 +88,14 @@ outputs/evidence to matrix or section item IDs. Its source-text overlap is
 exactly zero, conclusion fan-out is bounded, and missing, duplicated, failed,
 or untraceable coverage blocks final publication. No summary output can
 substitute for either underlying manifest/ledger.
+
+ADR-0017 requires application-owned confirmation for non-substantive omission,
+bound to the exact transcript revision and source-text digest. Provider analysis
+is stored as an immutable quarantined candidate. Explicit review creates a
+superseding ledger bound to the exact candidate ID/hash and every claim; no
+prior record is rewritten. Briefing export requires the exact active/current
+review bundle to show that all sections and the final are user-created and
+confirmed before bytes are written.
 
 ## Reliable recording storage contract
 

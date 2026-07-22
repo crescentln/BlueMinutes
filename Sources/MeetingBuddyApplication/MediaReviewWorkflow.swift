@@ -321,6 +321,10 @@ public protocol MediaReviewWorkflow: AnyObject {
     func analysisRoute(canonicalJobID: JobID) async throws -> AnalysisRouteReview
     func startAnalysis(canonicalJobID: JobID) async throws -> MediaJobReview
     func analysisReview(canonicalJobID: JobID) async throws -> AnalysisReviewBundle?
+    func confirmAnalysisReview(
+        canonicalJobID: JobID,
+        confirmsEveryClaim: Bool
+    ) async throws -> AnalysisReviewBundle
     func correctPosition(
         canonicalJobID: JobID,
         revisionID: RevisionID,
@@ -600,6 +604,13 @@ public extension MediaReviewWorkflow {
     }
 
     func analysisReview(canonicalJobID: JobID) async throws -> AnalysisReviewBundle? {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func confirmAnalysisReview(
+        canonicalJobID: JobID,
+        confirmsEveryClaim: Bool
+    ) async throws -> AnalysisReviewBundle {
         throw TranscriptWorkflowError.unavailable
     }
 

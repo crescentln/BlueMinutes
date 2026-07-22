@@ -988,7 +988,7 @@ NEXT ELIGIBLE COMMAND: PROCEED TO TASK 005A
 # 18. Task 005A — Local Media Intake, Canonical Audio, and Chunking
 
 **Status:** Accepted and frozen at commit
-`287f4aa14070c8de9ea48cea22c7119ef9fe93e5`; retained as historical scope and
+`e0e165a275fd99cd77b84ae39e47be333fd53278`; retained as historical scope and
 not to be reopened by later planning.
 
 **Prerequisite:** Task 004B accepted.  

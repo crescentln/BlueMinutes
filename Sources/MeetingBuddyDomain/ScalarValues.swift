@@ -60,7 +60,7 @@ public struct UTCInstant: Codable, Hashable, Sendable, Comparable, DomainValidat
             ValidationIssue(
                 code: .invalidRange,
                 path: "utc_instant",
-                message: "MeetingBuddy contract timestamps cannot precede the Unix epoch."
+                message: "Contract timestamps cannot precede the Unix epoch."
             )
         ]
     }

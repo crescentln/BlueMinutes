@@ -10,6 +10,7 @@ TARGET="${1:-$ROOT_DIR/dist/$RELEASE_SET_NAME}"
 VERIFICATION_MODE="${2:-internal-alpha}"
 EXPECTED_ENTITLEMENTS="$ROOT_DIR/Configuration/MeetingBuddy.entitlements"
 EXPECTED_PRIVACY_MANIFEST="$ROOT_DIR/Configuration/PrivacyInfo.xcprivacy"
+EXPECTED_APP_ICON="$ROOT_DIR/Configuration/Branding/BlueMinutes.icns"
 EXPECTED_GRDB_LICENSE_SHA256="9853f9dce81365fcc1d9b46004633354450164b8d17904e92e80c444545f7e87"
 EXPECTED_GRDB_PRIVACY_SHA256="17784da62e51f74c5859df32fe402e01e25cdf6f797a4add06e2a3ce15c911f4"
 
@@ -35,11 +36,12 @@ verify_app() {
 
     local info_plist="$app_bundle/Contents/Info.plist"
     local executable="$app_bundle/Contents/MacOS/MeetingBuddyApp"
+    local app_icon="$app_bundle/Contents/Resources/BlueMinutes.icns"
     local privacy_manifest="$app_bundle/Contents/Resources/PrivacyInfo.xcprivacy"
     local grdb_privacy="$app_bundle/Contents/Resources/GRDB_GRDB.bundle/PrivacyInfo.xcprivacy"
     local grdb_license="$app_bundle/Contents/Resources/ThirdPartyNotices/GRDB-LICENSE.txt"
     local required
-    for required in "$info_plist" "$executable" "$privacy_manifest" "$grdb_privacy" "$grdb_license"; do
+    for required in "$info_plist" "$executable" "$app_icon" "$privacy_manifest" "$grdb_privacy" "$grdb_license"; do
         [[ -f "$required" && ! -L "$required" ]] || fail "missing or linked bundle item: $required"
     done
     [[ -x "$executable" ]] || fail "app executable is not executable"
@@ -57,6 +59,7 @@ verify_app() {
         ./Contents/MacOS
         ./Contents/MacOS/MeetingBuddyApp
         ./Contents/Resources
+        ./Contents/Resources/BlueMinutes.icns
         ./Contents/Resources/GRDB_GRDB.bundle
         ./Contents/Resources/GRDB_GRDB.bundle/Info.plist
         ./Contents/Resources/GRDB_GRDB.bundle/PrivacyInfo.xcprivacy
@@ -80,6 +83,18 @@ LAYOUT
         == "15.0" ]] || fail "unexpected minimum system version"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")" \
         == "MeetingBuddyApp" ]] || fail "unexpected executable declaration"
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$info_plist")" \
+        == "BlueMinutes" ]] || fail "unexpected public display name"
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$info_plist")" \
+        == "BlueMinutes" ]] || fail "unexpected public bundle name"
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$info_plist")" \
+        == "BlueMinutes.icns" ]] || fail "unexpected application icon declaration"
+    /usr/bin/cmp -s "$EXPECTED_APP_ICON" "$app_icon" \
+        || fail "bundled application icon differs from the reviewed source icon"
+    /usr/bin/iconutil -c iconset "$app_icon" -o "$TEMP_DIR/$label.iconset" \
+        || fail "bundled application icon is not a valid macOS icon set"
+    [[ -f "$TEMP_DIR/$label.iconset/icon_512x512@2x.png" ]] \
+        || fail "bundled application icon has no 1024-pixel representation"
     /usr/bin/cmp -s "$EXPECTED_PRIVACY_MANIFEST" "$privacy_manifest" \
         || fail "bundled privacy manifest differs from the reviewed source manifest"
 
