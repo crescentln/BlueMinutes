@@ -1,6 +1,7 @@
-MeetingBuddy — Codex Handoff Quick Start
+BlueMinutes — Codex Handoff Quick Start
 
-1. Put these two Markdown files in the MeetingBuddy repository root:
+1. Put these two Markdown files in the BlueMinutes repository root. Their
+   legacy filenames are retained as internal compatibility identifiers:
    - MeetingBuddy_Codex_Master_Spec_v1.0.md
    - MeetingBuddy_Codex_Stepwise_Controller_Prompt_v1.0.md
 
@@ -20,9 +21,10 @@ are accepted, the canonical MVP sequence is complete, and there is no next
 eligible numbered task. Do not reopen accepted work from this handoff file.
 
 5. Current ledger state: Task 011 is accepted with an INTERNAL ALPHA
-   classification. The application is not a distributable release candidate.
-   Post-MVP capability work and any commit, push, tag, notarization, release,
-   upload, install, or distribution action require separate explicit authority.
+   application classification. The public `v0.1.0` version is source-only and
+   is not a distributable application candidate. Post-MVP capability work and
+   every later commit, push, tag, notarization, release, upload, install, or
+   distribution action require separate explicit authority.
 
 6. Thereafter, use the exact next eligible command printed by Codex, or natural Chinese equivalents. Useful commands include:
 

@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-The project is currently an internal alpha. Security fixes are applied to the
-latest `main` revision only. No public binary release is supported yet.
+The latest supported source version is `v0.1.0`, together with subsequent
+commits on `main`. Security fixes are applied to the latest `main` revision.
+No public binary application release is supported yet.
 
 ## Reporting a vulnerability
 
