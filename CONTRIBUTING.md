@@ -90,6 +90,20 @@ Maintainers may request smaller scope, new tests, an ADR, a migration plan, or
 additional privacy/security review. Passing CI is necessary but not sufficient
 for merge. Merge and release remain explicit maintainer decisions.
 
+## Changelog and releases
+
+- Add every notable user-visible change to the `Unreleased` section of
+  `CHANGELOG.md` in the same Pull Request.
+- BlueMinutes uses Semantic Versioning. During `0.x`, substantial capabilities
+  or compatibility changes normally receive a new minor version, while focused
+  fixes normally receive a patch version.
+- A release is cut only from a reviewed commit on protected `main` after the
+  required CI and repository gates pass.
+- Source releases and signed/notarized macOS application distributions are
+  separate scopes and require separate verification.
+- Release tags, notes, assets, and changelog entries must describe the same
+  exact commit and must not overstate implementation, support, or adoption.
+
 ## Licensing
 
 Unless explicitly stated otherwise, intentionally submitted contributions are

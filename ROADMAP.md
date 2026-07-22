@@ -23,9 +23,11 @@ explicit maintainer authorization.
   conversations, administrator enforcement, and force-push/delete denial;
   enabled the available Dependabot, secret-scanning, private-reporting, and
   CodeQL controls.
+- Published `v0.1.0` as the first public source release with a dated changelog
+  and release notes, without attaching an unverified application binary.
 
-No Git tag, GitHub Release, distributable binary, signing, notarization,
-installer, package, or deployment is part of this source-publication milestone.
+No distributable binary, signing, notarization, installer, package, updater, or
+deployment is part of this source-release milestone.
 
 ## Candidate milestone: public project presentation
 

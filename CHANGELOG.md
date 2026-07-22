@@ -6,6 +6,12 @@ All notable project changes are documented here. The format follows
 
 ## [Unreleased]
 
+No notable changes yet.
+
+## [0.1.0] - 2026-07-22
+
+First public source release.
+
 ### Added
 
 - The maintainer-selected BlueMinutes public brand, horizontal project lockup,
@@ -20,6 +26,19 @@ All notable project changes are documented here. The format follows
 - Application-owned closed-marker verification, exact transcript and optional
   translation text digests, and a safe reason code for `nonSubstantive`
   analysis omissions.
+- A public-facing README introduction explaining the project's firsthand
+  diplomatic motivation, solo-maintainer scope, and review-first workflow.
+- Public release notes and a documented Semantic Versioning and changelog
+  cadence for future substantial milestones.
+
+### Changed
+
+- Standardized reader-facing documentation on the BlueMinutes name and moved
+  legacy `MeetingBuddy` identifiers into clearly labeled compatibility and
+  developer-command contexts.
+- Replaced the prominent internal-status warning with precise source-release,
+  distribution, and human-review boundaries in the sections where readers need
+  them.
 
 ### Security
 
@@ -27,6 +46,13 @@ All notable project changes are documented here. The format follows
   security scan. Provider-only classifications and structurally valid text no
   longer authorize omission or consequential publication by themselves.
 - Added focused fail-closed regression tests and production verifier tests.
+
+### Release scope
+
+- Published `v0.1.0` as a source release from protected `main`.
+- No app bundle, installer, archive, signing material, or other binary asset is
+  attached. Signed and notarized macOS distribution remains a separate future
+  milestone.
 
 ## [0.1.0-internal-alpha] - 2026-07-21
 
@@ -47,3 +73,6 @@ Internal validation milestone only; no Git tag or GitHub Release was created.
   final distribution icon review, or localization package.
 - Installed Apple-model tests remain opt-in and synthetic-only.
 - The internal alpha is not authorized for public binary distribution.
+
+[Unreleased]: https://github.com/crescentln/BlueMinutes/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/crescentln/BlueMinutes/releases/tag/v0.1.0

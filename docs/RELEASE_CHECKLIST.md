@@ -6,6 +6,25 @@ Initial source publication is not an application release. Creating a Git tag,
 GitHub Release, archive, installer, package, signed build, notarized build, or
 deployment requires separate explicit maintainer authorization.
 
+A source-only GitHub Release and a downloadable macOS application are distinct
+distribution scopes. A source release may proceed after the source gate passes
+even when the binary-distribution gate remains incomplete, provided that it
+attaches no application binary and states that boundary clearly.
+
+## Versioning and changelog policy
+
+- Use Semantic Versioning for public releases.
+- During `0.x`, substantial user-visible capabilities or compatibility changes
+  normally increment the minor version; focused fixes normally increment the
+  patch version.
+- Record every notable user-visible change under `Unreleased` in
+  `CHANGELOG.md` as part of the same Pull Request.
+- For each substantial milestone, move those entries into a dated version and
+  publish matching release notes after protected-`main` CI passes and the
+  maintainer authorizes the exact release.
+- Do not treat a source release as authorization for a signed app, installer,
+  updater, deployment, or other binary distribution.
+
 ## Release decision
 
 - [ ] The maintainer explicitly authorized this exact version and distribution
@@ -55,7 +74,7 @@ swift test -Xswiftc -warnings-as-errors
 - [ ] P0/P1 security, privacy, evidence-integrity, or data-loss findings are
       closed. Accepted lower-priority risk is explicit.
 
-## Distribution gate
+## Binary-distribution gate
 
 - [ ] A reproducible build procedure records the full Xcode/Swift/macOS
       toolchain and target architecture.
@@ -73,8 +92,8 @@ swift test -Xswiftc -warnings-as-errors
 - [ ] No signing, notarization, upload, publishing, or deployment credential is
       stored in the repository.
 
-The current internal alpha does not satisfy this distribution gate and must not
-be represented as a public binary release.
+Until this gate passes, public releases must remain source-only and must not
+attach or imply a supported BlueMinutes application download.
 
 ## Authorized publication steps
 

@@ -1,4 +1,4 @@
-# MeetingBuddy 0.1.0 Internal Alpha
+# BlueMinutes 0.1.0 Internal Validation Snapshot
 
 Build: 1
 Platform: Apple Silicon, macOS 15 or later
@@ -6,15 +6,17 @@ Status: local internal evaluation only; not distributed
 
 ## Included
 
-This internal alpha includes the accepted MeetingBuddy work through Task 010:
+This historical internal snapshot includes the accepted BlueMinutes work
+through Task 010:
 local workspace/persistence, managed media intake and canonical audio,
 on-device transcription/translation/analysis/briefing routes with manual
 fallbacks, evidence-linked review, retention/recovery controls, bounded
 recording capture, local automation/stdio MCP developer surfaces, and
 historical comparison/preferences.
 
-The selected release artifact contains only `MeetingBuddy.app`. The CLI and
-MCP executables remain local developer/operator tools and are not bundled.
+The selected historical artifact contains only the legacy-compatible
+`MeetingBuddy.app` bundle. The CLI and MCP executables remain local
+developer/operator tools and are not bundled.
 
 ## Task 011 changes
 

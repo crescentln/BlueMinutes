@@ -30,6 +30,23 @@ struct PublicBrandPresentationTests {
 
     @Test
     func visibleBrandChangesPreserveCompatibilityIdentifiers() throws {
+        let readme = try source("README.md")
+        #expect(readme.contains("> **By a diplomat, for diplomats.**"))
+        #expect(readme.contains("The first public version, `v0.1.0`"))
+        #expect(readme.contains("legacy `MeetingBuddy` identifier"))
+        #expect(!readme.contains("open dist/MeetingBuddy.app"))
+        #expect(!readme.contains("source-only internal alpha"))
+
+        let changelog = try source("CHANGELOG.md")
+        #expect(changelog.contains("## [0.1.0] - 2026-07-22"))
+
+        let publicReleaseNotes = try source("docs/RELEASE_NOTES_0.1.0.md")
+        #expect(
+            publicReleaseNotes.contains(
+                "# BlueMinutes v0.1.0 — First Public Source Release"
+            )
+        )
+
         let rootView = try source(
             "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
         )

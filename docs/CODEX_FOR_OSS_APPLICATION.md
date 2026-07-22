@@ -1,7 +1,7 @@
 # Codex for Open Source Application Pack
 
-Status: draft; public-repository gates complete; submit after the maintainer
-verifies the private account fields and final live-form text
+Status: application copy ready; submit after the maintainer verifies the
+private account fields and final live-form text
 Last verified against the official form: 2026-07-22
 
 The maintainer-selected public project name is `BlueMinutes`. Internal
@@ -11,8 +11,7 @@ create unnecessary migration or operational risk.
 The primary requested program benefit is **six months of ChatGPT Pro, including
 Codex**. The official form lists that subscription as a benefit for selected
 maintainers rather than as an interest checkbox. API credits are a useful
-additional request; Codex Security is not requested and trusted access is not a
-prerequisite for the ChatGPT Pro benefit.
+additional request; Codex Security is not requested.
 
 ## Current official eligibility signals
 
@@ -22,7 +21,8 @@ evidence of active maintenance. The application form requires a public GitHub
 profile and a public repository. Its three narrative fields each allow at most
 500 characters. The Program Terms also require accurate and complete
 information about the applicant, repository, and maintainer role; selection is
-not guaranteed.
+not guaranteed. The official criteria do not require a signed or notarized app,
+downloadable binary, demo, GitHub Release, star count, or download count.
 
 Official references:
 
@@ -32,25 +32,24 @@ Official references:
 
 BlueMinutes is now published at the public
 [`crescentln/BlueMinutes`](https://github.com/crescentln/BlueMinutes)
-repository. Signed-out page, raw-file, API, and anonymous Git checks resolve
-public baseline `e621537`, and
-[exact-main public CI run 29964705558](https://github.com/crescentln/BlueMinutes/actions/runs/29964705558)
-passes.
+repository. Signed-out page, raw-file, API, and anonymous Git checks pass. The
+exact protected-`main` source-release commit and public CI run are recorded in
+[Open-source readiness evidence](OPEN_SOURCE_READINESS.md).
 
 ## Current readiness scorecard
 
 | Gate | Current status | Required before submission |
 | --- | --- | --- |
 | Public GitHub profile | Ready | Public API state and a signed-out HTTP request both succeeded; repeat the visual check immediately before submission. |
-| Public GitHub repository | Ready | Public visibility, signed-out HTTP, unauthenticated API, and anonymous Git all resolve exact baseline `e621537`. |
+| Public GitHub repository | Ready | Public visibility, signed-out HTTP, unauthenticated API, and anonymous Git checks pass. |
 | Open-source license and governance | Ready | Apache-2.0, notices, policies, templates, and community files are visible publicly. |
-| Build and tests | Ready | [Public exact-main run 29964705558](https://github.com/crescentln/BlueMinutes/actions/runs/29964705558) passes the warning-as-error build, focused gates, and complete synthetic-safe suite. |
-| Sensitive-data and secret boundary | Ready for the recorded baseline | Layered working-tree and reachable-history checks pass on `e621537`; repeat after later code changes. |
-| Name and brand | Ready for source publication | BlueMinutes is selected, the preliminary collision screen and independence language are recorded, and no formal trademark clearance is claimed. |
+| Build and tests | Ready | The exact protected-`main` run recorded in the readiness evidence passes the warning-as-error build, focused gates, and complete synthetic-safe suite. |
+| Sensitive-data and secret boundary | Ready for the recorded baseline | Layered working-tree and reachable-history checks pass; repeat after later code changes. |
+| Name and brand | Ready for a source release | BlueMinutes is selected, the preliminary collision screen and independence language are recorded, and no formal trademark clearance is claimed. |
 | Demonstration | Optional strengthening | A synthetic or already-public demo can improve the application but is not an official form prerequisite. |
 | Public maintenance evidence | Ready | Commit history, tests, Issues, Pull Requests, roadmap, and governance are public; contributor-sized Issues can strengthen the application later. |
 | Form narratives | Draft complete | Recount in the live form and verify every factual statement. |
-| Requested benefit | Six months of ChatGPT Pro with Codex, plus API credits | Leave Codex Security unselected; no trusted-access dependency remains. |
+| Requested benefit | Six months of ChatGPT Pro with Codex, plus API credits | Select API credits; leave Codex Security unselected unless the maintainer genuinely wants it. |
 
 ## Submission gate
 
@@ -68,10 +67,10 @@ following repository-truth checks are complete:
 - no credential, signing material, private meeting data, internal document,
   transcript, briefing, user database, workspace, or log is present in the
   working tree or reachable history;
-- the README objectively documents the project, source-only alpha status,
-  current limitations, and independence from the United Nations, United
-  Nations entities, and governments;
-- the source-only alpha status, roadmap, and recent maintenance evidence are
+- the README objectively documents the project, current source-release and
+  binary-distribution boundaries, limitations, and independence from the
+  United Nations, United Nations entities, and governments;
+- the roadmap, changelog, release notes, and recent maintenance evidence are
   visible; and
 - any screenshots or demo submitted with the application use synthetic or
   already-public material only.
@@ -82,11 +81,11 @@ an otherwise truthful application.
 
 ## Application strategy
 
-BlueMinutes is new and pre-release, so this application must not imply broad
-adoption or invent stars, downloads, users, testimonials, or institutional
-support. The official program expressly invites maintainers to explain a
-project's ecosystem importance when it does not neatly fit the usual adoption
-signals. The strongest truthful case is therefore:
+BlueMinutes is an early-stage `v0.1.0` source release, so this application must
+not imply broad adoption or invent stars, downloads, users, testimonials, or
+institutional support. The official program expressly invites maintainers to
+explain a project's ecosystem importance when it does not neatly fit the usual
+adoption signals. The strongest truthful case is therefore:
 
 1. an underserved public-interest workflow grounded in firsthand
    multilateral-diplomacy expertise;
@@ -108,11 +107,11 @@ Primary maintainer
 
 ### Why does this repository qualify?
 
-485 characters; recount in the live form before submission and refresh the
+474 characters; recount in the live form before submission and refresh the
 test count if it has changed.
 
 ```text
-BlueMinutes is an actively maintained public-interest macOS OSS project built from firsthand multilateral-diplomacy expertise. Unlike generic speech-to-text tools, it supports long multilingual meetings through reviewable transcripts, position analysis, and evidence-linked briefs. Its 248-test synthetic-safe suite, typed provenance, 100% segment-coverage gates, human review, local-first processing, and provider routing offer reusable patterns for privacy-sensitive, high-stakes AI.
+BlueMinutes is an early-stage, actively maintained macOS open-source project created by a diplomat to address a neglected multilateral workflow: turning hours of multilingual meetings into reviewable transcripts, position analysis, and evidence-linked briefs. Its 248-test synthetic-safe suite, local-first design, typed provenance, complete source-segment accounting, human confirmation, and policy-controlled model routing offer reusable patterns for privacy-sensitive AI.
 ```
 
 ### Interested in
@@ -125,27 +124,27 @@ Security unselected; select API credits as an additional benefit.
 
 ### How will you use API credits for your project?
 
-483 characters; recount in the live form before submission.
+489 characters; recount in the live form before submission.
 
 ```text
-I will use credits for OSS maintenance: PR review, issue triage, security fixes, release checks, and regression evaluation with synthetic/public fixtures. Maintenance is unusually time- and token-intensive: BlueMinutes combines long-context multilingual AI, provenance, deterministic coverage, macOS integration, and provider routing. Future work will evaluate optional, policy-reviewed integrations with documented public UN data APIs. No confidential meeting material will be used.
+I will use API credits for Codex-backed open-source maintenance: pull-request review, issue triage, security fixes, release checks, and regression evaluation using synthetic or public fixtures. BlueMinutes combines long-context multilingual processing, exact evidence provenance, deterministic source coverage, native macOS integration, and policy-controlled model routing, so responsible maintenance is unusually time- and compute-intensive. No confidential meeting material will be used.
 ```
 
 ### Anything else we should know?
 
-477 characters; recount in the live form before submission.
+483 characters; recount in the live form before submission.
 
 ```text
-I am the solo maintainer. My work involves multilateral diplomacy in the UN ecosystem. Turning hours of multilingual meetings into accurate, reviewable briefs is a recurring pressure point for delegations, UN staff, and civil-society teams. BlueMinutes is independent—not an official UN or government product—and contains no confidential meeting data. Six months of ChatGPT Pro with Codex is the primary support I am seeking; API credits would complement it for OSS automation.
+I am BlueMinutes’s solo creator and primary maintainer, and I work in multilateral diplomacy. The project grew from firsthand experience of a recurring pressure point: small teams must turn hours of multilingual meetings into accurate, reviewable briefs under tight deadlines. BlueMinutes is my independent personal project—not an official UN or government product—and contains no confidential meeting data. Six months of ChatGPT Pro with Codex is the support I am primarily seeking.
 ```
 
 ### Lower-disclosure alternative
 
-449 characters; lower-disclosure alternative. Recount in the live form before
+477 characters; lower-disclosure alternative. Recount in the live form before
 submission.
 
 ```text
-I am the primary maintainer. BlueMinutes grew from firsthand experience with a recurring multilateral-diplomacy pressure point: small delegations and civil-society teams must follow hours-long multilingual meetings and produce accurate, evidence-linked briefs with limited staff. It is my independent personal OSS project—not an official UN or government product. Codex helps a domain expert without a large engineering team maintain it responsibly.
+I am BlueMinutes’s solo creator and primary maintainer. The project grew from firsthand experience with a recurring multilateral meeting pressure point: small teams must turn hours of multilingual meetings into accurate, reviewable briefs under tight deadlines. BlueMinutes is an independent personal project and contains no confidential meeting data. Six months of ChatGPT Pro with Codex is the support I am primarily seeking; API credits would support maintenance automation.
 ```
 
 ## Repository description
@@ -174,8 +173,8 @@ those private account details to the repository. Immediately before submitting:
    the primary maintainer;
 3. replace the test count if the public CI result differs from 248;
 4. recount all narrative fields in the live form;
-5. confirm no wording implies adoption, endorsement, official UN status, or a
-   currently implemented UN data API integration; and
+5. confirm no wording implies adoption, endorsement, or official UN or
+   government status; and
 6. save a private copy of the exact submitted text and submission date.
 
 ## Evidence to strengthen before submission
