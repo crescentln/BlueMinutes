@@ -23,12 +23,15 @@ INTERNAL ALPHA, not a release candidate or distributable build.
 
 ## Repository state
 
-- Git repository: local `main`; accepted Task 011 status baseline is
+- Git repository: private `crescentln/BlueMinutes`; local `main` tracks
+  `origin/main`. Private source publication began at `5733eb7`, and the current
+  pre-status-sync baseline is `4c8025a` after Dependabot PR #1 updated the
+  pinned official checkout Action. Accepted Task 011 status baseline is
   `d31b9aa`, Task 011 implementation is `852257c`, and accepted Task 010 commit
   `f371faa` is the pre-Task-011 rollback anchor. These are the current reachable
   equivalents after the authorized private-path and GitHub-noreply history
-  sanitizations. No push, tag, notarization submission, upload, installation,
-  or distribution was authorized.
+  sanitizations. No public conversion, tag, notarization submission, binary
+  upload, installation, or distribution is authorized.
 - Product source files: `Sources/MeetingBuddyDomain/`,
   `Sources/MeetingBuddyApplication/`, `Sources/MeetingBuddyPersistence/`, and
   `Sources/MeetingBuddyTasks/`, `Sources/MeetingBuddyMedia/`,
@@ -46,14 +49,16 @@ INTERNAL ALPHA, not a release candidate or distributable build.
   `meetingbuddy-mcp`; seven test targets are present.
 - Dependency: exact GRDB 7.11.1 pin with `Package.resolved`; GRDB is isolated to
   persistence implementation and persistence tests.
-- Tests: 242 Swift Testing cases in 42 suites, including exactly five Task 003B
+- Tests: 248 Swift Testing cases in 43 suites, including exactly five Task 003B
   Golden fixtures, the Task 006A 5/5 diplomatic-rule matrix, Task 006B contract
   and vertical-slice cases, the Task 010 false-change Golden and 10,000-Position
-  scale gate, Task 011 resource/backup/release-verifier regressions, disposable
+  scale gate, Task 011 resource/backup/release-verifier regressions, the
+  post-MVP evidence-integrity and public-brand regressions, disposable
   persistence/recovery, task/runtime, media, provider/pipeline/approved-route,
   automation/CLI, and feature-model cases. Three opt-in installed-model tests
-  also pass separately on synthetic-only inputs; no CI, formatter, or linter
-  configuration exists.
+  also pass separately on synthetic-only inputs. GitHub Actions runs the
+  synthetic-safe warning-as-error gate; no formatter or linter configuration
+  exists.
 - No database, recovery snapshot, managed media, credential, or runtime
   workspace is committed. Integration tests create and remove only unique
   system-temporary workspaces.

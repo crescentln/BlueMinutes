@@ -4,15 +4,16 @@ This roadmap describes maintenance priorities, not delivery promises. Scope and
 timing are decided through Issues, ADRs, Pull Requests, passing gates, and
 explicit maintainer authorization.
 
-## Current milestone: source publication foundation
+## Completed milestone: private source-publication foundation
 
-- Complete the evidence-integrity remediation and warning-as-error test gate.
-- Use the maintainer-selected `BlueMinutes` public brand while preserving
+- Completed the evidence-integrity remediation and warning-as-error test gate.
+- Adopted the maintainer-selected `BlueMinutes` public brand while preserving
   compatibility-sensitive internal identifiers.
-- Publish source first to a private GitHub repository with Apache License 2.0,
-  maintenance policies, synthetic-safe CI, and protected-branch workflow.
-- Verify secrets, reachable history, generated files, repository access, and
-  GitHub Actions before any public-conversion decision.
+- Published source first to a private GitHub repository with Apache License 2.0,
+  maintenance policies, synthetic-safe CI, and an Issue/short-branch/Pull
+  Request workflow.
+- Verified secrets, reachable history, generated files, private repository
+  access, and GitHub Actions before any public-conversion decision.
 
 No public repository, Git tag, GitHub Release, distributable binary, signing,
 notarization, package, or deployment is part of this milestone unless separately

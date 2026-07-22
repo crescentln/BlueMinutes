@@ -72,11 +72,13 @@ See [Security and privacy](docs/SECURITY_PRIVACY.md),
 
 ## Open-source readiness
 
-The current pre-publication warning-as-error gate passes a 248-test suite in 43
-suites. Three installed Apple-model routes remain explicit opt-in checks and
-are not represented as ordinary-CI passes. The repository includes conservative
-CI, Apache License 2.0, contribution and security policies, a threat model,
-maintenance and recovery procedures, and synthetic-fixture requirements.
+The current private-publication warning-as-error gate passes a 248-test suite
+in 43 suites, and GitHub Actions has passed the same synthetic-safe gate on
+private `main`. Three installed Apple-model routes remain explicit opt-in
+checks and are not represented as ordinary-CI passes. The repository includes
+conservative CI, Apache License 2.0, contribution and security policies, a
+threat model, maintenance and recovery procedures, and synthetic-fixture
+requirements. Public conversion remains a separate maintainer decision.
 
 BlueMinutes is pre-release and does not claim broad adoption, production users,
 institutional endorsement, or security certification. See the
