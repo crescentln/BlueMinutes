@@ -1080,6 +1080,11 @@ public struct RecordingRecoveryOutcome: Codable, Hashable, Sendable {
     public let quarantinedRelativePaths: [WorkspaceRelativePath]
     public let rebuiltCheckpoint: RecordingCheckpoint?
 
+    public var reconciliationRequired: Bool {
+        !quarantinedRelativePaths.isEmpty
+            || rebuiltCheckpoint?.reconciliationRequired == true
+    }
+
     public init(
         snapshot: RecordingSessionSnapshot,
         verifiedSegments: [SealedCaptureSegment],

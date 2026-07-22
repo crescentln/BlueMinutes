@@ -26,9 +26,15 @@ public final class LocalStorageService: @unchecked Sendable {
         dataClassification: DataClassification,
         retentionClass: RetentionClass,
         operationID: UUID? = nil,
+        maximumByteSize: UInt64? = nil,
         cancellationCheck: @Sendable () throws -> Void = {}
     ) throws -> ManagedAssetRecord {
         try cancellationCheck()
+        guard maximumByteSize.map({ $0 > 0 }) ?? true else {
+            throw WorkspaceContractError.managedAssetMismatch(
+                "A managed asset byte limit must be positive."
+            )
+        }
         guard dataClassification.isKnown, retentionClass.isKnown else {
             throw WorkspaceContractError.managedAssetMismatch(
                 "Managed asset classification and retention must be recognized before intake."
@@ -79,6 +85,7 @@ public final class LocalStorageService: @unchecked Sendable {
             let (digest, byteSize) = try copyAndHash(
                 from: source,
                 to: staging,
+                maximumByteSize: maximumByteSize,
                 cancellationCheck: cancellationCheck
             )
             guard byteSize > 0 else {
@@ -316,6 +323,7 @@ public final class LocalStorageService: @unchecked Sendable {
     private func copyAndHash(
         from source: URL,
         to destination: URL,
+        maximumByteSize: UInt64?,
         cancellationCheck: @Sendable () throws -> Void
     ) throws -> (ContentDigest, UInt64) {
         let sourceHandle = try FileHandle(forReadingFrom: source)
@@ -329,14 +337,19 @@ public final class LocalStorageService: @unchecked Sendable {
         var total: UInt64 = 0
         while let data = try sourceHandle.read(upToCount: Self.chunkSize), !data.isEmpty {
             try cancellationCheck()
-            hasher.update(data: data)
-            try destinationHandle.write(contentsOf: data)
             let (next, overflow) = total.addingReportingOverflow(UInt64(data.count))
             guard !overflow else {
                 throw WorkspaceContractError.managedAssetMismatch(
                     "Managed asset size exceeded the supported range."
                 )
             }
+            guard maximumByteSize.map({ next <= $0 }) ?? true else {
+                throw WorkspaceContractError.managedAssetMismatch(
+                    "The selected source exceeded its inspected byte size during intake."
+                )
+            }
+            hasher.update(data: data)
+            try destinationHandle.write(contentsOf: data)
             total = next
         }
         try cancellationCheck()

@@ -32,6 +32,48 @@ struct MediaContractTests {
     }
 
     @Test
+    func chunkPlanFailsClosedOutsideThreeHourReleaseBound() throws {
+        let maximum = CanonicalChunkPlanner.maximumDurationFrames
+        #expect(try CanonicalChunkPlanner.plan(totalFrameCount: maximum).count == 360)
+        #expect(throws: MediaContractError.self) {
+            _ = try CanonicalChunkPlanner.plan(totalFrameCount: maximum + 1)
+        }
+        #expect(throws: MediaContractError.self) {
+            _ = try CanonicalChunkPlanner.plan(totalFrameCount: .max)
+        }
+    }
+
+    @Test
+    func mediaInspectionRejectsExcessiveAudioTrackCardinalityBeforeSorting() throws {
+        let acceptedTracks = try (1...MediaInspection.maximumAudioTrackCount).map { value in
+            try AudioTrackDescriptor(
+                trackIdentifier: MediaTrackIdentifier(Int32(value)),
+                durationFrameCount: 16_000
+            )
+        }
+        #expect(
+            try MediaInspection(
+                format: .wav,
+                durationFrameCount: 16_000,
+                audioTracks: acceptedTracks
+            ).audioTracks.count == MediaInspection.maximumAudioTrackCount
+        )
+        let excessiveTrack = try AudioTrackDescriptor(
+            trackIdentifier: MediaTrackIdentifier(
+                Int32(MediaInspection.maximumAudioTrackCount + 1)
+            ),
+            durationFrameCount: 16_000
+        )
+        #expect(throws: MediaContractError.self) {
+            _ = try MediaInspection(
+                format: .wav,
+                durationFrameCount: 16_000,
+                audioTracks: acceptedTracks + [excessiveTrack]
+            )
+        }
+    }
+
+    @Test
     func canonicalJobPayloadRoundTripsExactIdentifiersAndPolicy() throws {
         let sourceID = SourceAssetID(UUID(uuidString: "50000000-0000-0000-0000-000000000001")!)
         let sourceRevisionID = RevisionID(

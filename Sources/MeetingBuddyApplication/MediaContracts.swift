@@ -166,6 +166,8 @@ public struct AudioTrackDescriptor: Codable, Hashable, Sendable, Identifiable {
 }
 
 public struct MediaInspection: Codable, Hashable, Sendable {
+    public static let maximumAudioTrackCount = 32
+
     public let format: ApprovedMediaFormat
     public let durationFrameCount: UInt64
     public let audioTracks: [AudioTrackDescriptor]
@@ -175,6 +177,11 @@ public struct MediaInspection: Codable, Hashable, Sendable {
         durationFrameCount: UInt64,
         audioTracks: [AudioTrackDescriptor]
     ) throws {
+        guard audioTracks.count <= Self.maximumAudioTrackCount else {
+            throw MediaContractError.invalidTimeline(
+                "Media inspection supports at most \(Self.maximumAudioTrackCount) audio tracks."
+            )
+        }
         let tracks = audioTracks.sorted { $0.trackIdentifier < $1.trackIdentifier }
         guard durationFrameCount > 0, !tracks.isEmpty,
               Set(tracks.map(\.trackIdentifier)).count == tracks.count
@@ -295,10 +302,16 @@ public struct MediaChunkPlanEntry: Codable, Hashable, Sendable, Comparable, Iden
 public enum CanonicalChunkPlanner {
     public static let coreDurationFrames: UInt64 = 480_000
     public static let contextFrames: UInt64 = 16_000
+    public static let maximumDurationFrames: UInt64 = 3 * 60 * 60 * 16_000
 
     public static func plan(totalFrameCount: UInt64) throws -> [MediaChunkPlanEntry] {
         guard totalFrameCount > 0 else {
             throw MediaContractError.invalidChunkPlan("Canonical audio cannot be empty.")
+        }
+        guard totalFrameCount <= maximumDurationFrames else {
+            throw MediaContractError.invalidChunkPlan(
+                "Canonical audio exceeds the supported three-hour release bound."
+            )
         }
         var entries: [MediaChunkPlanEntry] = []
         var start: UInt64 = 0

@@ -306,6 +306,49 @@ struct RecordingContractAndMetadataTests {
     }
 
     @Test
+    func metadataParserRemovesManyLateBlockedElementsWithMonotonicProgress() throws {
+        let url = try ValidatedUNWebTVAssetURL(
+            "https://webtv.un.org/en/asset/k1t/k1tezmm4d8"
+        )
+        let longPrefix = String(repeating: "a", count: 65_536)
+        let blocked = (0..<64).map { index in
+            "<script>blocked-marker-\(index)</script>"
+        }.joined()
+        let html = "<html><head><title>Bounded Event</title></head>"
+            + "<body><div>\(longPrefix)</div>\(blocked)</body></html>"
+        let candidate = try UNWebTVMetadataHTMLParser().parse(
+            Data(html.utf8),
+            requestedURL: url,
+            finalURL: url,
+            fetchedAt: mediaInstant(1_800_100_050_001)
+        )
+        let payload = try JSONEncoder().encode(candidate)
+        let text = try #require(String(data: payload, encoding: .utf8))
+        #expect(text.contains("Bounded Event"))
+        #expect(!text.contains("blocked-marker"))
+    }
+
+    @Test
+    func metadataParserRejectsUnclosedBlockedElementsInsteadOfExposingTheirText() throws {
+        let url = try ValidatedUNWebTVAssetURL(
+            "https://webtv.un.org/en/asset/k1t/k1tezmm4d8"
+        )
+        let html = """
+        <html><head><title>Bounded Event</title></head><body>
+        <script>Languages: injected metadata without a closing tag
+        </body></html>
+        """
+        #expect(throws: UNWebTVMetadataError.parserDrift) {
+            _ = try UNWebTVMetadataHTMLParser().parse(
+                Data(html.utf8),
+                requestedURL: url,
+                finalURL: url,
+                fetchedAt: mediaInstant(1_800_100_050_002)
+            )
+        }
+    }
+
+    @Test
     func metadataRouteFailsBeforeNetworkWhenOutboundIsDisabled() async throws {
         let url = try ValidatedUNWebTVAssetURL(
             "https://webtv.un.org/en/asset/k1t/k1tezmm4d8"

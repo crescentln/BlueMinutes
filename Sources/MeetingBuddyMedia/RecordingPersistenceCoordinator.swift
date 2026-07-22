@@ -120,6 +120,7 @@ public actor RecordingPersistenceCoordinator: CapturedAudioPacketSink {
     ) throws -> RecordingSessionSnapshot {
         let snapshot = outcome.snapshot
         guard snapshot.state == .recovering || snapshot.state == .finalizing,
+              !outcome.reconciliationRequired,
               !epochs.isEmpty,
               epochs.allSatisfy({ $0.sessionID == snapshot.intent.sessionID }),
               Set(epochs.flatMap(\.sources).map(\.trackID))

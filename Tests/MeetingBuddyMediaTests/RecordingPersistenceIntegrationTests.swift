@@ -299,6 +299,7 @@ struct RecordingPersistenceIntegrationTests {
         let second = try await recovery.recover(fixture.intent.sessionID)
         #expect(second.gaps == first.gaps)
         #expect(second.quarantinedRelativePaths == first.quarantinedRelativePaths)
+        #expect(second.reconciliationRequired)
         #expect(FileManager.default.fileExists(atPath: url.path))
 
         let restored = RecordingPersistenceCoordinator(
@@ -309,14 +310,14 @@ struct RecordingPersistenceIntegrationTests {
             assetFileAccess: fixture.workspace.fileAccess,
             clock: { fixture.timestamp }
         )
-        _ = try await restored.restore(
-            outcome: second,
-            epochs: try await fixture.workspace.store.epochs(
-                sessionID: fixture.intent.sessionID
+        await #expect(throws: RecordingContractError.self) {
+            _ = try await restored.restore(
+                outcome: second,
+                epochs: try await fixture.workspace.store.epochs(
+                    sessionID: fixture.intent.sessionID
+                )
             )
-        )
-        let terminal = try await restored.stop(reason: .recoveredWithoutResume)
-        #expect(terminal.state == .failed)
+        }
         #expect(
             try fixture.workspace.store.sourceAsset(
                 revisionID: fixture.intent.publicationPlan.manifest.revisionID

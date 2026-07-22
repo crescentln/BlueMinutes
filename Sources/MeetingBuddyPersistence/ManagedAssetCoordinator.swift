@@ -64,6 +64,7 @@ public final class ManagedAssetCoordinator: MediaIntakeStorage, ManagedAssetReco
             createdAt: createdAt,
             dataClassification: dataClassification,
             retentionClass: retentionClass,
+            maximumByteSize: nil,
             cancellationCheck: {}
         )
     }
@@ -76,6 +77,7 @@ public final class ManagedAssetCoordinator: MediaIntakeStorage, ManagedAssetReco
         createdAt: UTCInstant,
         dataClassification: DataClassification,
         retentionClass: RetentionClass,
+        maximumByteSize: UInt64? = nil,
         cancellationCheck: @Sendable () throws -> Void
     ) throws -> ManagedAssetRecord {
         try withOperationLock {
@@ -107,6 +109,7 @@ public final class ManagedAssetCoordinator: MediaIntakeStorage, ManagedAssetReco
                     dataClassification: dataClassification,
                     retentionClass: retentionClass,
                     operationID: operationID,
+                    maximumByteSize: maximumByteSize,
                     cancellationCheck: cancellationCheck
                 )
             } catch {

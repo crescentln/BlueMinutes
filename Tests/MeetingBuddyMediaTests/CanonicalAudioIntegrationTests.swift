@@ -2,6 +2,7 @@ import Foundation
 import MeetingBuddyApplication
 import MeetingBuddyDomain
 import MeetingBuddyMedia
+import MeetingBuddyPersistence
 import MeetingBuddyTasks
 import Testing
 
@@ -131,6 +132,59 @@ struct CanonicalAudioIntegrationTests {
             includingPropertiesForKeys: nil
         )
         #expect(stagingEntries.isEmpty)
+    }
+
+    @Test
+    func localAcquisitionRejectsSourceGrowthBeforeWritingPastInspectedSize() async throws {
+        let workspace = try MediaTestWorkspace()
+        defer { workspace.cleanup() }
+        try workspace.installMeeting()
+        let inspectedByteSize = 1_048_576
+        let sourceBytes = Data(repeating: 0x47, count: 3 * inspectedByteSize)
+        try workspace.writeUserSource(sourceBytes)
+        let processor = try SyntheticMediaProcessor(totalFrames: 48_000)
+        let intake = LocalMediaIntakeService(
+            processor: processor,
+            storage: workspace.coordinator,
+            catalog: workspace.store,
+            fileAccess: workspace.fileAccess
+        )
+        let inspection = try await intake.inspect(workspace.sourceURL)
+
+        await #expect(throws: WorkspaceContractError.self) {
+            _ = try await intake.importSelectedMedia(
+                from: workspace.sourceURL,
+                initialInspection: inspection,
+                request: MediaIntakeRequest(
+                    meetingID: workspace.meetingID,
+                    sourceAssetID: mediaID(47, as: SourceAssetID.self),
+                    sourceRevisionID: mediaID(48, as: RevisionID.self),
+                    storageObjectID: mediaID(49, as: StorageObjectID.self),
+                    selectedTrack: MediaTrackIdentifier(1),
+                    speechSourceKind: .originalSpeakerAudio,
+                    language: LanguageTag("en"),
+                    createdAt: mediaInstant(1_800_100_000_042),
+                    dataClassification: .internal,
+                    expectedSourceByteSize: UInt64(inspectedByteSize)
+                )
+            )
+        }
+        #expect(
+            try workspace.store.managedAsset(
+                storageObjectID: mediaID(49, as: StorageObjectID.self)
+            ) == nil
+        )
+        #expect(
+            try workspace.store.sourceAsset(
+                revisionID: mediaID(48, as: RevisionID.self)
+            ) == nil
+        )
+        let stagingEntries = try FileManager.default.contentsOfDirectory(
+            at: workspace.root.appendingPathComponent(".temp", isDirectory: true),
+            includingPropertiesForKeys: nil
+        )
+        #expect(stagingEntries.isEmpty)
+        #expect(try Data(contentsOf: workspace.sourceURL) == sourceBytes)
     }
 
     @Test

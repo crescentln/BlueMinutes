@@ -19,6 +19,11 @@ public final class AVFoundationMediaProcessor: NativeMediaProcessing, @unchecked
         guard !tracks.isEmpty else {
             throw MediaContractError.noAudioTrack
         }
+        guard tracks.count <= MediaInspection.maximumAudioTrackCount else {
+            throw MediaContractError.invalidTimeline(
+                "Media inspection supports at most \(MediaInspection.maximumAudioTrackCount) audio tracks."
+            )
+        }
 
         let durationFrames = try frameCount(for: duration)
         var descriptors: [AudioTrackDescriptor] = []

@@ -126,3 +126,26 @@ Reviewed: 2026-07-18
 - <https://github.com/groue/GRDB.swift/releases/tag/v7.11.1>
 - <https://github.com/groue/GRDB.swift/blob/v7.11.1/Package.swift>
 - <https://github.com/groue/GRDB.swift/blob/v7.11.1/LICENSE>
+
+## Task 011 release re-review
+
+Reviewed: 2026-07-21
+
+- A new-scratch release build resolves the single exact source dependency as
+  GRDB 7.11.1 and produces no additional transitive source dependency.
+- The final `MeetingBuddy.app` has no non-system dynamic library dependency;
+  GRDB is linked into the 25,170,800-byte arm64 executable.
+- `GRDB_GRDB.bundle` now ships in `Contents/Resources` with the upstream
+  `PrivacyInfo.xcprivacy` SHA-256
+  `17784da62e51f74c5859df32fe402e01e25cdf6f797a4add06e2a3ce15c911f4`.
+- `ThirdPartyNotices/GRDB-LICENSE.txt` ships with the previously reviewed exact
+  MIT notice SHA-256
+  `9853f9dce81365fcc1d9b46004633354450164b8d17904e92e80c444545f7e87`.
+- The verified internal-alpha app occupies 24,608 KiB and its update archive
+  6,704,678 bytes (6,547 KiB rounded down) on the audit host. These values
+  include the whole product rather
+  than an isolated GRDB size delta.
+- The upstream release/tag, manifest, license, and privacy resource were
+  rechecked; no dependency upgrade, SQLCipher/custom SQLite, optional GRDB
+  product, entitlement, executable, network route, or credential behavior was
+  added.

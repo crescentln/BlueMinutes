@@ -209,18 +209,30 @@ public struct UNWebTVMetadataHTMLParser: Sendable {
     private func removingBlockedElements(from html: String) throws -> String {
         var output = html
         for name in ["script", "style", "template", "noscript"] {
+            let source = output
+            var cleaned = ""
+            cleaned.reserveCapacity(source.utf8.count)
+            var cursor = source.startIndex
             var scans = 0
-            while let open = output.range(of: "<\(name)", options: [.caseInsensitive]),
-                  let close = output.range(
+            while let open = source.range(
+                of: "<\(name)",
+                options: [.caseInsensitive],
+                range: cursor..<source.endIndex
+            ) {
+                guard let close = source.range(
                       of: "</\(name)>",
                       options: [.caseInsensitive],
-                      range: open.lowerBound..<output.endIndex
-                  )
-            {
-                output.removeSubrange(open.lowerBound..<close.upperBound)
+                      range: open.lowerBound..<source.endIndex
+                ) else {
+                    throw UNWebTVMetadataError.parserDrift
+                }
+                cleaned.append(contentsOf: source[cursor..<open.lowerBound])
+                cursor = close.upperBound
                 scans += 1
                 guard scans <= 256 else { throw UNWebTVMetadataError.parserDrift }
             }
+            cleaned.append(contentsOf: source[cursor..<source.endIndex])
+            output = cleaned
         }
         return output
     }

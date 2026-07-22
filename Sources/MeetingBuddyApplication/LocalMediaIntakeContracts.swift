@@ -134,8 +134,34 @@ public protocol MediaIntakeStorage: StorageService {
         createdAt: UTCInstant,
         dataClassification: DataClassification,
         retentionClass: RetentionClass,
+        maximumByteSize: UInt64?,
         cancellationCheck: @Sendable () throws -> Void
     ) throws -> ManagedAssetRecord
+}
+
+public extension MediaIntakeStorage {
+    func importFile(
+        from authorizedSource: URL,
+        meetingID: MeetingID,
+        storageObjectID: StorageObjectID,
+        fileExtension: ManagedFileExtension?,
+        createdAt: UTCInstant,
+        dataClassification: DataClassification,
+        retentionClass: RetentionClass,
+        cancellationCheck: @Sendable () throws -> Void
+    ) throws -> ManagedAssetRecord {
+        try importFile(
+            from: authorizedSource,
+            meetingID: meetingID,
+            storageObjectID: storageObjectID,
+            fileExtension: fileExtension,
+            createdAt: createdAt,
+            dataClassification: dataClassification,
+            retentionClass: retentionClass,
+            maximumByteSize: nil,
+            cancellationCheck: cancellationCheck
+        )
+    }
 }
 
 public extension MediaJobTypes {

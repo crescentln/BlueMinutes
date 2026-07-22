@@ -107,6 +107,7 @@ public final class LocalMediaIntakeService: @unchecked Sendable {
             createdAt: request.createdAt,
             dataClassification: request.dataClassification,
             retentionClass: request.retentionClass,
+            maximumByteSize: request.expectedSourceByteSize,
             cancellationCheck: cancellationCheck
         )
         do {

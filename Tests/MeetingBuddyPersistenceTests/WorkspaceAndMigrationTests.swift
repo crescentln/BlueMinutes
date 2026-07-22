@@ -1236,6 +1236,53 @@ struct WorkspaceAndMigrationTests {
     }
 
     @Test
+    func coldWholeWorkspaceCopyReopensAsAnIndependentRollbackWorkspace() throws {
+        let workspace = try DisposableMeetingBuddyWorkspace(suffix: "cold-backup")
+        defer { workspace.cleanup() }
+
+        let sourceStore = try workspace.makeStore()
+        try sourceStore.close()
+
+        let restoredRoot = workspace.container.appendingPathComponent(
+            "restored-workspace",
+            isDirectory: true
+        )
+        try FileManager.default.copyItem(at: workspace.root, to: restoredRoot)
+
+        let sourceDatabaseIdentity = try workspace.descriptor.layout.databaseFile
+            .resourceValues(forKeys: [.fileResourceIdentifierKey])
+            .fileResourceIdentifier
+        let restoredDescriptor = try LocalWorkspaceService().openWorkspace(at: restoredRoot)
+        let restoredDatabaseIdentity = try restoredDescriptor.layout.databaseFile
+            .resourceValues(forKeys: [.fileResourceIdentifierKey])
+            .fileResourceIdentifier
+        #expect(String(describing: sourceDatabaseIdentity) != String(describing: restoredDatabaseIdentity))
+
+        let restoredStore = try SQLitePersistenceStore(workspace: restoredDescriptor)
+        let restoredFacts = try restoredStore.databasePool.read { db in
+            (
+                schemaVersion: try UInt32.fetchOne(
+                    db,
+                    sql: "SELECT database_schema_version FROM workspace_metadata WHERE singleton = 1"
+                ),
+                quickCheck: try String.fetchOne(db, sql: "PRAGMA quick_check"),
+                foreignKeyFailures: try Row.fetchAll(
+                    db,
+                    sql: "PRAGMA foreign_key_check"
+                ).count
+            )
+        }
+        #expect(restoredFacts.schemaVersion == SQLiteSchema.currentVersion)
+        #expect(restoredFacts.quickCheck == "ok")
+        #expect(restoredFacts.foreignKeyFailures == 0)
+        try restoredStore.close()
+
+        let reopenedSource = try workspace.makeStore()
+        #expect(reopenedSource.migrationOutcome.schemaVersion == SQLiteSchema.currentVersion)
+        try reopenedSource.close()
+    }
+
+    @Test
     func rejectsTraversalSymlinksAndUnownedRoots() throws {
         for raw in ["/absolute", "../escape", "a/../escape", "a//b", "~/home", "a\\b", "a\u{0000}b"] {
             #expect(throws: WorkspaceContractError.self) {
