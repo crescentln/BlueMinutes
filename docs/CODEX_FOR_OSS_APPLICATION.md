@@ -30,23 +30,23 @@ Official references:
 - [Application form](https://openai.com/form/codex-for-oss/)
 - [Program terms](https://learn.chatgpt.com/docs/codex-for-oss-terms)
 
-An initial **private** GitHub repository is not sufficient for submission.
-Making the repository public is a separate action requiring explicit maintainer
-authorization after the sensitive-data, license, CI, name, and public-readiness
-gates pass.
+BlueMinutes is now published to an initial **private** GitHub repository. That
+private repository is not sufficient for submission. Making it public remains
+a separate action requiring explicit maintainer authorization after the
+sensitive-data, license, CI, name, and public-readiness gates pass.
 
 ## Current readiness scorecard
 
 | Gate | Current status | Required before submission |
 | --- | --- | --- |
 | Public GitHub profile | Ready | Public API state and a signed-out HTTP request both succeeded; repeat the visual check immediately before submission. |
-| Public GitHub repository | Not yet authorized | Complete private publication, final history review, and a separate public-conversion decision. |
-| Open-source license and governance | Ready locally | Confirm Apache-2.0, notices, policies, and templates are visible on the public commit. |
-| Build and tests | Ready locally | Pass GitHub Actions on the exact public `main` commit and update dynamic counts. |
-| Sensitive-data and secret boundary | Ready locally | Offline detect-secrets and layered working-tree/reachable-history checks pass; repeat them on the exact commit. |
+| Public GitHub repository | Private publication complete; public conversion not authorized | Perform the final history review and make a separate public-conversion decision. |
+| Open-source license and governance | Ready in the private repository | Confirm Apache-2.0, notices, policies, and templates are visible on the public commit. |
+| Build and tests | Private `main` CI passed | Pass GitHub Actions on the exact public `main` commit and update dynamic counts. |
+| Sensitive-data and secret boundary | Verified for private publication | Offline detect-secrets and layered working-tree/reachable-history checks pass; repeat them on the exact public commit. |
 | Name and brand | Ready for source publication | BlueMinutes is selected, the preliminary collision screen and independence language are recorded, and no formal trademark clearance is claimed. |
 | Demonstration | Optional strengthening | A synthetic or already-public demo can improve the application but is not an official form prerequisite. |
-| Public maintenance evidence | Base evidence ready locally | Commit history, tests, roadmap, and governance will become visible on publication; contributor-sized Issues can strengthen the application later. |
+| Public maintenance evidence | Visible in the private repository | Commit history, tests, roadmap, and governance become public only after separate conversion; contributor-sized Issues can strengthen the application later. |
 | Form narratives | Draft complete | Recount in the live form and verify every factual statement. |
 | Requested benefit | Six months of ChatGPT Pro with Codex, plus API credits | Leave Codex Security unselected; no trusted-access dependency remains. |
 
