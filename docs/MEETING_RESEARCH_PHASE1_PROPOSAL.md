@@ -9,6 +9,11 @@ Phase 0 baseline: `d473b7037d7014ef0ae4e18d2c72463847347d8e`
 Governing decision:
 `docs/adr/ADR-0018-blue-minutes-meeting-research-integration.md`
 
+> Historical status update (2026-07-23): the maintainer later authorized and
+> accepted both bounded change groups, which were implemented and reviewed in
+> PR #12. This document preserves the pre-authorization proposal; current
+> operational status is recorded in `docs/CODEX_EXECUTION_STATE.md`.
+
 ## 1. Outcome
 
 The smallest compatible Phase 1 is a hidden compatibility foundation inside

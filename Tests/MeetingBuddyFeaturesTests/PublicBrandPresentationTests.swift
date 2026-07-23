@@ -32,7 +32,8 @@ struct PublicBrandPresentationTests {
     func visibleBrandChangesPreserveCompatibilityIdentifiers() throws {
         let readme = try source("README.md")
         #expect(readme.contains("> **By a diplomat, for diplomats.**"))
-        #expect(readme.contains("The first public version, `v0.1.0`"))
+        #expect(readme.contains("The current public version, `v0.2.0`"))
+        #expect(readme.contains("Every related capability remains disabled by default"))
         #expect(readme.contains("legacy `MeetingBuddy` identifier"))
         #expect(readme.contains("./script/build_and_run.sh --stage-only"))
         #expect(
@@ -42,7 +43,15 @@ struct PublicBrandPresentationTests {
         #expect(!readme.contains("source-only internal alpha"))
 
         let changelog = try source("CHANGELOG.md")
+        #expect(changelog.contains("## [0.2.0] - 2026-07-23"))
         #expect(changelog.contains("## [0.1.0] - 2026-07-22"))
+
+        let currentReleaseNotes = try source("docs/RELEASE_NOTES_0.2.0.md")
+        #expect(
+            currentReleaseNotes.contains(
+                "# BlueMinutes v0.2.0 — Default-Off Meeting / Research Foundation"
+            )
+        )
 
         let publicReleaseNotes = try source("docs/RELEASE_NOTES_0.1.0.md")
         #expect(
