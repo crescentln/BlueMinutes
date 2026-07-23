@@ -15,6 +15,28 @@ authorized_post_mvp_work:
   remote_publication_status: "https://github.com/crescentln/BlueMinutes is PUBLIC; the BlueMinutes-first README and v0.1.0 source-release material from Issue #8 and PR #9 were rebased into main at b45b38a, and the exact release baseline is verified by protected-main CI, signed-out HTTP, GitHub API, and anonymous Git access"
   public_conversion_status: "visibility conversion completed under explicit maintainer authorization at e6215373fbefa61f911ca4ee65c33852fd2dea76; main requires Pull Requests, strict Swift build and test status, linear history, conversation resolution, and administrator enforcement, while force-push and branch deletion are disabled"
   public_source_release_status: "v0.1.0 is a regular GitHub source Release at https://github.com/crescentln/BlueMinutes/releases/tag/v0.1.0; annotated tag v0.1.0 peels to b45b38abc68739d008bad733479286438a4b4bc8; the Release is neither draft nor prerelease and has no uploaded binary assets"
+post_mvp_initiatives:
+  blue_minutes_meeting_research:
+    title: "Blue Minutes Meeting / Research integration"
+    status: "governance_accepted_phase_1_not_authorized"
+    task_sequence_status: "independent post-MVP initiative; not a numbered Task 012"
+    authorization_scope: "governance and documentation only"
+    local_branch: "codex/blue-minutes-governance"
+    local_change_set_status: "uncommitted and pending maintainer review"
+    product_plan: "docs/BLUE_MINUTES_MEETING_RESEARCH_MVP_PLAN.md"
+    product_plan_sha256: "98c5abd3f77917df89df64b638e74140ea657289590a884da1e58ed00aed61e8"
+    phase_0_records:
+      - "docs/BLUE_MINUTES_ARCHITECTURE_MAP.md"
+      - "docs/MEETING_RESEARCH_INTEGRATION_ADR.md"
+      - "docs/MEETING_RESEARCH_GAP_ANALYSIS.md"
+      - "docs/MEETING_RESEARCH_PHASE1_PROPOSAL.md"
+    accepted_architecture_decision: "docs/adr/ADR-0018-blue-minutes-meeting-research-integration.md"
+    implementation_status: "not started"
+    schema_status: "schema v10 unchanged"
+    runtime_status: "no source, test, dependency, user-data, or application behavior change"
+    audit_baseline: "d473b7037d7014ef0ae4e18d2c72463847347d8e"
+    rollback_anchor: "d473b7037d7014ef0ae4e18d2c72463847347d8e"
+    next_gate: "maintainer review, then separately authorized commit, GitHub publication, or exact Phase 1 change group"
 accepted_tasks:
   - "001"
   - "002"
@@ -35,8 +57,8 @@ accepted_tasks:
   - "011"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "b45b38abc68739d008bad733479286438a4b4bc8 (v0.1.0 source-release baseline before this Issue #10 status-sync revision; e6215373fbefa61f911ca4ee65c33852fd2dea76 is the public-conversion baseline, 5733eb7d9daf9b925ffd72eca123e421d2cb7857 is the initial private publication-foundation commit, 5450a916172c07ec2b7054c76fa40c80db17692e is its local rollback anchor, d31b9aa3b72482266c6ee7ea0c2b5aac344611f4 is the accepted Task 011 ledger-state commit, and 852257c33fc39c1ec1d4b099d33f38ca8e26b65b is the Task 011 implementation/evidence commit)"
-working_tree_status_summary: "BlueMinutes source and regular v0.1.0 source Release are PUBLIC at https://github.com/crescentln/BlueMinutes; release baseline b45b38a contains the BlueMinutes-first README and source-release material, has one linear 36-commit root with GitHub noreply/system identities, and passes exact-main CI run 29969615653 attempt 2 on the unchanged SHA after one shared-runner wall-clock fluctuation; annotated tag v0.1.0 peels to the exact baseline, the Release is not draft or prerelease and has no uploaded binary asset, and signed-out release/raw-README HTTP requests return 200; main protection and repository security features remain enabled; internal MeetingBuddy compatibility identifiers remain unchanged; ignored dist output remains a non-distributable internal-alpha artifact and was not published"
+last_known_git_head: "d473b7037d7014ef0ae4e18d2c72463847347d8e (current local governance rollback anchor; b45b38abc68739d008bad733479286438a4b4bc8 is the v0.1.0 source-release baseline, e6215373fbefa61f911ca4ee65c33852fd2dea76 is the public-conversion baseline, 5450a916172c07ec2b7054c76fa40c80db17692e is the initial publication rollback anchor, d31b9aa3b72482266c6ee7ea0c2b5aac344611f4 is the accepted Task 011 ledger-state commit, and 852257c33fc39c1ec1d4b099d33f38ca8e26b65b is the Task 011 implementation/evidence commit)"
+working_tree_status_summary: "local branch codex/blue-minutes-governance contains an uncommitted governance/documentation-only Blue Minutes Meeting / Research change set based on d473b703; the product plan is under docs, ADR-0018 records accepted compatibility defaults, and the initiative remains independent of the numbered MVP sequence with Phase 1 not authorized; production source, tests, Package.swift, Package.resolved, schema v10, dependencies, user data, and application behavior are unchanged; no commit, push, Pull Request, release, or remote mutation has been performed"
 last_verification_commands:
   - "Codex Security standard repository scan ec5ba727-af63-4f1a-bd8c-feb3001ed3a2 with 134/134 receipts, validation, reconciliation, attack-path analysis, sealed manifest/findings/coverage/report/SARIF, and completion indexing"
   - "swift test --scratch-path <new temporary directory> -Xswiftc -warnings-as-errors"
@@ -58,6 +80,7 @@ last_verification_commands:
   - "public repository protection: required Pull Request and strict Swift build and test check on main, administrator enforcement, linear history, conversation resolution, force-push/delete denial, read-only default Actions token, Dependabot security updates, secret scanning/push protection, private vulnerability reporting, and CodeQL default setup"
   - "v0.1.0 source-release preparation: Issue #8 and PR #9; BlueMinutes-first README, SemVer/changelog policy, source release notes, safe stage-only quick start, focused public-brand tests, local warning-as-error build and 248-test run, Markdown-link and application-length checks, exact-head CI run 29968562103 attempt 2, CodeQL run 29968560184, and resolved review thread"
   - "authorized v0.1.0 source release: PR #9 rebase merge; exact-main CI run 29969615653 attempt 2 on unchanged b45b38a; annotated tag push; regular GitHub Release creation; tag-peel, release-state, empty-uploaded-assets, signed-out HTTP, raw README, and clean working-tree verification"
+  - "Blue Minutes governance acceptance: exact eight-path documentation allowlist; branch, HEAD, index, root-plan absence, canonical-plan hash, and runtime-path checks; YAML parse and task/initiative assertions; local Markdown links and concrete current-path references; Markdown fences, changed-document whitespace, strict credential/key/private-path patterns, ADR/proposal status, schema-v10/no-Task-012 assertions, and no-commit verification"
 last_verification_results:
   - "post-MVP documentation reconciliation is committed at 5cd59015277814206ca7328f6cfb89e42c252f4c after the authorized metadata-preserving private-path and GitHub-noreply history sanitizations: exactly 20 governance/architecture/ADR documents changed, all 35 checked local link targets resolve, the stale-reference and secret-pattern gates are clear, and the tracked working tree was clean before this ledger-only refresh; no production code, test, dependency, release artifact, push, tag, release, or distribution changed"
   - "the final new-scratch full run passes 242 tests in 42 suites with warnings as errors; the ordinary run truthfully skips three opt-in installed-model routes, and the separate new-scratch synthetic-only opt-in run passes all three in 6.016 seconds"
@@ -86,6 +109,7 @@ last_verification_results:
   - "public main protection requires Pull Requests and the strict Swift build and test check, applies to administrators, requires linear history and resolved conversations, and rejects force-push and deletion; Dependabot security updates, secret scanning/push protection, private vulnerability reporting, and CodeQL default setup are enabled while Actions keeps read-only default permissions"
   - "PR #9 publishes the BlueMinutes-first README and v0.1.0 source-release documentation; the only actionable review comment restored --stage-only as the safe quick-start default and added a regression assertion; exact-head CI attempt 2 and both CodeQL analyses pass, while the first CI attempt recorded only the known shared-runner wall-clock performance fluctuation"
   - "v0.1.0 is a regular, non-draft, non-prerelease GitHub source Release; annotated tag v0.1.0 peels to exact protected-main commit b45b38a, exact-main CI run 29969615653 attempt 2 passes on that unchanged SHA, signed-out release and raw-README requests return HTTP 200, and the Release contains zero uploaded binary assets"
+  - "on local branch codex/blue-minutes-governance at unchanged HEAD d473b703, exactly eight governance/document paths differ and the index is empty; the root plan is absent and the canonical docs copy retains SHA-256 98c5abd3f77917df89df64b638e74140ea657289590a884da1e58ed00aed61e8; ledger YAML, local links, concrete current paths, fences, changed-document whitespace, strict sensitive-pattern, canonical ADR, Phase 1 not-authorized, schema-v10, no-new-numbered-Task-012, and no-new-commit gates pass; Sources, Tests, Package.swift, Package.resolved, production behavior, schema, dependencies, and user data are unchanged; the documentation-only gate relies on the immediately preceding Phase 0 warning-clean build and 248-test/43-suite baseline rather than rerunning Swift; no commit, push, Pull Request, release, or remote mutation occurred"
 open_P0_decisions: []
 open_P1_decisions: []
 known_out_of_scope_findings:
@@ -112,6 +136,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
-next_eligible_task: "the v0.1.0 public source release is complete and the canonical MVP sequence remains complete; future maintenance follows the Issue/short-branch/Pull Request workflow, substantial user-visible changes prepare a new SemVer version and changelog entry under explicit release authorization, every new product capability requires explicit task authorization, and notarization, binary upload, installation, or distribution remain separately gated"
-last_updated_at: "2026-07-23T00:47:17Z"
+next_eligible_task: "there is no next numbered MVP task; ADR-0018 accepts governance defaults for the independent Blue Minutes Meeting / Research initiative, but Phase 1 is not authorized; after maintainer review, a local commit, GitHub publication, or exact Phase 1 change group each requires a separate explicit command, while release, notarization, binary upload, installation, and distribution remain separately gated"
+last_updated_at: "2026-07-23T15:58:54Z"
 ```

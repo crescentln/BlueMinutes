@@ -2,7 +2,7 @@
 
 Status: Active index
 Owner: Codex
-Last updated: 2026-07-22
+Last updated: 2026-07-23
 Purpose: Index binding decisions and visible open questions. ADRs do not grant
 task authorization.
 
@@ -35,6 +35,8 @@ task authorization.
 | [ADR-0014](ADR-0014-task-009a-automation-command-boundary.md) | Accepted | Closed shared command layer, composition-owned authority, immutable local audit/replay, reversible safe settings, and a thin confined CLI |
 | [ADR-0015](ADR-0015-task-009b-local-mcp-boundary.md) | Accepted | Local stdio MCP with seven read-authority tools, explicit audit/migration approval, truthful v9 attribution, and no new provider or network route |
 | [ADR-0016](ADR-0016-task-010-historical-review-and-preferences.md) | Accepted | Deterministic local history, evidence-qualified comparison, explicit user confirmation, and visible presentation-only preferences |
+| [ADR-0017](ADR-0017-evidence-integrity-publication-boundaries.md) | Accepted | Application-owned omission verification and exact human-confirmation gates for consequential analysis and briefing publication |
+| [ADR-0018](ADR-0018-blue-minutes-meeting-research-integration.md) | Accepted | Compatibility-first Blue Minutes Meeting / Research boundary: distinct logical workspace types, exact revision adapters, schema v10, and default-off capabilities |
 
 ## Open decisions by blocking task
 
@@ -89,6 +91,14 @@ The separately authorized post-MVP security-remediation task adds
 application-owned transcript/analysis omission verification and exact human
 confirmation gates for consequential analysis and briefing export while
 preserving schema v10 and immutable historical payloads.
+
+The independently authorized Blue Minutes governance-acceptance task adds
+[ADR-0018](ADR-0018-blue-minutes-meeting-research-integration.md). It accepts
+the compatibility defaults for a separate post-MVP Meeting / Research
+initiative while preserving the native modular monolith, accepted Meeting
+contracts, schema v10, and default-off behavior. It does not create Task 012
+and does not authorize Phase 1, a commit, GitHub publication, or any runtime or
+user-data change.
 
 Some individual ADR headers retain their original in-task acceptance wording
 as historical context. This index and `../CODEX_EXECUTION_STATE.md` report the
