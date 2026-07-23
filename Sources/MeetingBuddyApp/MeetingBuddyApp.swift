@@ -1,4 +1,5 @@
 import AppKit
+import MeetingBuddyApplication
 import MeetingBuddyFeatures
 import SwiftUI
 
@@ -10,7 +11,8 @@ struct MeetingBuddyDesktopApp: App {
     @State private var store: MediaReviewStore
 
     init() {
-        let workflow = AppMediaReviewWorkflow()
+        let capabilities = AppCapabilities()
+        let workflow = AppMediaReviewWorkflow(capabilities: capabilities)
         _store = State(initialValue: MediaReviewStore(workflow: workflow))
     }
 

@@ -77,6 +77,7 @@ enum AppWorkflowError: LocalizedError {
 
 private final class WorkspaceRuntime: @unchecked Sendable {
     let descriptor: LocalWorkspaceDescriptor
+    let capabilities: AppCapabilities
     let store: SQLitePersistenceStore
     let storage: LocalStorageService
     let coordinator: ManagedAssetCoordinator
@@ -98,8 +99,12 @@ private final class WorkspaceRuntime: @unchecked Sendable {
     let briefingProvider: (any BriefingSectionProvider)?
     private(set) var mostRecentRecoveredRecordingSession: RecordingSessionSnapshot? = nil
 
-    init(descriptor: LocalWorkspaceDescriptor) throws {
+    init(
+        descriptor: LocalWorkspaceDescriptor,
+        capabilities: AppCapabilities
+    ) throws {
         self.descriptor = descriptor
+        self.capabilities = capabilities
         store = try SQLitePersistenceStore(workspace: descriptor)
         storage = LocalStorageService(workspace: descriptor)
         coordinator = ManagedAssetCoordinator(storage: storage, metadata: store)
@@ -228,6 +233,7 @@ private final class WorkspaceRuntime: @unchecked Sendable {
 
 @MainActor
 final class AppMediaReviewWorkflow: MediaReviewWorkflow {
+    private let capabilities: AppCapabilities
     private let workspaceService = LocalWorkspaceService()
     private let workspaceSecurityScope = WorkspaceSecurityScope()
 
@@ -236,6 +242,10 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
     private var pendingSourceURL: URL?
     private var pendingSourceDidStartScope = false
     private var pendingInspection: MediaInspection?
+
+    init(capabilities: AppCapabilities) {
+        self.capabilities = capabilities
+    }
 
     deinit {
         if pendingSourceDidStartScope {
@@ -247,7 +257,10 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         guard let url = try workspaceSecurityScope.restore() else { return nil }
         do {
             let descriptor = try workspaceService.openWorkspace(at: url)
-            let nextRuntime = try WorkspaceRuntime(descriptor: descriptor)
+            let nextRuntime = try WorkspaceRuntime(
+                descriptor: descriptor,
+                capabilities: capabilities
+            )
             try await nextRuntime.recover()
             runtime = nextRuntime
             workspaceDisplayName = displayName(for: url)
@@ -280,7 +293,10 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
                     createdAt: try currentInstant()
                 )
             }
-            let nextRuntime = try WorkspaceRuntime(descriptor: descriptor)
+            let nextRuntime = try WorkspaceRuntime(
+                descriptor: descriptor,
+                capabilities: capabilities
+            )
             try await nextRuntime.recover()
             releasePendingSource()
             runtime = nextRuntime
