@@ -18,11 +18,11 @@ authorized_post_mvp_work:
 post_mvp_initiatives:
   blue_minutes_meeting_research:
     title: "Blue Minutes Meeting / Research integration"
-    status: "phase_1_change_group_1_accepted"
+    status: "phase_1_change_group_2_accepted"
     task_sequence_status: "independent post-MVP initiative; not a numbered Task 012"
-    authorization_scope: "Phase 1 Change Group 1 contracts and read-only compatibility adapters only; Change Group 2 and later work are not authorized"
+    authorization_scope: "Phase 1 Change Group 2 default-off capability composition only; accepted Change Group 1 remains frozen, and later work is not authorized"
     local_branch: "codex/blue-minutes-governance"
-    local_change_set_status: "accepted and committed locally at 2cf443c2b338bf5dff4b27f86a2f47ad800dc501; not pushed or otherwise published"
+    local_change_set_status: "Change Group 1 is accepted and committed locally at 2cf443c2b338bf5dff4b27f86a2f47ad800dc501; the maintainer accepted the exact six-path Change Group 2 working tree and authorized its intentional local commit; nothing is pushed or otherwise published"
     product_plan: "docs/BLUE_MINUTES_MEETING_RESEARCH_MVP_PLAN.md"
     product_plan_sha256: "98c5abd3f77917df89df64b638e74140ea657289590a884da1e58ed00aed61e8"
     phase_0_records:
@@ -31,12 +31,12 @@ post_mvp_initiatives:
       - "docs/MEETING_RESEARCH_GAP_ANALYSIS.md"
       - "docs/MEETING_RESEARCH_PHASE1_PROPOSAL.md"
     accepted_architecture_decision: "docs/adr/ADR-0018-blue-minutes-meeting-research-integration.md"
-    implementation_status: "Change Group 1 accepted; Change Group 2 not started and not authorized"
+    implementation_status: "Change Groups 1 and 2 accepted; no later Phase 1 group exists"
     schema_status: "schema v10 unchanged"
-    runtime_status: "provider-neutral Domain/Application contracts and pure read-only SourceAssetV1, FinalBriefingV1, HistoricalComparisonV1, and EvidenceRefV1 projection adapters only; no persistence, production composition, provider, network, UI, task, automation, CLI, MCP, dependency, file-layout, or user-data change"
+    runtime_status: "the accepted provider-neutral Change Group 1 contracts/adapters remain unchanged; Change Group 2 adds an immutable, non-Codable AppCapabilities value with four false defaults and explicitly injects one snapshot through app composition into WorkspaceRuntime without reading any flag or registering Research behavior; visible UI, Meeting flows, executors, providers, network routes, persistence, schema, automation, CLI, MCP, dependencies, entitlements, file layout, and user data are unchanged"
     audit_baseline: "d473b7037d7014ef0ae4e18d2c72463847347d8e"
-    rollback_anchor: "a3b21d275e0701b4d8df5877a77a67c78242267d"
-    next_gate: "Change Group 2 requires a separate explicit command; GitHub publication and every release/distribution action remain separately gated"
+    rollback_anchor: "c30d08ed85bcac736b55d1f39fdf250b1e2b6f44"
+    next_gate: "the Change Group 2 local commit is explicitly authorized; GitHub publication and every release/distribution or later-initiative action remain separately gated"
 accepted_tasks:
   - "001"
   - "002"
@@ -57,8 +57,8 @@ accepted_tasks:
   - "011"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "2cf443c2b338bf5dff4b27f86a2f47ad800dc501 (accepted Phase 1 Change Group 1 implementation and test commit; a3b21d275e0701b4d8df5877a77a67c78242267d remains its rollback anchor, and this ledger-only acceptance reconciliation follows as a separate local commit)"
-working_tree_status_summary: "local branch codex/blue-minutes-governance contains the maintainer-accepted Phase 1 Change Group 1 implementation at 2cf443c2b338bf5dff4b27f86a2f47ad800dc501: five provider-neutral Domain/Application contract and pure adapter source files, three focused test files, and the accepted ledger transition; schema v10, Package.swift, Package.resolved, existing semantic payloads, existing production wiring, dependencies, file layout, and user data are unchanged; Change Group 2 is not started; no push, Pull Request, release, deployment, or remote mutation has been performed"
+last_known_git_head: "c30d08ed85bcac736b55d1f39fdf250b1e2b6f44 (accepted Phase 1 Change Group 1 implementation at 2cf443c2b338bf5dff4b27f86a2f47ad800dc501 plus its ledger-only acceptance reconciliation; current Change Group 2 work is intentionally uncommitted)"
+working_tree_status_summary: "the maintainer accepted the exact six-path Change Group 2 candidate on codex/blue-minutes-governance: one immutable Application capability value, explicit default construction and inert WorkspaceRuntime injection in two App files, two focused Features test suites, and this ledger transition; the five new tests and unchanged CLI/MCP regressions pass, and the complete synthetic-safe warning-as-error suite passes 269 tests in 48 suites; schema v10, Package.swift, Package.resolved, existing semantic payloads, all visible Features production files, executors, provider/network routes, automation/CLI/MCP catalogs, dependencies, entitlements, workspace/user-data file layout, and user data are unchanged; the intentional local commit is authorized, while push, Pull Request, release, deployment, and remote mutation are not"
 last_verification_commands:
   - "Codex Security standard repository scan ec5ba727-af63-4f1a-bd8c-feb3001ed3a2 with 134/134 receipts, validation, reconciliation, attack-path analysis, sealed manifest/findings/coverage/report/SARIF, and completion indexing"
   - "swift test --scratch-path <new temporary directory> -Xswiftc -warnings-as-errors"
@@ -83,6 +83,7 @@ last_verification_commands:
   - "Blue Minutes governance acceptance and local commit: exact eight-path documentation allowlist; branch, base HEAD, index, root-plan absence, canonical-plan hash, and runtime-path checks; YAML parse and task/initiative assertions; local Markdown links and concrete current-path references; Markdown fences, strict whitespace with the plan's four original Markdown hard breaks preserved, strict credential/key/private-path patterns, ADR/proposal status, schema-v10/no-Task-012 assertions, staged-scope and identity verification, baseline commit 1184b3c27f03404b4c87127fffc045be012842ca, and ledger-only post-commit reconciliation"
   - "Phase 1 Change Group 1: warning-as-error Swift build; 16 focused Research/Transcript contract tests; 39 existing canonical/provider/migration/transcript compatibility tests; complete synthetic-safe warning-as-error Swift suite; package manifest, exact-path scope, schema-v10, no-AppCapabilities, no-production-wiring, dependency-drift, and whitespace checks"
   - "Phase 1 Change Group 1 acceptance commit: exact nine-path staged allowlist; author/committer GitHub noreply identity; staged whitespace, text-only, credential/private-key, schema-v10, dependency-drift, no-production-wiring, no-unrelated-drift, and 16-test focused gates; intentional local commit followed by ledger-only reconciliation"
+  - "Phase 1 Change Group 2: swift package dump-package; isolated warning-as-error Swift build; 3 AppCapabilities tests; 2 MeetingBuddyRootView structure tests; unchanged 5-test CLI/command and 5-test MCP adapter regressions; complete synthetic-safe 269-test/48-suite warning-as-error run with live installed-model flags explicitly false; exact six-path scope, schema-v10, dependency, entitlement, automation/CLI/MCP, Features-production, production-reference, no-capability-branch, plist, whitespace, and sensitive-pattern checks"
 last_verification_results:
   - "post-MVP documentation reconciliation is committed at 5cd59015277814206ca7328f6cfb89e42c252f4c after the authorized metadata-preserving private-path and GitHub-noreply history sanitizations: exactly 20 governance/architecture/ADR documents changed, all 35 checked local link targets resolve, the stale-reference and secret-pattern gates are clear, and the tracked working tree was clean before this ledger-only refresh; no production code, test, dependency, release artifact, push, tag, release, or distribution changed"
   - "the final new-scratch full run passes 242 tests in 42 suites with warnings as errors; the ordinary run truthfully skips three opt-in installed-model routes, and the separate new-scratch synthetic-only opt-in run passes all three in 6.016 seconds"
@@ -115,10 +116,13 @@ last_verification_results:
   - "Phase 1 Change Group 1 adds only the accepted provider-neutral identities and scalar values, immutable Research/Artifact/Conversation/Instruction/Citation contracts, separate transcript-source provider and application resolver contracts, and pure exact-revision compatibility adapters; provider snapshots cannot carry the application-owned canonical-audio proof, untimed text cannot satisfy audio coverage, instruction layers cannot shadow protected policy, and existing immutable semantic revisions remain authoritative"
   - "the final synthetic-safe warning-as-error run passes 264 tests in 46 suites with zero failures; the 16 new focused tests and 39 selected compatibility tests pass separately; three installed Apple-model checks remain explicitly skipped because live-model validation is opt-in; package dependencies, schema v10, existing production source signatures/wiring, user data, and existing semantic payload bytes/hashes are unchanged"
   - "the maintainer accepted Phase 1 Change Group 1 and its exact nine-path reviewed change set is committed locally at 2cf443c2b338bf5dff4b27f86a2f47ad800dc501 with the configured GitHub noreply identity; no unrelated path, binary, dependency, schema, user-data, push, Pull Request, release, deployment, or remote mutation is included"
+  - "Phase 1 Change Group 2 introduces exactly four immutable composition values whose default and canonical description are pinned: research=false, transcript_source_resolution=false, shared_object_store=false, and conversation_persistence=false; production references are confined to the value definition and two App composition files, WorkspaceRuntime stores but does not consume the snapshot, and no Research service, executor, UI, keyboard route, persistence, network request, or provider is created"
+  - "the Change Group 2 isolated warning-as-error build and complete synthetic-safe run pass 269 tests in 48 suites with zero failures; the 5 new focused tests, unchanged 5-test CLI/command regression, and unchanged 5-test MCP regression also pass separately; package/dependency, schema-v10, automation/CLI/MCP, entitlements/plists, and all existing Features production hashes remain unchanged; manual GUI/accessibility smoke, live installed-models, microphone, screen-capture, external connector/provider behavior, and runtime packet observation were not run"
+  - "the maintainer accepted Phase 1 Change Group 2 and authorized one intentional local implementation/acceptance commit plus the ledger-only hash reconciliation required to record it; no push, Pull Request, release, deployment, distribution, or later initiative is authorized"
 open_P0_decisions: []
 open_P1_decisions: []
 known_out_of_scope_findings:
-  - "Phase 1 Change Group 1 intentionally adds no persistence, migration, ObjectStore implementation, provider or connector, network route, production resolver, capability composition, Setup Guide, Settings, Conversation/Chat UI, artifact UI, task registration, automation, CLI, MCP, export, or user-data behavior; all Change Group 2 and later work remains separately gated"
+  - "Phase 1 Change Group 2 intentionally adds no enabled Research capability, conditional feature branch, persistence, migration, ObjectStore implementation, provider or connector, network route, production resolver, Research service/executor, Setup Guide, Settings, Conversation/Chat UI, artifact UI, task registration, automation, CLI, MCP, export, or user-data behavior; all later work remains separately gated"
   - "Task 011 release classification is INTERNAL ALPHA: Developer ID, Team ID, notarization/stapling, affirmative Gatekeeper distribution approval, clean-machine install/update/rollback, final distribution icon/localization review, manual VoiceOver/keyboard/contrast/reduced-motion review, and intended-OS live TCC/capture interruption evidence are incomplete"
   - "current-version application reopen is proven for a cold copied workspace, but an actual older binary rollback and clean-machine restore are untested; compact verification summaries are preserved without full raw test transcripts"
   - "release-set replacement is a recoverable two-rename operation rather than a strict atomic exchange; interruption can require inspection of a fail-closed .previous-* directory"
@@ -142,6 +146,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
-next_eligible_task: "there is no next numbered MVP task; Phase 1 Change Group 1 is accepted and committed locally at 2cf443c2b338bf5dff4b27f86a2f47ad800dc501, while Change Group 2, GitHub publication, release, notarization, binary upload, installation, and distribution each require their own explicit authorization"
-last_updated_at: "2026-07-23T17:42:19Z"
+next_eligible_task: "there is no next numbered MVP task; Phase 1 Change Group 2 is accepted for its explicitly authorized local commit with rollback anchor c30d08ed85bcac736b55d1f39fdf250b1e2b6f44, while GitHub publication, release, notarization, binary upload, installation, distribution, and every later initiative each require their own explicit authorization"
+last_updated_at: "2026-07-23T18:15:45Z"
 ```
