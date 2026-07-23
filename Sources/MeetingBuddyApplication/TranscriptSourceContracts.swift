@@ -401,6 +401,9 @@ public struct TranscriptAudioCoverageBinding:
     public let coverageManifestID: TranscriptCoverageManifestID
     public let coverageManifestHash: ContentDigest
     public let canonicalSourceRevision: SemanticRevisionReference
+    public let transcriptSourceReference: TranscriptSourceReference
+    public let transcriptSourceContentDigest: ContentDigest
+    public let transcriptSourceSnapshotHash: ContentDigest
     public let verifiedCompleteFrameCoverage: Bool
     public let verifier: VersionedComponent
 
@@ -408,12 +411,18 @@ public struct TranscriptAudioCoverageBinding:
         coverageManifestID: TranscriptCoverageManifestID,
         coverageManifestHash: ContentDigest,
         canonicalSourceRevision: SemanticRevisionReference,
+        transcriptSourceReference: TranscriptSourceReference,
+        transcriptSourceContentDigest: ContentDigest,
+        transcriptSourceSnapshotHash: ContentDigest,
         verifiedCompleteFrameCoverage: Bool,
         verifier: VersionedComponent
     ) throws {
         self.coverageManifestID = coverageManifestID
         self.coverageManifestHash = coverageManifestHash
         self.canonicalSourceRevision = canonicalSourceRevision
+        self.transcriptSourceReference = transcriptSourceReference
+        self.transcriptSourceContentDigest = transcriptSourceContentDigest
+        self.transcriptSourceSnapshotHash = transcriptSourceSnapshotHash
         self.verifiedCompleteFrameCoverage = verifiedCompleteFrameCoverage
         self.verifier = verifier
         try validate()
@@ -431,6 +440,9 @@ public struct TranscriptAudioCoverageBinding:
                 )
             )
         }
+        issues += transcriptSourceReference.validationIssues()
+        issues += transcriptSourceContentDigest.validationIssues()
+        issues += transcriptSourceSnapshotHash.validationIssues()
         if !verifiedCompleteFrameCoverage {
             issues.append(
                 transcriptIssue(
@@ -459,6 +471,18 @@ public struct TranscriptAudioCoverageBinding:
                 SemanticRevisionReference.self,
                 forKey: .canonicalSourceRevision
             ),
+            transcriptSourceReference: container.decode(
+                TranscriptSourceReference.self,
+                forKey: .transcriptSourceReference
+            ),
+            transcriptSourceContentDigest: container.decode(
+                ContentDigest.self,
+                forKey: .transcriptSourceContentDigest
+            ),
+            transcriptSourceSnapshotHash: container.decode(
+                ContentDigest.self,
+                forKey: .transcriptSourceSnapshotHash
+            ),
             verifiedCompleteFrameCoverage: container.decode(
                 Bool.self,
                 forKey: .verifiedCompleteFrameCoverage
@@ -471,6 +495,9 @@ public struct TranscriptAudioCoverageBinding:
         case coverageManifestID = "coverage_manifest_id"
         case coverageManifestHash = "coverage_manifest_hash"
         case canonicalSourceRevision = "canonical_source_revision"
+        case transcriptSourceReference = "transcript_source_reference"
+        case transcriptSourceContentDigest = "transcript_source_content_digest"
+        case transcriptSourceSnapshotHash = "transcript_source_snapshot_hash"
         case verifiedCompleteFrameCoverage = "verified_complete_frame_coverage"
         case verifier
     }
@@ -510,14 +537,26 @@ public struct TranscriptSourceSnapshot: Codable, Hashable, Sendable, DomainValid
     }
 
     public var hasCompleteTiming: Bool {
-        !segments.isEmpty
-            && segments.allSatisfy { $0.timeRange != nil }
-            && zip(segments, segments.dropFirst()).allSatisfy { lhs, rhs in
-                guard let lhsRange = lhs.timeRange, let rhsRange = rhs.timeRange else {
-                    return false
-                }
-                return lhsRange.endMilliseconds <= rhsRange.startMilliseconds
+        guard
+            let firstRange = segments.first?.timeRange,
+            firstRange.startMilliseconds == 0,
+            segments.allSatisfy({ $0.timeRange != nil })
+        else {
+            return false
+        }
+        return zip(segments, segments.dropFirst()).allSatisfy { lhs, rhs in
+            guard let lhsRange = lhs.timeRange, let rhsRange = rhs.timeRange else {
+                return false
             }
+            return lhsRange.endMilliseconds == rhsRange.startMilliseconds
+        }
+    }
+
+    /// Canonical identity for the complete fetched snapshot, including its
+    /// source identity, transcript content and timing, provenance, and policy
+    /// classification facts.
+    public func calculatedSnapshotHash() throws -> ContentDigest {
+        try transcriptCanonicalHash(self)
     }
 
     public func validationIssues() -> [ValidationIssue] {
@@ -751,9 +790,22 @@ public struct TranscriptResolutionCandidate:
     /// Provider text and timing never satisfy audio coverage by themselves.
     /// Only the application-owned candidate assembly can attach exact proof.
     public var canSatisfyCanonicalAudioCoverage: Bool {
-        availability.completeness == .complete
-            && snapshot?.hasCompleteTiming == true
-            && applicationAudioCoverageBinding?.verifiedCompleteFrameCoverage == true
+        guard
+            let snapshot,
+            let applicationAudioCoverageBinding,
+            let snapshotHash = try? snapshot.calculatedSnapshotHash()
+        else {
+            return false
+        }
+        return availability.completeness == .complete
+            && snapshot.hasCompleteTiming
+            && applicationAudioCoverageBinding.verifiedCompleteFrameCoverage
+            && applicationAudioCoverageBinding.transcriptSourceReference
+                == snapshot.reference
+            && applicationAudioCoverageBinding.transcriptSourceContentDigest
+                == snapshot.contentDigest
+            && applicationAudioCoverageBinding.transcriptSourceSnapshotHash
+                == snapshotHash
     }
 
     public func validationIssues() -> [ValidationIssue] {
@@ -794,6 +846,42 @@ public struct TranscriptResolutionCandidate:
                         .inconsistentValue,
                         "application_audio_coverage_binding",
                         "Application audio coverage requires a complete, timed, available source snapshot."
+                    )
+                )
+            }
+            if let snapshot,
+               applicationAudioCoverageBinding.transcriptSourceReference
+                != snapshot.reference
+            {
+                issues.append(
+                    transcriptIssue(
+                        .inconsistentValue,
+                        "application_audio_coverage_binding.transcript_source_reference",
+                        "Application audio coverage must bind the exact fetched transcript source reference."
+                    )
+                )
+            }
+            if let snapshot,
+               applicationAudioCoverageBinding.transcriptSourceContentDigest
+                != snapshot.contentDigest
+            {
+                issues.append(
+                    transcriptIssue(
+                        .inconsistentValue,
+                        "application_audio_coverage_binding.transcript_source_content_digest",
+                        "Application audio coverage must bind the exact fetched transcript source content digest."
+                    )
+                )
+            }
+            if let snapshot,
+               applicationAudioCoverageBinding.transcriptSourceSnapshotHash
+                != (try? snapshot.calculatedSnapshotHash())
+            {
+                issues.append(
+                    transcriptIssue(
+                        .inconsistentValue,
+                        "application_audio_coverage_binding.transcript_source_snapshot_hash",
+                        "Application audio coverage must bind the exact canonical fetched transcript snapshot."
                     )
                 )
             }
@@ -1070,6 +1158,28 @@ public struct TranscriptResolutionDecision:
                     .inconsistentValue,
                     "authoritative_reference",
                     "The authoritative reference must be one of the considered alternatives."
+                )
+            )
+        }
+        if !inputSnapshot.policy.externalSourceUseAllowed,
+           selectedPrimarySource != nil
+        {
+            issues.append(
+                transcriptIssue(
+                    .inconsistentValue,
+                    "selected_primary_source",
+                    "External policy denial prohibits selecting a provider-owned transcript source."
+                )
+            )
+        }
+        if !inputSnapshot.policy.externalSourceUseAllowed,
+           authoritativeReference != nil
+        {
+            issues.append(
+                transcriptIssue(
+                    .inconsistentValue,
+                    "authoritative_reference",
+                    "External policy denial prohibits assigning authority to a provider-owned transcript source."
                 )
             )
         }

@@ -103,6 +103,205 @@ struct TranscriptSourceContractTests {
     }
 
     @Test
+    func leadingTimingGapCannotSatisfyCanonicalAudioCoverage() throws {
+        let snapshot = try transcriptSnapshot(
+            timed: true,
+            timeRanges: [
+                MediaTimeRange(startMilliseconds: 1, endMilliseconds: 1_000),
+                MediaTimeRange(startMilliseconds: 1_000, endMilliseconds: 2_000)
+            ]
+        )
+
+        #expect(!snapshot.hasCompleteTiming)
+        #expect(throws: DomainValidationError.self) {
+            _ = try TranscriptResolutionCandidate(
+                availability: transcriptAvailability(for: snapshot),
+                snapshot: snapshot,
+                applicationAudioCoverageBinding: transcriptCoverageBinding(for: snapshot)
+            )
+        }
+    }
+
+    @Test
+    func interiorTimingGapCannotSatisfyCanonicalAudioCoverage() throws {
+        let snapshot = try transcriptSnapshot(
+            timed: true,
+            timeRanges: [
+                MediaTimeRange(startMilliseconds: 0, endMilliseconds: 1_000),
+                MediaTimeRange(startMilliseconds: 1_001, endMilliseconds: 2_000)
+            ]
+        )
+
+        #expect(!snapshot.hasCompleteTiming)
+        #expect(throws: DomainValidationError.self) {
+            _ = try TranscriptResolutionCandidate(
+                availability: transcriptAvailability(for: snapshot),
+                snapshot: snapshot,
+                applicationAudioCoverageBinding: transcriptCoverageBinding(for: snapshot)
+            )
+        }
+    }
+
+    @Test
+    func externalPolicyDenialRejectsExternalSelectionsWhileLocalASRRuns() throws {
+        let snapshot = try transcriptSnapshot(timed: false)
+        let input = try resolutionInput(
+            snapshot: snapshot,
+            policy: transcriptPolicy(externalSourceUseAllowed: false)
+        )
+        let reason = try TranscriptResolutionReason(
+            code: "local-asr-required",
+            displayText: "External transcript source use is not authorized."
+        )
+
+        #expect(throws: DomainValidationError.self) {
+            _ = try TranscriptResolutionDecision(
+                selectedPrimarySource: snapshot.reference,
+                shouldRunLocalASR: true,
+                reason: reason,
+                consideredAlternatives: [snapshot.reference],
+                inputSnapshot: input
+            )
+        }
+        #expect(throws: DomainValidationError.self) {
+            _ = try TranscriptResolutionDecision(
+                selectedPrimarySource: nil,
+                authoritativeReference: snapshot.reference,
+                shouldRunLocalASR: true,
+                reason: reason,
+                consideredAlternatives: [snapshot.reference],
+                inputSnapshot: input
+            )
+        }
+
+        let decision = try TranscriptResolutionDecision(
+            selectedPrimarySource: nil,
+            authoritativeReference: nil,
+            shouldRunLocalASR: true,
+            reason: reason,
+            consideredAlternatives: [snapshot.reference],
+            inputSnapshot: input
+        )
+        #expect(decision.shouldRunLocalASR)
+        #expect(decision.selectedPrimarySource == nil)
+        #expect(decision.authoritativeReference == nil)
+    }
+
+    @Test
+    func coverageBindingRejectsDifferentSnapshotReference() throws {
+        let snapshot = try transcriptSnapshot(timed: true)
+        let differentReference = try transcriptReference(
+            providerIdentifier: "different-provider"
+        )
+
+        #expect(throws: DomainValidationError.self) {
+            _ = try TranscriptResolutionCandidate(
+                availability: transcriptAvailability(for: snapshot),
+                snapshot: snapshot,
+                applicationAudioCoverageBinding: transcriptCoverageBinding(
+                    for: snapshot,
+                    transcriptSourceReference: differentReference
+                )
+            )
+        }
+    }
+
+    @Test
+    func coverageBindingRejectsDifferentSnapshotContentDigest() throws {
+        let snapshot = try transcriptSnapshot(timed: true)
+
+        #expect(throws: DomainValidationError.self) {
+            _ = try TranscriptResolutionCandidate(
+                availability: transcriptAvailability(for: snapshot),
+                snapshot: snapshot,
+                applicationAudioCoverageBinding: transcriptCoverageBinding(
+                    for: snapshot,
+                    transcriptSourceContentDigest: transcriptDigest("f")
+                )
+            )
+        }
+    }
+
+    @Test
+    func coverageBindingRejectsDifferentCanonicalSnapshot() throws {
+        let original = try transcriptSnapshot(timed: true)
+        let changedTiming = try transcriptSnapshot(
+            timed: true,
+            timeRanges: [
+                MediaTimeRange(startMilliseconds: 0, endMilliseconds: 900),
+                MediaTimeRange(startMilliseconds: 900, endMilliseconds: 2_000)
+            ]
+        )
+        let changedText = try transcriptSnapshot(
+            timed: true,
+            segmentTexts: [
+                "Changed synthetic segment.",
+                "Second synthetic segment."
+            ]
+        )
+        let binding = try transcriptCoverageBinding(for: original)
+
+        for differentSnapshot in [changedTiming, changedText] {
+            #expect(differentSnapshot.reference == original.reference)
+            #expect(differentSnapshot.contentDigest == original.contentDigest)
+            #expect(try differentSnapshot.calculatedSnapshotHash()
+                != original.calculatedSnapshotHash())
+            #expect(throws: DomainValidationError.self) {
+                _ = try TranscriptResolutionCandidate(
+                    availability: transcriptAvailability(for: differentSnapshot),
+                    snapshot: differentSnapshot,
+                    applicationAudioCoverageBinding: binding
+                )
+            }
+        }
+    }
+
+    @Test
+    func coverageBindingRequiresFetchedSnapshot() throws {
+        let snapshot = try transcriptSnapshot(timed: true)
+
+        #expect(throws: DomainValidationError.self) {
+            _ = try TranscriptResolutionCandidate(
+                availability: transcriptAvailability(for: snapshot),
+                applicationAudioCoverageBinding: transcriptCoverageBinding(for: snapshot)
+            )
+        }
+    }
+
+    @Test
+    func legacyUnboundCoverageBindingFailsDecoding() throws {
+        let snapshot = try transcriptSnapshot(timed: true)
+        let binding = try transcriptCoverageBinding(for: snapshot)
+        let encoded = try JSONEncoder().encode(binding)
+        #expect(
+            try JSONDecoder().decode(
+                TranscriptAudioCoverageBinding.self,
+                from: encoded
+            ) == binding
+        )
+        let object = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+
+        for missingKey in [
+            "transcript_source_reference",
+            "transcript_source_content_digest",
+            "transcript_source_snapshot_hash"
+        ] {
+            var legacyObject = object
+            legacyObject.removeValue(forKey: missingKey)
+            let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+
+            #expect(throws: DecodingError.self) {
+                _ = try JSONDecoder().decode(
+                    TranscriptAudioCoverageBinding.self,
+                    from: legacyData
+                )
+            }
+        }
+    }
+
+    @Test
     func candidateOrderIsCanonicalAndDoesNotEncodeAuthorityPriority() throws {
         let firstSnapshot = try transcriptSnapshot(
             providerIdentifier: "z-provider",
@@ -185,17 +384,18 @@ private actor SyntheticTranscriptSourceProvider: TranscriptSourceProviding {
 
 private func resolutionInput(
     snapshot: TranscriptSourceSnapshot,
-    withCoverageProof: Bool = false
+    withCoverageProof: Bool = false,
+    policy: TranscriptResolutionPolicySnapshot? = nil
 ) throws -> TranscriptResolutionInputSnapshot {
     try TranscriptResolutionInputSnapshot(
         context: transcriptContext(),
-        policy: transcriptPolicy(),
+        policy: policy ?? transcriptPolicy(),
         candidates: [
             TranscriptResolutionCandidate(
                 availability: transcriptAvailability(for: snapshot),
                 snapshot: snapshot,
                 applicationAudioCoverageBinding: withCoverageProof
-                    ? transcriptCoverageBinding()
+                    ? transcriptCoverageBinding(for: snapshot)
                     : nil
             )
         ],
@@ -203,7 +403,9 @@ private func resolutionInput(
     )
 }
 
-private func transcriptPolicy() throws -> TranscriptResolutionPolicySnapshot {
+private func transcriptPolicy(
+    externalSourceUseAllowed: Bool = true
+) throws -> TranscriptResolutionPolicySnapshot {
     try TranscriptResolutionPolicySnapshot(
         policyVersion: VersionedComponent(
             identifier: "synthetic-transcript-resolution-policy",
@@ -211,7 +413,7 @@ private func transcriptPolicy() throws -> TranscriptResolutionPolicySnapshot {
         ),
         localASRAllowed: true,
         localASRAvailable: true,
-        externalSourceUseAllowed: true
+        externalSourceUseAllowed: externalSourceUseAllowed
     )
 }
 
@@ -242,14 +444,19 @@ private func transcriptAvailability(
 private func transcriptSnapshot(
     providerIdentifier: String = "synthetic-provider",
     authority: SourceAuthority = .official,
-    timed: Bool
+    timed: Bool,
+    timeRanges: [MediaTimeRange]? = nil,
+    segmentTexts: [String] = [
+        "First synthetic segment.",
+        "Second synthetic segment."
+    ]
 ) throws -> TranscriptSourceSnapshot {
     let reference = try transcriptReference(providerIdentifier: providerIdentifier)
-    let ranges = [
+    let ranges = try timeRanges ?? [
         try MediaTimeRange(startMilliseconds: 0, endMilliseconds: 1_000),
         try MediaTimeRange(startMilliseconds: 1_000, endMilliseconds: 2_000)
     ]
-    let segments = try ["First synthetic segment.", "Second synthetic segment."]
+    let segments = try segmentTexts
         .enumerated()
         .map { index, text in
             try TranscriptSourceSegment(
@@ -270,11 +477,21 @@ private func transcriptSnapshot(
     )
 }
 
-private func transcriptCoverageBinding() throws -> TranscriptAudioCoverageBinding {
+private func transcriptCoverageBinding(
+    for snapshot: TranscriptSourceSnapshot,
+    transcriptSourceReference: TranscriptSourceReference? = nil,
+    transcriptSourceContentDigest: ContentDigest? = nil,
+    transcriptSourceSnapshotHash: ContentDigest? = nil
+) throws -> TranscriptAudioCoverageBinding {
     try TranscriptAudioCoverageBinding(
         coverageManifestID: transcriptID(10, TranscriptCoverageManifestID.self),
         coverageManifestHash: transcriptDigest("d"),
         canonicalSourceRevision: transcriptSourceRevision(),
+        transcriptSourceReference: transcriptSourceReference ?? snapshot.reference,
+        transcriptSourceContentDigest:
+            transcriptSourceContentDigest ?? snapshot.contentDigest,
+        transcriptSourceSnapshotHash:
+            try transcriptSourceSnapshotHash ?? snapshot.calculatedSnapshotHash(),
         verifiedCompleteFrameCoverage: true,
         verifier: VersionedComponent(
             identifier: "synthetic-coverage-verifier",
