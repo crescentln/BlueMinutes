@@ -9,7 +9,7 @@ current_task: "011"
 current_status: accepted
 authorized_post_mvp_work:
   task: "public GitHub source publication and long-term maintenance foundation"
-  status: "v0.2.0_source_release_preparation_locally_validated_pending_pull_request"
+  status: "v0.2.0_source_release_pr_15_open_pending_exact_head_gates"
   rollback_anchor: "5450a916172c07ec2b7054c76fa40c80db17692e"
   public_name_status: "BlueMinutes selected by the maintainer; preliminary exact-name and affiliation-risk screen passed with normal trademark limitations"
   remote_publication_status: "https://github.com/crescentln/BlueMinutes is PUBLIC; the BlueMinutes-first README and v0.1.0 source-release material from Issue #8 and PR #9 were rebased into main at b45b38a, and the exact release baseline is verified by protected-main CI, signed-out HTTP, GitHub API, and anonymous Git access"
@@ -18,14 +18,15 @@ authorized_post_mvp_work:
   next_source_release:
     version: "v0.2.0"
     distribution_scope: "GitHub source Release only; GitHub-generated source archives and zero uploaded assets"
-    status: "local_release_preparation_validated_pending_push_and_pull_request"
+    status: "pull_request_15_open_pending_exact_head_review_ci_codeql_and_conversation_gates"
     github_issue: "Issue #14 at https://github.com/crescentln/BlueMinutes/issues/14"
+    pull_request: "PR #15 at https://github.com/crescentln/BlueMinutes/pull/15"
     local_branch: "docs/14-v0.2.0-source-release"
     implementation_commit: "3832df2f71a83f86038bdf626ef8221f7a5abda0"
     authorization_scope: "prepare the v0.2.0 source-release Pull Request, update CHANGELOG and release-facing README/version documentation, publish a source-only v0.2.0 GitHub Release after protected-main gates, then replace the README audience tagline and add public-safe synthetic screenshots in a separate post-release Pull Request; no binary build, signing, notarization, application upload, installation, deployment, or other distribution is authorized"
     merge_authority_status: "explicit and conditional: the maintainer authorized rebase merges for PR #12, the v0.2.0 release-preparation Pull Request, and the post-release README/screenshot Pull Request only after all applicable gates pass"
     bundle_version_status: "Configuration/MeetingBuddy-Info.plist remains the separately gated 0.1.0 internal-alpha application-bundle version because this is a source-tree release and the historical 0.1.0-internal-alpha packaging/verifier chain is not being promoted or altered"
-    next_gate: "complete local validation on the rebased release branch; push and open the Issue #14 release Pull Request; require exact-head review, CI, CodeQL, and zero unresolved threads; rebase-merge only while those gates remain green; require exact new-main CI and CodeQL; then create the unsigned annotated tag and publish only the authorized source Release with zero uploaded assets"
+    next_gate: "publish this ledger-only PR-number reconciliation; require exact-head review, CI, CodeQL, CLEAN/MERGEABLE state, and zero unresolved threads on PR #15; rebase-merge only while those gates remain green; require exact new-main CI and CodeQL; then create the unsigned annotated tag and publish only the authorized source Release with zero uploaded assets"
 post_mvp_initiatives:
   blue_minutes_meeting_research:
     title: "Blue Minutes Meeting / Research integration"
@@ -72,7 +73,7 @@ accepted_tasks:
 completed_pending_acceptance: []
 blocked_tasks: []
 last_known_git_head: "3832df2f71a83f86038bdf626ef8221f7a5abda0 (local v0.2.0 source-release documentation and presentation-test preparation rebased directly onto protected main d7f56efb4020d5d0bb58d71c6f80f6770a3ddb78; this ledger-only reconciliation is its immediate child)"
-working_tree_status_summary: "local branch docs/14-v0.2.0-source-release contains exactly two rebased commits above protected main d7f56efb4020d5d0bb58d71c6f80f6770a3ddb78; release-preparation commit 3832df2f71a83f86038bdf626ef8221f7a5abda0 updates nine release-facing documentation/test paths, adds v0.2.0 changelog and source-release notes, keeps Research capabilities explicitly default-off, preserves schema v10 and every dependency/network/persistence/user-data boundary, and intentionally leaves the separately gated application-bundle metadata at 0.1.0 internal alpha; dependency resolution, isolated warning-as-error build, two focused public-brand tests, the complete 284-test/48-suite run, exact ten-path scope, Markdown-link, plist/version, diff, binary-artifact, large-file, and sensitive-content gates pass; the branch has not yet been pushed, and no release Pull Request, tag, GitHub Release, README tagline change, screenshot publication, signing, notarization, binary upload, installation, deployment, or distribution has been performed"
+working_tree_status_summary: "branch docs/14-v0.2.0-source-release is published in open PR #15 against protected main d7f56efb4020d5d0bb58d71c6f80f6770a3ddb78; release-preparation commit 3832df2f71a83f86038bdf626ef8221f7a5abda0 updates nine release-facing documentation/test paths, adds v0.2.0 changelog and source-release notes, keeps Research capabilities explicitly default-off, preserves schema v10 and every dependency/network/persistence/user-data boundary, and intentionally leaves the separately gated application-bundle metadata at 0.1.0 internal alpha; dependency resolution, isolated warning-as-error build, two focused public-brand tests, the complete 284-test/48-suite run, exact ten-path scope, Markdown-link, plist/version, diff, binary-artifact, large-file, and sensitive-content gates pass; this ledger-only reconciliation records the actual Pull Request number before exact-head gates, and no merge, tag, GitHub Release, README tagline change, screenshot publication, signing, notarization, binary upload, installation, deployment, or distribution has been performed"
 last_verification_commands:
   - "Codex Security standard repository scan ec5ba727-af63-4f1a-bd8c-feb3001ed3a2 with 134/134 receipts, validation, reconciliation, attack-path analysis, sealed manifest/findings/coverage/report/SARIF, and completion indexing"
   - "swift test --scratch-path <new temporary directory> -Xswiftc -warnings-as-errors"
