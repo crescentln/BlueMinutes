@@ -1,6 +1,6 @@
 # Open-Source Readiness Evidence
 
-Status: public-source evidence map; verified on public baseline `e621537`
+Status: public-source evidence map; verified on `v0.1.0` release baseline `b45b38a`
 Last verified: 2026-07-22
 
 This document gives reviewers and contributors a short path from project claims
@@ -28,12 +28,14 @@ announcement, or substitute for the final public CI and sensitive-data gates.
   opt-in gates and are not represented as ordinary-CI passes.
 - Focused migration, serialization, recovery, evidence-linked integration, and
   bounded Golden suites are configured in GitHub Actions.
-- Public baseline `e6215373fbefa61f911ca4ee65c33852fd2dea76` passes
-  [exact-main GitHub Actions run 29964705558](https://github.com/crescentln/BlueMinutes/actions/runs/29964705558)
-  after the visibility conversion.
+- The `v0.1.0` release baseline
+  `b45b38abc68739d008bad733479286438a4b4bc8` passes
+  [exact-main GitHub Actions run 29969615653](https://github.com/crescentln/BlueMinutes/actions/runs/29969615653).
+  Attempt 2 succeeded on the unchanged SHA after attempt 1 hit the documented
+  shared-runner wall-clock performance fluctuation.
 - Signed-out repository and raw README requests return HTTP 200, the
-  unauthenticated API reports public visibility, and anonymous Git resolves
-  `main` to the same exact public baseline.
+  unauthenticated API reports public visibility, and anonymous Git resolves the
+  peeled `v0.1.0` tag to the same exact source-release baseline.
 - `main` requires Pull Requests and the strict `Swift build and test` check,
   applies protection to administrators, requires linear history and resolved
   conversations, and rejects force-push and deletion. Dependabot security
@@ -45,9 +47,9 @@ announcement, or substitute for the final public CI and sensitive-data gates.
 - Apache License 2.0, contribution, security, support, maintenance, backup,
   release, and community policies are present.
 
-These are local and public-source results. The exact public baseline and its
-successful GitHub Actions run are recorded above; later code changes must
-replace them with the then-current protected `main` evidence.
+These are local and public-source results. The exact `v0.1.0` source-release
+baseline and its successful GitHub Actions run are recorded above; later source
+releases must record their own protected-`main` evidence.
 
 Reachable `main` history completed its private-path sanitization before the
 initial publication, which pushed only `refs/heads/main:refs/heads/main`.
@@ -59,8 +61,8 @@ snapshots.
 
 ## Honest application position
 
-BlueMinutes is pre-release and does not yet claim broad adoption, stars,
-downloads, production users, or institutional endorsement. Its application case
+BlueMinutes has an early-stage `v0.1.0` source release and does not claim broad
+adoption, production users, or institutional endorsement. Its application case
 rests on clear public-interest and ecosystem importance, active maintenance,
 reusable safety and provenance patterns, and a credible solo-maintainer burden.
 The [Codex for Open Source form](https://openai.com/form/codex-for-oss/)
@@ -77,8 +79,10 @@ The repository-side publication gates are complete:
 - working-tree and reachable-history sensitive-data checks pass;
 - reachable author and committer identities use GitHub noreply/system
   identities; and
-- only the explicit `main` branch is public, with no tag, Release, binary,
-  deployment, or Codex rollback ref.
+- the protected `main` branch, annotated `v0.1.0` tag, and regular
+  [GitHub source Release](https://github.com/crescentln/BlueMinutes/releases/tag/v0.1.0)
+  are public; the Release has no uploaded binary asset, deployment, or Codex
+  rollback ref.
 
 Immediately before submitting an application, the maintainer must still:
 
@@ -94,6 +98,7 @@ strengthen the application after publication, but the official form does not
 make them prerequisites. Do not delay a truthful application solely to create
 those signals.
 
-Public source publication and public binary distribution remain separate. A
-public repository does not authorize a Git tag, GitHub Release, signed build,
-notarization, installer, package, or application binary upload.
+Public source publication and public binary distribution remain separate. The
+explicitly authorized `v0.1.0` tag and GitHub source Release contain no uploaded
+app bundle, installer, or maintainer-built ZIP and do not authorize a signed
+build, notarization, installer, or future application-binary upload.
