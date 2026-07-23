@@ -146,16 +146,19 @@ CI runs the warning-as-error build and the complete synthetic-safe test suite.
 Installed Apple-model smoke tests are deliberately opt-in and use only
 project-authored synthetic inputs.
 
-### Stage and open the app
+### Stage the app
 
 ```sh
-./script/build_and_run.sh
+./script/build_and_run.sh --stage-only
 ```
 
-The script builds, stages, ad-hoc signs, and opens a local development bundle
-under `dist/`. Use `./script/build_and_run.sh --stage-only` to stage without
-opening it. The app displays the BlueMinutes name and icon; the development
-bundle path and process name retain legacy compatibility identifiers.
+This builds, stages, and ad-hoc signs a local development bundle under `dist/`
+without opening it or interrupting a running session. To open the staged app,
+run `./script/build_and_run.sh` only after saving your work and stopping any
+active recording: the opening form stops an existing development instance
+before launching the new build. The app displays the BlueMinutes name and icon;
+the development bundle path and process name retain legacy compatibility
+identifiers.
 
 ## Using the app
 

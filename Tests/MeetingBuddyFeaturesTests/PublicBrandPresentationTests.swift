@@ -34,6 +34,10 @@ struct PublicBrandPresentationTests {
         #expect(readme.contains("> **By a diplomat, for diplomats.**"))
         #expect(readme.contains("The first public version, `v0.1.0`"))
         #expect(readme.contains("legacy `MeetingBuddy` identifier"))
+        #expect(readme.contains("./script/build_and_run.sh --stage-only"))
+        #expect(
+            readme.contains("stops an existing development instance")
+        )
         #expect(!readme.contains("open dist/MeetingBuddy.app"))
         #expect(!readme.contains("source-only internal alpha"))
 
