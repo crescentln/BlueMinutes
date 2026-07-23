@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The latest supported source version is `v0.1.0`, together with subsequent
+The latest supported source version is `v0.2.0`, together with subsequent
 commits on `main`. Security fixes are applied to the latest `main` revision.
 No public binary application release is supported yet.
 

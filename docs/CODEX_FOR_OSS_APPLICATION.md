@@ -81,7 +81,7 @@ an otherwise truthful application.
 
 ## Application strategy
 
-BlueMinutes is an early-stage `v0.1.0` source release, so this application must
+BlueMinutes is an early-stage `v0.2.0` source release, so this application must
 not imply broad adoption or invent stars, downloads, users, testimonials, or
 institutional support. The official program expressly invites maintainers to
 explain a project's ecosystem importance when it does not neatly fit the usual

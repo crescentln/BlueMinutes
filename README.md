@@ -39,9 +39,12 @@ conditions, exact source evidence, review state, and later corrections.
 BlueMinutes is not affiliated with, sponsored by, or endorsed by the United
 Nations, any United Nations entity, or any government.
 
-The first public version, `v0.1.0`, is a source release for developers and
-early evaluators who build BlueMinutes locally. A signed and notarized app
-download is a separate future distribution milestone.
+The current public version, `v0.2.0`, is a source release for developers and
+early evaluators who build BlueMinutes locally. It adds a hidden, default-off
+compatibility and validation foundation for future Meeting / Research work; it
+does not add a Research interface, connector, external provider, or persistent
+Research data. A signed and notarized app download is a separate future
+distribution milestone.
 
 ## Contents
 
@@ -289,6 +292,11 @@ BlueMinutes is a Swift 6 modular monolith:
 | Native app | SwiftUI review experience and composition root |
 | Local automation | Typed, permissioned CLI and MCP adapters |
 
+The `v0.2.0` source tree also defines provider-neutral contracts and
+exact-revision compatibility adapters for future Meeting / Research
+integration. Every related capability remains disabled by default; no Research
+interface, provider, persistence, migration, or new network route is active.
+
 GRDB 7.11.1 is the only external package dependency and is confined to the
 persistence implementation and tests. Start with
 [Current architecture](docs/CURRENT_ARCHITECTURE.md),
@@ -298,9 +306,11 @@ there and retain their legacy compatibility identifiers.
 
 ## Known limitations
 
-- The `v0.1.0` GitHub Release contains source code only. A Developer ID signed
+- GitHub Releases currently contain source code only. A Developer ID signed
   and notarized app download, installer, automatic updater, universal/Intel
-  build, and clean-machine distribution proof are future milestones.
+  build, and clean-machine distribution proof remain future milestones. The
+  development app bundle retains its separately gated `0.1.0` internal-alpha
+  metadata.
 - Automatic Apple transcription, translation, analysis, and briefing require
   macOS 26, supported hardware/locales, and installed system model assets.
   Manual transcript and translation intake remain available, but there is no

@@ -8,6 +8,58 @@ All notable project changes are documented here. The format follows
 
 No notable changes yet.
 
+## [0.2.0] - 2026-07-23
+
+Source-only compatibility and safety foundation for future Meeting / Research
+work.
+
+### Added
+
+- Provider-neutral, versioned contracts for logical Research workspaces,
+  shared-source references, exact-version artifacts, citation associations,
+  append-only Conversation histories, instruction profiles and snapshots, and
+  transcript-source discovery and resolution.
+- Read-only adapters that project existing Meeting sources, briefings,
+  historical comparisons, and evidence without replacing their authoritative
+  revisions.
+- An immutable, composition-owned capability snapshot whose four Research
+  integration capabilities are all disabled by default.
+
+### Changed
+
+- Reorganized CI so resource-bound coverage and historical-scale checks run
+  once in isolated or focused steps; product behavior and validation thresholds
+  are unchanged.
+
+### Security
+
+- The new transcript-source contract rejects external primary or authoritative
+  selections whenever application policy denies external source use.
+- Canonical-audio coverage eligibility requires exact source binding,
+  application-owned proof, and zero-based, contiguous, gap-free,
+  chronological, non-overlapping timing.
+- Conversation histories remain bound to one logical Meeting identity or one
+  Research workspace identity while exact revision references may evolve
+  within that identity.
+
+### Compatibility
+
+- SQLite schema remains v10. This release adds no visible Research surface,
+  connector, external provider, persistence, migration, backfill, dependency,
+  entitlement, CLI command, MCP tool, network destination, user-data behavior,
+  or file-layout change.
+- Existing Meeting workflows remain unchanged with the default capability
+  snapshot.
+- The GitHub source version advances independently of the separately gated
+  `0.1.0` internal-alpha application-bundle metadata and packaging evidence.
+
+### Release scope
+
+- Distribution is source code only. No app bundle, installer, archive, signing
+  material, or other binary asset is attached.
+- A Developer ID signed and notarized macOS download remains a separate future
+  distribution milestone.
+
 ## [0.1.0] - 2026-07-22
 
 First public source release.
@@ -74,5 +126,6 @@ Internal validation milestone only; no Git tag or GitHub Release was created.
 - Installed Apple-model tests remain opt-in and synthetic-only.
 - The internal alpha is not authorized for public binary distribution.
 
-[Unreleased]: https://github.com/crescentln/BlueMinutes/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/crescentln/BlueMinutes/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/crescentln/BlueMinutes/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/crescentln/BlueMinutes/releases/tag/v0.1.0

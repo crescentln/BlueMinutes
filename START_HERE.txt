@@ -21,7 +21,7 @@ are accepted, the canonical MVP sequence is complete, and there is no next
 eligible numbered task. Do not reopen accepted work from this handoff file.
 
 5. Current ledger state: Task 011 is accepted with an INTERNAL ALPHA
-   application classification. The public `v0.1.0` version is source-only and
+   application classification. The public `v0.2.0` version is source-only and
    is not a distributable application candidate. Post-MVP capability work and
    every later commit, push, tag, notarization, release, upload, install, or
    distribution action require separate explicit authority.
