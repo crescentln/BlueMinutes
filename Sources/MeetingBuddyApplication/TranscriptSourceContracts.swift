@@ -598,6 +598,7 @@ public struct TranscriptSourceSnapshot: Codable, Hashable, Sendable, DomainValid
                 )
             )
         }
+        var previousTimedRange: MediaTimeRange?
         for (index, segment) in segments.enumerated() {
             issues += segment.validationIssues()
             if segment.sequence != UInt64(index + 1) {
@@ -609,18 +610,19 @@ public struct TranscriptSourceSnapshot: Codable, Hashable, Sendable, DomainValid
                     )
                 )
             }
-            if index > 0,
-               let priorRange = segments[index - 1].timeRange,
-               let range = segment.timeRange,
-               priorRange.endMilliseconds > range.startMilliseconds
-            {
-                issues.append(
-                    transcriptIssue(
-                        .invalidRange,
-                        "segments[\(index)].time_range",
-                        "Timed transcript source segments cannot overlap."
+            if let range = segment.timeRange {
+                if let previousTimedRange,
+                   previousTimedRange.endMilliseconds > range.startMilliseconds
+                {
+                    issues.append(
+                        transcriptIssue(
+                            .invalidRange,
+                            "segments[\(index)].time_range",
+                            "Timed transcript source segments must remain chronological and cannot overlap."
+                        )
                     )
-                )
+                }
+                previousTimedRange = range
             }
         }
         issues += contentDigest.validationIssues()

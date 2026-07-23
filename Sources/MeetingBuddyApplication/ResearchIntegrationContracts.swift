@@ -611,12 +611,21 @@ public struct ConversationContext: Codable, Hashable, Sendable, DomainValidatabl
                     )
                 )
             }
-            if !referencedRevisions.contains(where: { $0.objectType == .meetingProfile }) {
+            let logicalMeetingIdentities = meetingConversationLogicalIdentities(in: self)
+            if logicalMeetingIdentities.isEmpty {
                 issues.append(
                     researchIssue(
                         .missingRequiredValue,
                         "referenced_revisions",
                         "A Meeting Conversation requires an exact MeetingProfile revision."
+                    )
+                )
+            } else if logicalMeetingIdentities.count > 1 {
+                issues.append(
+                    researchIssue(
+                        .inconsistentValue,
+                        "referenced_revisions",
+                        "A Meeting Conversation cannot include more than one logical Meeting identity."
                     )
                 )
             }
@@ -826,6 +835,7 @@ public struct ConversationHistory: Codable, Hashable, Sendable, DomainValidatabl
 
     public func validationIssues() -> [ValidationIssue] {
         var issues: [ValidationIssue] = []
+        let anchorContext = messages.first?.context
         if messages.count > 10_000 {
             issues.append(
                 researchIssue(
@@ -875,7 +885,9 @@ public struct ConversationHistory: Codable, Hashable, Sendable, DomainValidatabl
                         )
                     )
                 }
-                if message.context.kind != prior.context.kind {
+                if let anchorContext,
+                   message.context.kind != anchorContext.kind
+                {
                     issues.append(
                         researchIssue(
                             .inconsistentValue,
@@ -883,6 +895,35 @@ public struct ConversationHistory: Codable, Hashable, Sendable, DomainValidatabl
                             "A Conversation cannot switch between Meeting and Research contexts."
                         )
                     )
+                } else if let anchorContext {
+                    switch message.context.kind {
+                    case .research:
+                        if message.context.researchWorkspaceID
+                            != anchorContext.researchWorkspaceID
+                        {
+                            issues.append(
+                                researchIssue(
+                                    .inconsistentValue,
+                                    "messages[\(index)].context.research_workspace_id",
+                                    "A Conversation cannot switch Research workspace identities."
+                                )
+                            )
+                        }
+                    case .meeting:
+                        if meetingConversationLogicalIdentities(in: message.context)
+                            != meetingConversationLogicalIdentities(in: anchorContext)
+                        {
+                            issues.append(
+                                researchIssue(
+                                    .inconsistentValue,
+                                    "messages[\(index)].context.referenced_revisions",
+                                    "A Conversation cannot switch logical Meeting identities."
+                                )
+                            )
+                        }
+                    case .unrecognized:
+                        break
+                    }
                 }
             }
         }
@@ -901,6 +942,16 @@ public struct ConversationHistory: Codable, Hashable, Sendable, DomainValidatabl
         case conversationID = "conversation_id"
         case messages
     }
+}
+
+private func meetingConversationLogicalIdentities(
+    in context: ConversationContext
+) -> Set<LogicalObjectID> {
+    Set(
+        context.referencedRevisions
+            .filter { $0.objectType == .meetingProfile }
+            .map(\.logicalID)
+    )
 }
 
 /// A small structured value vocabulary for instruction settings. It is not a
