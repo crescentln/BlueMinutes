@@ -162,6 +162,167 @@ struct ResearchIntegrationContractTests {
     }
 
     @Test
+    func conversationHistoryRejectsResearchWorkspaceSwitch() throws {
+        let conversationID = cg1ID(160, ConversationID.self)
+        let firstContext = try ConversationContext(
+            kind: .research,
+            researchWorkspaceID: cg1ID(161, ResearchWorkspaceID.self),
+            referencedRevisions: [],
+            dataClassification: .internal
+        )
+        let secondContext = try ConversationContext(
+            kind: .research,
+            researchWorkspaceID: cg1ID(162, ResearchWorkspaceID.self),
+            referencedRevisions: [],
+            dataClassification: .internal
+        )
+        let first = try conversationMessage(
+            suffix: 163,
+            conversationID: conversationID,
+            sequence: 1,
+            context: firstContext
+        )
+        let second = try conversationMessage(
+            suffix: 164,
+            conversationID: conversationID,
+            sequence: 2,
+            context: secondContext
+        )
+
+        #expect(throws: DomainValidationError.self) {
+            _ = try ConversationHistory(
+                conversationID: conversationID,
+                messages: [first, second]
+            )
+        }
+    }
+
+    @Test
+    func conversationHistoryRejectsMeetingIdentitySwitch() throws {
+        let conversationID = cg1ID(170, ConversationID.self)
+        let firstContext = try ConversationContext(
+            kind: .meeting,
+            referencedRevisions: [
+                cg1Reference(171, 172, MeetingID.self)
+            ],
+            dataClassification: .internal
+        )
+        let secondContext = try ConversationContext(
+            kind: .meeting,
+            referencedRevisions: [
+                cg1Reference(173, 174, MeetingID.self)
+            ],
+            dataClassification: .internal
+        )
+        let first = try conversationMessage(
+            suffix: 175,
+            conversationID: conversationID,
+            sequence: 1,
+            context: firstContext
+        )
+        let second = try conversationMessage(
+            suffix: 176,
+            conversationID: conversationID,
+            sequence: 2,
+            context: secondContext
+        )
+
+        #expect(throws: DomainValidationError.self) {
+            _ = try ConversationHistory(
+                conversationID: conversationID,
+                messages: [first, second]
+            )
+        }
+    }
+
+    @Test
+    func meetingConversationContextRequiresOneLogicalMeetingIdentity() throws {
+        #expect(throws: DomainValidationError.self) {
+            _ = try ConversationContext(
+                kind: .meeting,
+                referencedRevisions: [
+                    cg1Reference(180, 181, MeetingID.self),
+                    cg1Reference(182, 183, MeetingID.self)
+                ],
+                dataClassification: .internal
+            )
+        }
+    }
+
+    @Test
+    func conversationHistoryAllowsNewExactRevisionForSameMeeting() throws {
+        let conversationID = cg1ID(190, ConversationID.self)
+        let firstContext = try ConversationContext(
+            kind: .meeting,
+            referencedRevisions: [
+                cg1Reference(191, 192, MeetingID.self)
+            ],
+            dataClassification: .internal
+        )
+        let secondContext = try ConversationContext(
+            kind: .meeting,
+            referencedRevisions: [
+                cg1Reference(191, 193, MeetingID.self)
+            ],
+            dataClassification: .internal
+        )
+        let first = try conversationMessage(
+            suffix: 194,
+            conversationID: conversationID,
+            sequence: 1,
+            context: firstContext
+        )
+        let second = try conversationMessage(
+            suffix: 195,
+            conversationID: conversationID,
+            sequence: 2,
+            context: secondContext
+        )
+        let history = try ConversationHistory(
+            conversationID: conversationID,
+            messages: [first, second]
+        )
+
+        #expect(history.messages.map(\.context) == [firstContext, secondContext])
+    }
+
+    @Test
+    func conversationHistoryAllowsUpdatedReferencesForSameResearchWorkspace() throws {
+        let conversationID = cg1ID(200, ConversationID.self)
+        let workspaceID = cg1ID(201, ResearchWorkspaceID.self)
+        let firstContext = try ConversationContext(
+            kind: .research,
+            researchWorkspaceID: workspaceID,
+            referencedRevisions: [],
+            dataClassification: .internal
+        )
+        let secondContext = try ConversationContext(
+            kind: .research,
+            researchWorkspaceID: workspaceID,
+            referencedRevisions: [cg1Reference(202, 203, SourceAssetID.self)],
+            dataClassification: .internal
+        )
+        let first = try conversationMessage(
+            suffix: 204,
+            conversationID: conversationID,
+            sequence: 1,
+            context: firstContext
+        )
+        let second = try conversationMessage(
+            suffix: 205,
+            conversationID: conversationID,
+            sequence: 2,
+            context: secondContext
+        )
+        let history = try ConversationHistory(
+            conversationID: conversationID,
+            messages: [first, second]
+        )
+
+        #expect(history.messages.map(\.context) == [firstContext, secondContext])
+    }
+
+    @Test
     func instructionCompilationProtectsPolicyAndIsDeterministic() throws {
         for protectedKey in [
             "classification.value",
@@ -346,6 +507,24 @@ private func sourceReference() throws -> SemanticRevisionReference {
     try SemanticRevisionReference(
         logicalID: cg1ID(10, SourceAssetID.self),
         revisionID: cg1ID(11, RevisionID.self)
+    )
+}
+
+private func conversationMessage(
+    suffix: Int,
+    conversationID: ConversationID,
+    sequence: UInt64,
+    context: ConversationContext
+) throws -> ConversationMessage {
+    try ConversationMessage(
+        messageID: cg1ID(suffix, MessageID.self),
+        conversationID: conversationID,
+        sequence: sequence,
+        role: sequence == 1 ? .user : .assistant,
+        content: "Synthetic conversation message \(sequence).",
+        context: context,
+        instructionSnapshotID: cg1ID(suffix, InstructionSnapshotID.self),
+        createdAt: cg1Instant(Int64(suffix))
     )
 }
 

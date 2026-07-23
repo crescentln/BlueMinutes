@@ -143,6 +143,47 @@ struct TranscriptSourceContractTests {
     }
 
     @Test
+    func untimedSegmentCannotHideTimedOverlapOrReordering() throws {
+        let invalidTimedRanges = [
+            [
+                try MediaTimeRange(startMilliseconds: 0, endMilliseconds: 2_000),
+                try MediaTimeRange(startMilliseconds: 1_000, endMilliseconds: 3_000)
+            ],
+            [
+                try MediaTimeRange(startMilliseconds: 2_000, endMilliseconds: 3_000),
+                try MediaTimeRange(startMilliseconds: 0, endMilliseconds: 1_000)
+            ]
+        ]
+
+        for timedRanges in invalidTimedRanges {
+            #expect(throws: DomainValidationError.self) {
+                _ = try transcriptSnapshotWithUntimedMiddleSegment(
+                    firstTimedRange: timedRanges[0],
+                    finalTimedRange: timedRanges[1]
+                )
+            }
+        }
+    }
+
+    @Test
+    func untimedSegmentMaySeparateChronologicalNonoverlappingTiming() throws {
+        let snapshot = try transcriptSnapshotWithUntimedMiddleSegment(
+            firstTimedRange: MediaTimeRange(
+                startMilliseconds: 0,
+                endMilliseconds: 1_000
+            ),
+            finalTimedRange: MediaTimeRange(
+                startMilliseconds: 1_000,
+                endMilliseconds: 2_000
+            )
+        )
+
+        #expect(snapshot.segments.count == 3)
+        #expect(snapshot.segments[1].timeRange == nil)
+        #expect(!snapshot.hasCompleteTiming)
+    }
+
+    @Test
     func externalPolicyDenialRejectsExternalSelectionsWhileLocalASRRuns() throws {
         let snapshot = try transcriptSnapshot(timed: false)
         let input = try resolutionInput(
@@ -471,6 +512,37 @@ private func transcriptSnapshot(
         completeness: .complete,
         language: LanguageTag("en"),
         segments: segments,
+        contentDigest: transcriptDigest("e"),
+        dataClassification: .internal,
+        fetchedAt: transcriptInstant(9)
+    )
+}
+
+private func transcriptSnapshotWithUntimedMiddleSegment(
+    firstTimedRange: MediaTimeRange,
+    finalTimedRange: MediaTimeRange
+) throws -> TranscriptSourceSnapshot {
+    try TranscriptSourceSnapshot(
+        reference: transcriptReference(),
+        authority: .official,
+        completeness: .complete,
+        language: LanguageTag("en"),
+        segments: [
+            TranscriptSourceSegment(
+                sequence: 1,
+                text: "First timed synthetic segment.",
+                timeRange: firstTimedRange
+            ),
+            TranscriptSourceSegment(
+                sequence: 2,
+                text: "Untimed synthetic segment."
+            ),
+            TranscriptSourceSegment(
+                sequence: 3,
+                text: "Final timed synthetic segment.",
+                timeRange: finalTimedRange
+            )
+        ],
         contentDigest: transcriptDigest("e"),
         dataClassification: .internal,
         fetchedAt: transcriptInstant(9)
