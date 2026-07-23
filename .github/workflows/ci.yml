@@ -73,5 +73,13 @@ jobs:
           swift test -Xswiftc -warnings-as-errors --filter GoldenFixtureTests
           swift test -Xswiftc -warnings-as-errors --filter Task010HistoricalComparisonGoldenTests
 
-      - name: Run complete synthetic-safe suite
-        run: swift test -Xswiftc -warnings-as-errors
+      - name: Validate isolated historical scale bound
+        run: >-
+          swift test -Xswiftc -warnings-as-errors
+          --filter historicalIndexAndFilteredQueryStayBoundedAtTenThousandPublishedPositions
+
+      - name: Run remaining synthetic-safe suite
+        run: >-
+          swift test -Xswiftc -warnings-as-errors
+          --skip
+          'historicalIndexAndFilteredQueryStayBoundedAtTenThousandPublishedPositions|threeHourRetryAcrossManagerRestartPreservesExactCoverageAndTraceability'
