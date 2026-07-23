@@ -18,11 +18,11 @@ authorized_post_mvp_work:
 post_mvp_initiatives:
   blue_minutes_meeting_research:
     title: "Blue Minutes Meeting / Research integration"
-    status: "governance_accepted_phase_1_not_authorized"
+    status: "phase_1_change_group_1_accepted"
     task_sequence_status: "independent post-MVP initiative; not a numbered Task 012"
-    authorization_scope: "governance and documentation only"
+    authorization_scope: "Phase 1 Change Group 1 contracts and read-only compatibility adapters only; Change Group 2 and later work are not authorized"
     local_branch: "codex/blue-minutes-governance"
-    local_change_set_status: "accepted and committed locally at 1184b3c27f03404b4c87127fffc045be012842ca; not pushed or otherwise published"
+    local_change_set_status: "Change Group 1 is accepted under the maintainer's explicit local-commit command and included in this intentional local change set; not pushed or otherwise published"
     product_plan: "docs/BLUE_MINUTES_MEETING_RESEARCH_MVP_PLAN.md"
     product_plan_sha256: "98c5abd3f77917df89df64b638e74140ea657289590a884da1e58ed00aed61e8"
     phase_0_records:
@@ -31,12 +31,12 @@ post_mvp_initiatives:
       - "docs/MEETING_RESEARCH_GAP_ANALYSIS.md"
       - "docs/MEETING_RESEARCH_PHASE1_PROPOSAL.md"
     accepted_architecture_decision: "docs/adr/ADR-0018-blue-minutes-meeting-research-integration.md"
-    implementation_status: "not started"
+    implementation_status: "Change Group 1 accepted; Change Group 2 not started and not authorized"
     schema_status: "schema v10 unchanged"
-    runtime_status: "no source, test, dependency, user-data, or application behavior change"
+    runtime_status: "provider-neutral Domain/Application contracts and pure read-only SourceAssetV1, FinalBriefingV1, HistoricalComparisonV1, and EvidenceRefV1 projection adapters only; no persistence, production composition, provider, network, UI, task, automation, CLI, MCP, dependency, file-layout, or user-data change"
     audit_baseline: "d473b7037d7014ef0ae4e18d2c72463847347d8e"
-    rollback_anchor: "d473b7037d7014ef0ae4e18d2c72463847347d8e"
-    next_gate: "separately authorized GitHub publication or exact Phase 1 change group; neither is authorized by the local governance commit"
+    rollback_anchor: "a3b21d275e0701b4d8df5877a77a67c78242267d"
+    next_gate: "Change Group 2 requires a separate explicit command; GitHub publication and every release/distribution action remain separately gated"
 accepted_tasks:
   - "001"
   - "002"
@@ -57,8 +57,8 @@ accepted_tasks:
   - "011"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "1184b3c27f03404b4c87127fffc045be012842ca (accepted Blue Minutes governance baseline; d473b7037d7014ef0ae4e18d2c72463847347d8e remains the pre-governance rollback anchor; b45b38abc68739d008bad733479286438a4b4bc8 is the v0.1.0 source-release baseline, e6215373fbefa61f911ca4ee65c33852fd2dea76 is the public-conversion baseline, and this ledger-only acceptance reconciliation follows as a separate local commit)"
-working_tree_status_summary: "local branch codex/blue-minutes-governance contains the accepted, locally committed governance/documentation-only Blue Minutes Meeting / Research baseline at 1184b3c27f03404b4c87127fffc045be012842ca; the product plan is under docs, ADR-0018 records accepted compatibility defaults, and the initiative remains independent of the numbered MVP sequence with Phase 1 not authorized; production source, tests, Package.swift, Package.resolved, schema v10, dependencies, user data, and application behavior are unchanged; no push, Pull Request, release, or remote mutation has been performed"
+last_known_git_head: "a3b21d275e0701b4d8df5877a77a67c78242267d (accepted Blue Minutes governance ledger reconciliation and authorization-time rollback anchor for the uncommitted Phase 1 Change Group 1 change set; 1184b3c27f03404b4c87127fffc045be012842ca is the governance baseline)"
+working_tree_status_summary: "local branch codex/blue-minutes-governance contains the maintainer-accepted Phase 1 Change Group 1 local change set: five new provider-neutral Domain/Application contract and pure adapter source files, three new focused test files, and the acceptance ledger transition; schema v10, Package.swift, Package.resolved, existing semantic payloads, existing production wiring, dependencies, file layout, and user data are unchanged; Change Group 2 is not started; no push, Pull Request, release, deployment, or remote mutation has been performed"
 last_verification_commands:
   - "Codex Security standard repository scan ec5ba727-af63-4f1a-bd8c-feb3001ed3a2 with 134/134 receipts, validation, reconciliation, attack-path analysis, sealed manifest/findings/coverage/report/SARIF, and completion indexing"
   - "swift test --scratch-path <new temporary directory> -Xswiftc -warnings-as-errors"
@@ -81,6 +81,7 @@ last_verification_commands:
   - "v0.1.0 source-release preparation: Issue #8 and PR #9; BlueMinutes-first README, SemVer/changelog policy, source release notes, safe stage-only quick start, focused public-brand tests, local warning-as-error build and 248-test run, Markdown-link and application-length checks, exact-head CI run 29968562103 attempt 2, CodeQL run 29968560184, and resolved review thread"
   - "authorized v0.1.0 source release: PR #9 rebase merge; exact-main CI run 29969615653 attempt 2 on unchanged b45b38a; annotated tag push; regular GitHub Release creation; tag-peel, release-state, empty-uploaded-assets, signed-out HTTP, raw README, and clean working-tree verification"
   - "Blue Minutes governance acceptance and local commit: exact eight-path documentation allowlist; branch, base HEAD, index, root-plan absence, canonical-plan hash, and runtime-path checks; YAML parse and task/initiative assertions; local Markdown links and concrete current-path references; Markdown fences, strict whitespace with the plan's four original Markdown hard breaks preserved, strict credential/key/private-path patterns, ADR/proposal status, schema-v10/no-Task-012 assertions, staged-scope and identity verification, baseline commit 1184b3c27f03404b4c87127fffc045be012842ca, and ledger-only post-commit reconciliation"
+  - "Phase 1 Change Group 1: warning-as-error Swift build; 16 focused Research/Transcript contract tests; 39 existing canonical/provider/migration/transcript compatibility tests; complete synthetic-safe warning-as-error Swift suite; package manifest, exact-path scope, schema-v10, no-AppCapabilities, no-production-wiring, dependency-drift, and whitespace checks"
 last_verification_results:
   - "post-MVP documentation reconciliation is committed at 5cd59015277814206ca7328f6cfb89e42c252f4c after the authorized metadata-preserving private-path and GitHub-noreply history sanitizations: exactly 20 governance/architecture/ADR documents changed, all 35 checked local link targets resolve, the stale-reference and secret-pattern gates are clear, and the tracked working tree was clean before this ledger-only refresh; no production code, test, dependency, release artifact, push, tag, release, or distribution changed"
   - "the final new-scratch full run passes 242 tests in 42 suites with warnings as errors; the ordinary run truthfully skips three opt-in installed-model routes, and the separate new-scratch synthetic-only opt-in run passes all three in 6.016 seconds"
@@ -110,9 +111,12 @@ last_verification_results:
   - "PR #9 publishes the BlueMinutes-first README and v0.1.0 source-release documentation; the only actionable review comment restored --stage-only as the safe quick-start default and added a regression assertion; exact-head CI attempt 2 and both CodeQL analyses pass, while the first CI attempt recorded only the known shared-runner wall-clock performance fluctuation"
   - "v0.1.0 is a regular, non-draft, non-prerelease GitHub source Release; annotated tag v0.1.0 peels to exact protected-main commit b45b38a, exact-main CI run 29969615653 attempt 2 passes on that unchanged SHA, signed-out release and raw-README requests return HTTP 200, and the Release contains zero uploaded binary assets"
   - "the accepted Blue Minutes governance baseline is committed locally at 1184b3c27f03404b4c87127fffc045be012842ca on codex/blue-minutes-governance with exactly eight governance/document paths; the root plan is absent and the canonical docs copy retains SHA-256 98c5abd3f77917df89df64b638e74140ea657289590a884da1e58ed00aed61e8; ledger YAML, local links, concrete current paths, fences, strict whitespace with the plan's four original Markdown hard breaks preserved, strict sensitive-pattern, canonical ADR, Phase 1 not-authorized, schema-v10, no-new-numbered-Task-012, staged-scope, and commit-identity gates pass; Sources, Tests, Package.swift, Package.resolved, production behavior, schema, dependencies, and user data are unchanged; the documentation-only gate relies on the immediately preceding Phase 0 warning-clean build and 248-test/43-suite baseline rather than rerunning Swift; no push, Pull Request, release, or remote mutation occurred"
+  - "Phase 1 Change Group 1 adds only the accepted provider-neutral identities and scalar values, immutable Research/Artifact/Conversation/Instruction/Citation contracts, separate transcript-source provider and application resolver contracts, and pure exact-revision compatibility adapters; provider snapshots cannot carry the application-owned canonical-audio proof, untimed text cannot satisfy audio coverage, instruction layers cannot shadow protected policy, and existing immutable semantic revisions remain authoritative"
+  - "the final synthetic-safe warning-as-error run passes 264 tests in 46 suites with zero failures; the 16 new focused tests and 39 selected compatibility tests pass separately; three installed Apple-model checks remain explicitly skipped because live-model validation is opt-in; package dependencies, schema v10, existing production source signatures/wiring, user data, and existing semantic payload bytes/hashes are unchanged"
 open_P0_decisions: []
 open_P1_decisions: []
 known_out_of_scope_findings:
+  - "Phase 1 Change Group 1 intentionally adds no persistence, migration, ObjectStore implementation, provider or connector, network route, production resolver, capability composition, Setup Guide, Settings, Conversation/Chat UI, artifact UI, task registration, automation, CLI, MCP, export, or user-data behavior; all Change Group 2 and later work remains separately gated"
   - "Task 011 release classification is INTERNAL ALPHA: Developer ID, Team ID, notarization/stapling, affirmative Gatekeeper distribution approval, clean-machine install/update/rollback, final distribution icon/localization review, manual VoiceOver/keyboard/contrast/reduced-motion review, and intended-OS live TCC/capture interruption evidence are incomplete"
   - "current-version application reopen is proven for a cold copied workspace, but an actual older binary rollback and clean-machine restore are untested; compact verification summaries are preserved without full raw test transcripts"
   - "release-set replacement is a recoverable two-rename operation rather than a strict atomic exchange; interruption can require inspection of a fail-closed .previous-* directory"
@@ -136,6 +140,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
-next_eligible_task: "there is no next numbered MVP task; the Blue Minutes Meeting / Research governance baseline is accepted and committed locally at 1184b3c27f03404b4c87127fffc045be012842ca, but Phase 1 is not authorized; GitHub publication or an exact Phase 1 change group each requires a separate explicit command, while release, notarization, binary upload, installation, and distribution remain separately gated"
-last_updated_at: "2026-07-23T16:54:08Z"
+next_eligible_task: "there is no next numbered MVP task; Phase 1 Change Group 1 is accepted for its authorized local commit, while Change Group 2, GitHub publication, release, notarization, binary upload, installation, and distribution each require their own explicit authorization"
+last_updated_at: "2026-07-23T17:40:49Z"
 ```
