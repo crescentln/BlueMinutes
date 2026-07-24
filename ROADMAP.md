@@ -25,9 +25,10 @@ explicit maintainer authorization.
   CodeQL controls.
 - Published `v0.1.0` as the first public source release with a dated changelog
   and release notes, without attaching an unverified application binary.
-- Published `v0.2.0` as a source-only, default-off Meeting / Research contract
-  and validation foundation, without adding a Research interface, provider,
-  persistence, migration, network route, or binary asset.
+- Established the `v0.2.0` source-release scope as a source-only, default-off
+  Meeting / Research contract and validation foundation, without adding a
+  Research interface, provider, persistence, migration, network route, or
+  binary asset.
 
 No distributable binary, signing, notarization, installer, package, updater, or
 deployment is part of this source-release milestone.
