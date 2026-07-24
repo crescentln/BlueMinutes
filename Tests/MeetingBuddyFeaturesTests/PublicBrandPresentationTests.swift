@@ -46,6 +46,13 @@ struct PublicBrandPresentationTests {
         #expect(changelog.contains("## [0.2.0] - 2026-07-23"))
         #expect(changelog.contains("## [0.1.0] - 2026-07-22"))
 
+        let roadmap = try source("ROADMAP.md")
+        #expect(
+            roadmap.contains(
+                "Established the `v0.2.0` source-release scope as a source-only"
+            )
+        )
+
         let currentReleaseNotes = try source("docs/RELEASE_NOTES_0.2.0.md")
         #expect(
             currentReleaseNotes.contains(

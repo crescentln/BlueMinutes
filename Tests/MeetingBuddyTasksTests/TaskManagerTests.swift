@@ -202,6 +202,10 @@ struct TaskManagerTests {
     func cancellationIsCooperativeAndCleansJobOwnedTemporaryData() async throws {
         let workspace = try TaskTestWorkspace()
         defer { workspace.cleanup() }
+        let repository = CancellationFaultInjectingRepository(
+            underlying: workspace.repository,
+            fault: .optimisticLockOnce
+        )
         let jobType = try JobType("cancellable-work")
         let executor = ClosureTaskExecutor(jobType: jobType) { context in
             _ = try await context.writeTemporaryFile(
@@ -220,7 +224,7 @@ struct TaskManagerTests {
             return try JobExecutionResult()
         }
         let manager = try LocalTaskManager(
-            repository: workspace.repository,
+            repository: repository,
             temporaryStorage: workspace.temporaryStorage,
             logStore: workspace.logStore,
             clock: SteppingTaskClock(),
@@ -235,12 +239,48 @@ struct TaskManagerTests {
         _ = try await manager.enqueue(request)
         _ = try await waitForJob(manager, jobID: request.jobID, state: .running)
         _ = try await manager.cancel(jobID: request.jobID)
+        #expect(await repository.injectedFaultCount == 1)
         _ = try await waitForJob(manager, jobID: request.jobID, state: .cancelled)
         let taskDirectory = workspace.root.appendingPathComponent(
             ".tasks/\(request.jobID.canonicalString)",
             isDirectory: true
         )
         #expect(!FileManager.default.fileExists(atPath: taskDirectory.path))
+    }
+
+    @Test
+    func cancellationPropagatesNonOptimisticRepositoryFailure() async throws {
+        let workspace = try TaskTestWorkspace()
+        defer { workspace.cleanup() }
+        let release = ExecutionRelease()
+        let repository = CancellationFaultInjectingRepository(
+            underlying: workspace.repository,
+            fault: .nonOptimisticOnce
+        )
+        let jobType = try JobType("cancellation-repository-failure")
+        let executor = ClosureTaskExecutor(jobType: jobType) { _ in
+            await release.wait()
+            return try JobExecutionResult()
+        }
+        let manager = try LocalTaskManager(
+            repository: repository,
+            temporaryStorage: workspace.temporaryStorage,
+            logStore: workspace.logStore,
+            clock: SteppingTaskClock(),
+            maximumConcurrentJobs: 1,
+            executors: [executor]
+        )
+        let request = try makeTaskRequest(suffix: 62, jobType: jobType)
+        _ = try await manager.enqueue(request)
+        _ = try await waitForJob(manager, jobID: request.jobID, state: .running)
+
+        await #expect(throws: InjectedCancellationRepositoryError.self) {
+            _ = try await manager.cancel(jobID: request.jobID)
+        }
+        #expect(await repository.injectedFaultCount == 1)
+
+        await release.release()
+        _ = try await waitForJob(manager, jobID: request.jobID, state: .succeeded)
     }
 
     @Test
@@ -653,6 +693,88 @@ private actor ManagedAssetRecoveryProbe: ManagedAssetRecoveryService {
             repairRequiredOperationCount: 0,
             truncated: false
         )
+    }
+}
+
+private enum InjectedCancellationRepositoryError: Error {
+    case syntheticFailure
+}
+
+private actor CancellationFaultInjectingRepository: JobRepository {
+    enum Fault: Sendable {
+        case optimisticLockOnce
+        case nonOptimisticOnce
+    }
+
+    private let underlying: any JobRepository
+    private let fault: Fault
+    private(set) var injectedFaultCount = 0
+
+    init(underlying: any JobRepository, fault: Fault) {
+        self.underlying = underlying
+        self.fault = fault
+    }
+
+    func create(_ record: JobRecord) async throws {
+        try await underlying.create(record)
+    }
+
+    func job(id: JobID) async throws -> JobRecord? {
+        try await underlying.job(id: id)
+    }
+
+    func job(
+        jobType: JobType,
+        idempotencyKey: JobIdempotencyKey
+    ) async throws -> JobRecord? {
+        try await underlying.job(jobType: jobType, idempotencyKey: idempotencyKey)
+    }
+
+    func jobs(states: Set<JobState>?) async throws -> [JobRecord] {
+        try await underlying.jobs(states: states)
+    }
+
+    func replace(
+        _ record: JobRecord,
+        expectedVersion: UInt64,
+        changedAt: UTCInstant
+    ) async throws {
+        if record.state == .cancellationRequested, injectedFaultCount == 0 {
+            injectedFaultCount += 1
+            switch fault {
+            case .optimisticLockOnce:
+                guard let current = try await underlying.job(id: record.jobID) else {
+                    throw JobContractError.jobNotFound(record.jobID)
+                }
+                let concurrentCheckpoint = try current.updatingProgress(
+                    current.progress,
+                    checkpoint: current.checkpoint
+                )
+                try await underlying.replace(
+                    concurrentCheckpoint,
+                    expectedVersion: current.recordVersion,
+                    changedAt: changedAt
+                )
+                throw JobContractError.optimisticLockFailed(record.jobID)
+            case .nonOptimisticOnce:
+                throw InjectedCancellationRepositoryError.syntheticFailure
+            }
+        }
+        try await underlying.replace(
+            record,
+            expectedVersion: expectedVersion,
+            changedAt: changedAt
+        )
+    }
+
+    func validateInputRevisionsAreCurrent(
+        _ revisions: [SemanticRevisionReference]
+    ) async throws {
+        try await underlying.validateInputRevisionsAreCurrent(revisions)
+    }
+
+    func databaseHealth() async throws -> TaskDatabaseHealth {
+        try await underlying.databaseHealth()
     }
 }
 

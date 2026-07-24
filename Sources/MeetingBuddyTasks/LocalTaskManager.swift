@@ -163,51 +163,62 @@ public actor LocalTaskManager: TaskRuntimeManaging {
     }
 
     public func cancel(jobID: JobID) async throws -> JobRecord {
-        let current = try await requireJob(jobID)
-        if current.state == .cancelled || current.state == .cancellationRequested {
-            return current
-        }
-        let now = clock.now()
-        switch current.state {
-        case .queued, .failed, .interrupted:
-            let replacement = try current.transitioning(to: .cancelled, at: now)
-            try await repository.replace(
-                replacement,
-                expectedVersion: current.recordVersion,
-                changedAt: now
-            )
-            try? await temporaryStorage.cleanupDirectory(current.temporaryDirectory)
-            await log(
-                level: .notice,
-                category: "job-state",
-                jobID: jobID,
-                message: .publicValue("Job cancelled")
-            )
-            return replacement
-        case .running, .pauseRequested, .paused:
-            let replacement = try current.transitioning(
-                to: .cancellationRequested,
-                at: now
-            )
-            try await repository.replace(
-                replacement,
-                expectedVersion: current.recordVersion,
-                changedAt: now
-            )
-            if let gate = executionGates[jobID] {
-                await gate.cancel()
+        for _ in 0..<8 {
+            let current = try await requireJob(jobID)
+            if current.state == .cancelled || current.state == .cancellationRequested {
+                return current
             }
-            runningTasks[jobID]?.cancel()
-            await log(
-                level: .notice,
-                category: "job-state",
-                jobID: jobID,
-                message: .publicValue("Cancellation requested")
-            )
-            return replacement
-        default:
-            throw JobContractError.transitionNotAllowed(from: current.state, to: .cancelled)
+            let now = clock.now()
+            switch current.state {
+            case .queued, .failed, .interrupted:
+                let replacement = try current.transitioning(to: .cancelled, at: now)
+                do {
+                    try await repository.replace(
+                        replacement,
+                        expectedVersion: current.recordVersion,
+                        changedAt: now
+                    )
+                } catch JobContractError.optimisticLockFailed {
+                    continue
+                }
+                try? await temporaryStorage.cleanupDirectory(current.temporaryDirectory)
+                await log(
+                    level: .notice,
+                    category: "job-state",
+                    jobID: jobID,
+                    message: .publicValue("Job cancelled")
+                )
+                return replacement
+            case .running, .pauseRequested, .paused:
+                let replacement = try current.transitioning(
+                    to: .cancellationRequested,
+                    at: now
+                )
+                do {
+                    try await repository.replace(
+                        replacement,
+                        expectedVersion: current.recordVersion,
+                        changedAt: now
+                    )
+                } catch JobContractError.optimisticLockFailed {
+                    continue
+                }
+                if let gate = executionGates[jobID] {
+                    await gate.cancel()
+                }
+                runningTasks[jobID]?.cancel()
+                await log(
+                    level: .notice,
+                    category: "job-state",
+                    jobID: jobID,
+                    message: .publicValue("Cancellation requested")
+                )
+                return replacement
+            default:
+                throw JobContractError.transitionNotAllowed(from: current.state, to: .cancelled)
+            }
         }
+        throw JobContractError.optimisticLockFailed(jobID)
     }
 
     public func retry(jobID: JobID) async throws -> JobRecord {
