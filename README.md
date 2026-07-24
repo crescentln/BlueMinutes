@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Swift-6-orange.svg" alt="Swift 6">
 </p>
 
-> **By a diplomat, for diplomats.**
+> **For diplomats, multilateral practitioners, and policy researchers who need meeting records they can trace back to evidence.**
 
 BlueMinutes is an independent, one-person open-source project in its early
 stages, created and maintained in my own time. Development may move gradually,
@@ -46,8 +46,20 @@ does not add a Research interface, connector, external provider, or persistent
 Research data. A signed and notarized app download is a separate future
 distribution milestone.
 
+## Product preview
+
+These screenshots show the current local Meeting workflow in a disposable
+synthetic empty workspace. They contain no real meeting or user data. They were
+captured from a local development build; they are not a Developer ID-signed or
+notarized app download.
+
+| Local media intake | Bounded UN Web TV metadata |
+| --- | --- |
+| ![BlueMinutes Local Media intake in a synthetic empty workspace](docs/assets/screenshots/local-media.png) | ![BlueMinutes bounded UN Web TV metadata form in a synthetic empty workspace](docs/assets/screenshots/un-web-tv-metadata.png) |
+
 ## Contents
 
+- [Product preview](#product-preview)
 - [What BlueMinutes does](#what-blueminutes-does)
 - [Beyond conventional speech-to-text](#beyond-conventional-speech-to-text)
 - [Current capabilities](#current-capabilities)
