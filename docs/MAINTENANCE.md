@@ -70,7 +70,30 @@ release authorization is a separate decision.
 
 ## Required checks
 
-The baseline local gate is:
+The complete quality gate remains mandatory, but it does not need to run on the
+maintainer Mac by default. For maintainer-run Codex work, use a focused local
+development loop and make the exact Pull Request head on GitHub-hosted macOS CI
+the normal complete-gate authority. This reduces repeated local compilation
+without weakening merge requirements.
+
+### Focused local development loop
+
+- Documentation-only changes run link, status/scope, Markdown, whitespace, and
+  sensitive-content checks. They do not require a Swift build unless they
+  change executable configuration or their Issue explicitly requires one.
+- Behavioral changes run the smallest affected test target, suite, or case.
+- Cross-module, schema, recovery, security, and performance changes run every
+  focused risk-relevant suite required by the Issue. Add an incremental local
+  build only when it gives useful immediate feedback.
+- Do not treat the absence of a local full-suite run as passing evidence. The
+  exact Pull Request head must pass the complete remote gate before merge.
+- Do not expand automatically into repeated local clean builds or fresh scratch
+  paths. Use them only when a reproducibility problem or risk-specific
+  acceptance criterion requires them.
+
+### Complete GitHub macOS gate
+
+GitHub-hosted macOS CI runs the complete baseline:
 
 ```sh
 swift package resolve
@@ -93,6 +116,33 @@ Also run every focused suite relevant to the change. At minimum:
 
 Installed-model tests are opt-in and synthetic-only. A skip is not a pass for
 the installed-model path.
+
+### Native and manual exceptions
+
+Use Xcode or other local native tooling only when hosted CI cannot establish the
+required evidence, including SwiftUI/AppKit visual behavior, microphone or
+ScreenCaptureKit permissions, TCC, real interruption/device changes,
+accessibility, Instruments profiling, signing, notarization, Gatekeeper,
+installation, or release validation.
+
+The Swift command-line tools may use the installed Xcode toolchain without
+opening the Xcode application. Hosted CI must never be described as proof of
+real TCC, capture, accessibility, signing, notarization, or clean-machine
+behavior.
+
+### Build-cache and maintainer-machine discipline
+
+Keep the ignored `.build` directory and SwiftPM package caches for incremental
+reuse. Do not schedule broad cache cleanup or repeatedly run
+`swift package clean`; rebuilding discarded caches creates additional local
+work and disk writes. Cleanup requires an exact measured target, a reason such
+as corruption or material disk pressure, confirmation that no build uses the
+target, and the applicable authorization.
+
+Do not use the maintainer Mac as a self-hosted Actions runner for this workflow.
+After an authorized branch push, GitHub-hosted checks continue while the Mac
+sleeps or is offline. See `docs/CODEX_MAINTENANCE_WORKFLOW.md` for the Codex
+execution and completion-report contract.
 
 ## Database migrations
 
