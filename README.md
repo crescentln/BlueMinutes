@@ -39,8 +39,8 @@ conditions, exact source evidence, review state, and later corrections.
 BlueMinutes is not affiliated with, sponsored by, or endorsed by the United
 Nations, any United Nations entity, or any government.
 
-The current public version, `v0.2.0`, is a source release for developers and
-early evaluators who build BlueMinutes locally. It adds a hidden, default-off
+The `v0.2.0` milestone is a source release for developers and early evaluators
+who build BlueMinutes locally. It adds a hidden, default-off
 compatibility and validation foundation for future Meeting / Research work; it
 does not add a Research interface, connector, external provider, or persistent
 Research data. A signed and notarized app download is a separate future

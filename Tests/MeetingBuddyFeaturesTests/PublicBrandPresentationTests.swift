@@ -32,7 +32,7 @@ struct PublicBrandPresentationTests {
     func visibleBrandChangesPreserveCompatibilityIdentifiers() throws {
         let readme = try source("README.md")
         #expect(readme.contains("> **By a diplomat, for diplomats.**"))
-        #expect(readme.contains("The current public version, `v0.2.0`"))
+        #expect(readme.contains("The `v0.2.0` milestone is a source release"))
         #expect(readme.contains("Every related capability remains disabled by default"))
         #expect(readme.contains("legacy `MeetingBuddy` identifier"))
         #expect(readme.contains("./script/build_and_run.sh --stage-only"))
