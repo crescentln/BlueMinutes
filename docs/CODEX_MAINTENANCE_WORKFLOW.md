@@ -14,7 +14,9 @@ current repository evidence, and the user's explicit authorization.
    decisions before editing.
 4. Create or use the Issue's short-lived branch; never work directly on `main`.
 5. Make the smallest compatible change and add regression tests.
-6. Run focused checks, then the complete required gate.
+6. Run the smallest useful focused checks locally. Run the complete required
+   gate on GitHub-hosted macOS CI by default, plus any risk-relevant native
+   checks that CI cannot prove.
 7. Inspect the intended diff, staged files, ignored material, secrets, and large
    files before committing.
 8. Create a Pull Request; do not merge without explicit user authorization.
@@ -24,6 +26,92 @@ current repository evidence, and the user's explicit authorization.
 Codex must preserve user data, immutable evidence lineage, backward
 compatibility, Storage Service ownership, Task Manager routing, approved AI
 provider interfaces, and fail-closed structured-output validation.
+
+## Low-load local execution policy
+
+The required quality gate is unchanged. This policy changes where work runs,
+not what must pass. Codex cloud tasks are not used for repository maintenance.
+The maintainer Mac is the control, review, and focused-validation surface; it
+is not the default full-build machine.
+
+### Default development loop
+
+1. Inspect only the Issue, applicable governance, and the smallest relevant
+   source and test paths.
+2. Make one bounded, reviewable change.
+3. For documentation-only work, run link, status, scope, whitespace, and
+   sensitive-content checks; do not run Swift merely because the repository
+   contains Swift.
+4. For behavior changes, run the smallest affected test target, suite, or case.
+   Add an incremental `swift build` only when it provides useful immediate
+   cross-module feedback.
+5. After separately authorized branch publication, require the exact Pull
+   Request head to pass the complete GitHub-hosted macOS CI gate. CodeQL and
+   review gates remain unchanged.
+6. Iterate from focused evidence or CI failures. Do not expand automatically
+   into repeated local full-suite or clean-scratch runs.
+
+| Change type | Local default | Required additional evidence |
+| --- | --- | --- |
+| Documentation only | Links, status/scope assertions, diff, and sensitive-content checks | Exact-head Pull Request checks when published |
+| Focused behavior or regression | Affected `swift test --filter ...` suite or case | Complete GitHub macOS CI |
+| Cross-module, schema, recovery, or security | Risk-relevant focused suites; incremental build only when useful | Complete CI plus every Issue-specific migration, recovery, adversarial, or security gate |
+| SwiftUI, AppKit, capture, TCC, or accessibility | Focused structural tests where available | Complete CI plus explicit native/manual evidence |
+| Signing, notarization, installation, or release | Preparation checks authorized by the Issue | Exact release gate, native tooling, and clean-machine evidence under separate authorization |
+
+### Xcode and native validation
+
+`Package.swift` is the normal package entry point. Focused local work uses
+SwiftPM. The Swift command-line tools may use the installed Xcode toolchain
+without opening the Xcode application.
+
+Open Xcode only when the Issue requires evidence that command-line or hosted CI
+cannot provide, including:
+
+- SwiftUI or AppKit visual debugging;
+- microphone, ScreenCaptureKit, application-audio, or TCC behavior;
+- real interruption, sleep, device-change, or long-capture behavior;
+- VoiceOver, keyboard, contrast, reduced-motion, or other manual accessibility
+  review;
+- Instruments profiling; or
+- signing, Archive, notarization, Gatekeeper, installation, or distribution
+  verification.
+
+Hosted build/test success is not native TCC, capture, accessibility, signing,
+notarization, or clean-machine proof. Keep those gaps explicit.
+
+### Local artifacts and machine use
+
+- Preserve the ignored `.build` directory and normal SwiftPM package caches for
+  incremental reuse. Do not schedule `swift package clean`, fresh scratch
+  builds, or broad cache deletion.
+- Before any cleanup, measure the exact target, confirm that no build is using
+  it, explain the rebuild cost, obtain the required authorization, and use a
+  recoverable removal path where practical.
+- Never broadly delete Xcode `DerivedData`, Archives, simulator data, or shared
+  caches merely because one project needs maintenance.
+- GitHub-hosted runner artifacts stay remote unless an Issue explicitly
+  requires a reviewed artifact.
+- Do not register the maintainer Mac as a self-hosted Actions runner for this
+  workflow. After authorized branch publication, GitHub checks continue while
+  the Mac sleeps or is offline.
+
+### Exceptions and reporting
+
+An Issue may require a local full suite, fresh scratch path, Xcode, or other
+high-load evidence when migration, recovery, capture, performance, signing, or
+release risk warrants it. Before running that exception, Codex states why it is
+needed, the exact command or tool, the expected local load, and the evidence it
+will establish.
+
+Every completion report separates:
+
+- focused checks run locally;
+- exact-head GitHub CI and CodeQL results;
+- native/manual checks run locally;
+- skipped or unverified native paths;
+- whether Xcode was opened; and
+- material local build, archive, or distribution artifacts created.
 
 ## Standard prompts
 
