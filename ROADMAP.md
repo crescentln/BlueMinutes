@@ -25,10 +25,12 @@ explicit maintainer authorization.
   CodeQL controls.
 - Published `v0.1.0` as the first public source release with a dated changelog
   and release notes, without attaching an unverified application binary.
-- Established the `v0.2.0` source-release scope as a source-only, default-off
-  Meeting / Research contract and validation foundation, without adding a
+- Published `v0.2.0` as a source-only, default-off Meeting / Research contract
+  and validation foundation with zero uploaded assets, without adding a
   Research interface, provider, persistence, migration, network route, or
-  binary asset.
+  binary distribution.
+- Added high-resolution Local Media and UN Web TV Metadata screenshots from a
+  disposable synthetic empty workspace, with no real meeting or user data.
 
 No distributable binary, signing, notarization, installer, package, updater, or
 deployment is part of this source-release milestone.
@@ -38,8 +40,7 @@ deployment is part of this source-release milestone.
 - Perform a final professional name and trademark review before distribution;
   the current repository, app-store, package-registry, domain, and web screen is
   preliminary and not legal clearance.
-- Add a short demonstration and screenshots using synthetic or already-public
-  material only.
+- Add a short demonstration using synthetic or already-public material only.
 - Open several well-scoped Issues for contributor-sized work.
 - Collect honest early-user feedback without manufacturing adoption signals.
 

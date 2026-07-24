@@ -31,7 +31,12 @@ struct PublicBrandPresentationTests {
     @Test
     func visibleBrandChangesPreserveCompatibilityIdentifiers() throws {
         let readme = try source("README.md")
-        #expect(readme.contains("> **By a diplomat, for diplomats.**"))
+        #expect(
+            readme.contains(
+                "> **For diplomats, multilateral practitioners, and policy researchers"
+            )
+        )
+        #expect(!readme.contains("> **By a diplomat, for diplomats.**"))
         #expect(readme.contains("The `v0.2.0` milestone is a source release"))
         #expect(readme.contains("Every related capability remains disabled by default"))
         #expect(readme.contains("legacy `MeetingBuddy` identifier"))
@@ -54,7 +59,7 @@ struct PublicBrandPresentationTests {
         let roadmap = try source("ROADMAP.md")
         #expect(
             roadmap.contains(
-                "Established the `v0.2.0` source-release scope as a source-only"
+                "Published `v0.2.0` as a source-only, default-off Meeting / Research"
             )
         )
 
@@ -116,6 +121,37 @@ struct PublicBrandPresentationTests {
             )
         )
         #expect(!scalarValues.contains("MeetingBuddy contract timestamps"))
+    }
+
+    @Test
+    func readmePublishesPublicSafeProductPreview() throws {
+        let readme = try source("README.md")
+        let normalizedReadme = readme
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        #expect(readme.contains("## Product preview"))
+        #expect(normalizedReadme.contains("disposable synthetic empty workspace"))
+        #expect(normalizedReadme.contains("no real meeting or user data"))
+        #expect(
+            normalizedReadme.contains(
+                "not a Developer ID-signed or notarized app download"
+            )
+        )
+
+        let screenshotPaths = [
+            "docs/assets/screenshots/local-media.png",
+            "docs/assets/screenshots/un-web-tv-metadata.png",
+        ]
+        let pngSignature = Data([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+        for path in screenshotPaths {
+            #expect(readme.contains("(\(path))"))
+            let screenshot = try Data(
+                contentsOf: repositoryRoot.appendingPathComponent(path)
+            )
+            #expect(screenshot.count > 500_000)
+            #expect(screenshot.prefix(pngSignature.count) == pngSignature)
+        }
     }
 
     private var repositoryRoot: URL {
