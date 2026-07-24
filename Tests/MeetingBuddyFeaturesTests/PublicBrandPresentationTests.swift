@@ -45,6 +45,11 @@ struct PublicBrandPresentationTests {
         let changelog = try source("CHANGELOG.md")
         #expect(changelog.contains("## [0.2.0] - 2026-07-23"))
         #expect(changelog.contains("## [0.1.0] - 2026-07-22"))
+        #expect(
+            changelog.contains(
+                "Retried bounded cancellation transitions when concurrent checkpoint"
+            )
+        )
 
         let roadmap = try source("ROADMAP.md")
         #expect(
@@ -57,6 +62,11 @@ struct PublicBrandPresentationTests {
         #expect(
             currentReleaseNotes.contains(
                 "# BlueMinutes v0.2.0 — Default-Off Meeting / Research Foundation"
+            )
+        )
+        #expect(
+            currentReleaseNotes.contains(
+                "Task cancellation re-reads and retries bounded optimistic-lock conflicts"
             )
         )
 

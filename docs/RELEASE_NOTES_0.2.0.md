@@ -32,6 +32,9 @@ capability disabled.
 - Resource-bound coverage and historical-scale tests are isolated in CI so
   their validation thresholds are exercised once without changing product
   behavior.
+- Task cancellation re-reads and retries bounded optimistic-lock conflicts
+  caused by concurrent checkpoint persistence; unrelated repository failures
+  still surface and job-owned temporary data is still cleaned.
 
 ## What this release does not add
 

@@ -31,6 +31,12 @@ work.
   once in isolated or focused steps; product behavior and validation thresholds
   are unchanged.
 
+### Fixed
+
+- Retried bounded cancellation transitions when concurrent checkpoint
+  persistence advances the optimistic record version, while preserving
+  temporary-data cleanup and propagating unrelated repository failures.
+
 ### Security
 
 - The new transcript-source contract rejects external primary or authoritative
