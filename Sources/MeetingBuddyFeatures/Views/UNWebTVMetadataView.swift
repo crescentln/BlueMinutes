@@ -3,6 +3,7 @@ import SwiftUI
 
 struct UNWebTVMetadataView: View {
     @Bindable var store: MediaReviewStore
+    @Bindable var sceneState: MediaReviewSceneState
 
     var body: some View {
         ScrollView {
@@ -24,25 +25,25 @@ struct UNWebTVMetadataView: View {
             VStack(alignment: .leading, spacing: 12) {
                 TextField(
                     "https://webtv.un.org/en/asset/…/…",
-                    text: $store.unWebTVURL
+                    text: $sceneState.unWebTVURL
                 )
                 .textFieldStyle(.roundedBorder)
                 Toggle(
                     "Authorize one foreground GET to this exact official UN Web TV asset page. Do not fetch player, media, playlists, scripts, or subresources.",
-                    isOn: $store.unWebTVNetworkAuthorized
+                    isOn: $sceneState.unWebTVNetworkAuthorized
                 )
                 .toggleStyle(.checkbox)
                 .fixedSize(horizontal: false, vertical: true)
                 HStack {
-                    if let officialURL = store.validatedUNWebTVURL {
+                    if let officialURL = sceneState.validatedUNWebTVURL {
                         Link("Open Official Page", destination: officialURL)
                     }
                     Spacer()
                     Button("Fetch Metadata Candidate") {
-                        Task { await store.fetchUNWebTVMetadata() }
+                        Task { await store.fetchUNWebTVMetadata(using: sceneState) }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(store.isWorking || !store.unWebTVNetworkAuthorized)
+                    .disabled(store.isWorking || !sceneState.unWebTVNetworkAuthorized)
                 }
                 Text(
                     "Accepted URLs use HTTPS, the exact webtv.un.org host, a supported locale, and the bounded /asset/{collection}/{asset} shape with no query, fragment, user information, or custom port."
@@ -90,16 +91,19 @@ struct UNWebTVMetadataView: View {
     private var reviewCard: some View {
         GroupBox("Local review and correction") {
             Form {
-                TextField("Reviewed title", text: $store.reviewedUNTitle)
+                TextField("Reviewed title", text: $sceneState.reviewedUNTitle)
                 TextField(
                     "Reviewed description",
-                    text: $store.reviewedUNDescription,
+                    text: $sceneState.reviewedUNDescription,
                     axis: .vertical
                 )
-                TextField("Reviewed production date", text: $store.reviewedUNProductionDate)
+                TextField(
+                    "Reviewed production date",
+                    text: $sceneState.reviewedUNProductionDate
+                )
                 TextField(
                     "Reviewed language availability",
-                    text: $store.reviewedUNLanguageAvailability
+                    text: $sceneState.reviewedUNLanguageAvailability
                 )
                 LabeledContent("Media acquisition", value: "Not authorized and not implemented")
             }

@@ -5,11 +5,7 @@ import SwiftUI
 
 struct AnalysisReviewView: View {
     @Bindable var store: MediaReviewStore
-    @State private var selectedPositionRevisionID: RevisionID?
-    @State private var positionType: PositionType = .uncertain
-    @State private var statementDraft = ""
-    @State private var reservationsDraft = ""
-    @State private var conditionsDraft = ""
+    @Bindable var sceneState: MediaReviewSceneState
 
     var body: some View {
         Group {
@@ -19,14 +15,17 @@ struct AnalysisReviewView: View {
                 setupView
             }
         }
-        .onChange(of: selectedPositionRevisionID) { _, _ in
-            loadPositionDrafts()
+        .onAppear {
+            sceneState.analysis.reconcile(with: store.analysisReview)
+        }
+        .onChange(of: sceneState.analysis.selectedPositionID) { _, _ in
+            sceneState.analysis.reconcile(with: store.analysisReview)
         }
         .onChange(of: store.analysisReview?.ledger.ledgerID) { _, _ in
-            reconcileSelection()
+            sceneState.analysis.reconcile(with: store.analysisReview)
         }
         .onChange(of: store.analysisReview?.positions.map(\.revision.revisionID)) { _, _ in
-            reconcileSelection()
+            sceneState.analysis.reconcile(with: store.analysisReview)
         }
     }
 
@@ -47,7 +46,7 @@ struct AnalysisReviewView: View {
                                 Task { await store.refreshAnalysisRoute() }
                             }
                             Button("Analyze Locally") {
-                                Task { await store.startAnalysis() }
+                                Task { await store.startAnalysis(using: sceneState) }
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(
@@ -162,13 +161,13 @@ struct AnalysisReviewView: View {
                     .foregroundStyle(.orange)
                     Toggle(
                         "I reviewed every claim, qualification, speaker identity, and evidence link in this analysis.",
-                        isOn: $store.analysisClaimsConfirmed
+                        isOn: $sceneState.analysisClaimsConfirmed
                     )
                     Button("Confirm Exact Analysis Ledger") {
-                        Task { await store.confirmAnalysisReview() }
+                        Task { await store.confirmAnalysisReview(using: sceneState) }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!store.analysisClaimsConfirmed || store.isWorking)
+                    .disabled(!sceneState.analysisClaimsConfirmed || store.isWorking)
                 }
             }
             .padding()
@@ -274,7 +273,7 @@ struct AnalysisReviewView: View {
                 List(
                     review.positions,
                     id: \.revision.revisionID,
-                    selection: $selectedPositionRevisionID
+                    selection: positionSelection
                 ) { position in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(position.statement.text).lineLimit(2)
@@ -282,7 +281,7 @@ struct AnalysisReviewView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .tag(position.revision.revisionID)
+                    .tag(position.positionID)
                 }
                 .frame(minWidth: 260, idealWidth: 320, minHeight: 360)
 
@@ -299,42 +298,55 @@ struct AnalysisReviewView: View {
                             LabeledContent("Comparison state", value: position.comparisonState.encodedValue)
                             LabeledContent("Revision", value: short(position.revision.revisionID.canonicalString))
                                 .monospaced()
-                            Picker("Position type", selection: $positionType) {
+                            Picker(
+                                "Position type",
+                                selection: $sceneState.analysis.positionType
+                            ) {
                                 ForEach(PositionChoice.all) { choice in
                                     Text(choice.label).tag(choice.value)
                                 }
                             }
                             Text("Statement").font(.headline)
-                            TextEditor(text: $statementDraft)
+                            TextEditor(text: $sceneState.analysis.statement)
                                 .frame(minHeight: 110)
                                 .overlay { RoundedRectangle(cornerRadius: 6).stroke(.separator) }
                             Text("Reservations — one per line").font(.headline)
-                            TextEditor(text: $reservationsDraft)
+                            TextEditor(text: $sceneState.analysis.reservations)
                                 .frame(minHeight: 70)
                                 .overlay { RoundedRectangle(cornerRadius: 6).stroke(.separator) }
                             Text("Conditions — one per line").font(.headline)
-                            TextEditor(text: $conditionsDraft)
+                            TextEditor(text: $sceneState.analysis.conditions)
                                 .frame(minHeight: 70)
                                 .overlay { RoundedRectangle(cornerRadius: 6).stroke(.separator) }
                             Text("Saving creates an immutable user-confirmed Position revision. Dependent cards remain in history and are marked stale; they are not silently rewritten.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Button("Save Confirmed Position Revision") {
+                                guard let operation =
+                                    sceneState.beginDirectAnalysisSave()
+                                else { return }
                                 Task {
-                                    await store.correctPosition(
-                                        revisionID: position.revision.revisionID,
-                                        positionType: positionType,
-                                        statement: statementDraft,
-                                        reservations: lines(reservationsDraft),
-                                        conditions: lines(conditionsDraft)
+                                    let succeeded = await store.saveEditorDraft(
+                                        operation.request
                                     )
+                                    if sceneState.completeDirectEditorSave(
+                                        operation,
+                                        succeeded: succeeded,
+                                        updatedReviews: store.editorReviewSnapshot
+                                    ) {
+                                        sceneState.analysis.reconcile(
+                                            with: store.analysisReview
+                                        )
+                                    }
                                 }
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(
                                 store.isWorking
                                     || !review.isHumanConfirmed
-                                    || statementDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    || sceneState.analysis.statement
+                                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                                        .isEmpty
                             )
                         }
                         .padding()
@@ -376,7 +388,9 @@ struct AnalysisReviewView: View {
     }
 
     private func selectedPosition(in review: AnalysisReviewBundle) -> PositionV1? {
-        review.positions.first { $0.revision.revisionID == selectedPositionRevisionID }
+        review.positions.first {
+            $0.positionID == sceneState.analysis.selectedPositionID
+        }
     }
 
     private func representedName(
@@ -413,35 +427,11 @@ struct AnalysisReviewView: View {
         }
     }
 
-    private func reconcileSelection() {
-        guard let review = store.analysisReview else {
-            selectedPositionRevisionID = nil
-            return
-        }
-        if selectedPosition(in: review) == nil {
-            selectedPositionRevisionID = review.positions.first?.revision.revisionID
-        }
-        loadPositionDrafts()
-    }
-
-    private func loadPositionDrafts() {
-        guard let review = store.analysisReview,
-              let position = selectedPosition(in: review)
-        else {
-            positionType = .uncertain
-            statementDraft = ""
-            reservationsDraft = ""
-            conditionsDraft = ""
-            return
-        }
-        positionType = position.positionType
-        statementDraft = position.statement.text
-        reservationsDraft = position.reservations.map(\.text).joined(separator: "\n")
-        conditionsDraft = position.conditions.map(\.text).joined(separator: "\n")
-    }
-
-    private func lines(_ value: String) -> [String] {
-        value.split(whereSeparator: \.isNewline).map(String.init)
+    private var positionSelection: Binding<PositionID?> {
+        Binding(
+            get: { sceneState.analysis.selectedPositionID },
+            set: { sceneState.requestAnalysisSelection($0) }
+        )
     }
 
     private func short(_ value: String) -> String {

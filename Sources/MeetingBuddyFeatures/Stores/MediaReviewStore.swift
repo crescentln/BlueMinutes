@@ -31,43 +31,7 @@ public final class MediaReviewStore {
     public private(set) var webMetadataCandidate: UNWebTVMetadataCandidate?
     public private(set) var isWorking = false
     public private(set) var safeErrorMessage: String?
-
-    public var selectedSection: MediaReviewSection? = .intake
-    public var meetingTitle = ""
-    public var dataClassification: DataClassification = .internal
-    public var selectedTrack: MediaTrackIdentifier?
-    public var speechSourceKind: SpeechSourceKind = .unknown
-    public var languageTag = ""
-    public var transcriptSourceLanguageTag = "en"
-    public var transcriptTargetLanguageTag = ""
-    public var manualTranscriptText = ""
-    public var manualTranslationText = ""
-    public var manualCoverageConfirmed = false
-    public var analysisClaimsConfirmed = false
-    public var briefingExportFileName = "meeting-briefing"
-    public var captureMode: CaptureMode = .microphoneOnly
-    public var selectedMicrophoneDeviceID: String?
-    public var microphoneSpeechSourceKind: SpeechSourceKind = .originalSpeakerAudio
-    public var applicationSpeechSourceKind: SpeechSourceKind = .originalSpeakerAudio
-    public var recordingAcknowledged = false
-    public var unWebTVURL = ""
-    public var unWebTVNetworkAuthorized = false
-    public var reviewedUNTitle = ""
-    public var reviewedUNDescription = ""
-    public var reviewedUNProductionDate = ""
-    public var reviewedUNLanguageAvailability = ""
-    public var historyActorOrCountry = ""
-    public var historyTopic = ""
-    public var historyBody = ""
-    public var historyMeetingType = ""
-    public var historyStartDate = ""
-    public var historyEndDate = ""
-    public var selectedCurrentHistoryRevisionID: RevisionID?
-    public var selectedPriorHistoryRevisionID: RevisionID?
-    public var learnedPreferenceKind: LearnedPreferenceKind = .briefingLength
-    public var learnedPreferenceValue = ""
-    public var editingLearnedPreferenceID: LearnedPreferenceID?
-    public var editingLearnedPreferenceVersion: UInt64?
+    public private(set) var workspaceSession: UInt64 = 0
 
     @ObservationIgnored
     private let workflow: any MediaReviewWorkflow
@@ -75,6 +39,8 @@ public final class MediaReviewStore {
     private var pollingTask: Task<Void, Never>?
     @ObservationIgnored
     private var recordingPollingTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var hasAttemptedWorkspaceRestore = false
 
     public var blocksWorkspaceSwitch: Bool {
         recordingSession?.blocksWorkspaceSwitch == true
@@ -85,21 +51,38 @@ public final class MediaReviewStore {
         return !recordingSession.state.isTerminal
     }
 
-    public var validatedUNWebTVURL: URL? {
-        try? ValidatedUNWebTVAssetURL(unWebTVURL).url
+    public var blocksMediaReplacement: Bool {
+        [job, transcriptJob, analysisJob, briefingJob]
+            .compactMap { $0 }
+            .contains { !$0.state.isTerminal }
+    }
+
+    var editorReviewSnapshot: MediaReviewEditorReviewSnapshot {
+        MediaReviewEditorReviewSnapshot(
+            transcript: transcriptReview,
+            analysis: analysisReview,
+            briefing: briefingReview
+        )
     }
 
     public init(workflow: any MediaReviewWorkflow) {
         self.workflow = workflow
     }
 
-    public func restoreWorkspace() async {
+    public func restoreWorkspace(using sceneState: MediaReviewSceneState) async {
+        guard !hasAttemptedWorkspaceRestore, workspace == nil else { return }
+        hasAttemptedWorkspaceRestore = true
         await perform {
-            workspace = try await workflow.restoreWorkspace()
-            if workspace != nil {
+            let restoredWorkspace = try await workflow.restoreWorkspace()
+            if let restoredWorkspace {
+                advanceWorkspaceSession()
+                workspace = restoredWorkspace
+                resetMediaState()
+                sceneState.resetForWorkspaceChange()
                 let setup = try await workflow.recordingSetup()
                 recordingSetup = setup
                 recordingSession = setup.recoverableSession
+                sceneState.selectedMicrophoneDeviceID = setup.microphones.first?.id
                 if let session = setup.recoverableSession, !session.state.isTerminal {
                     beginRecordingPolling(jobID: session.jobID)
                 }
@@ -107,42 +90,60 @@ public final class MediaReviewStore {
         }
     }
 
-    public func openOrCreateWorkspace(at url: URL) async {
+    public func openOrCreateWorkspace(
+        at url: URL,
+        using sceneState: MediaReviewSceneState
+    ) async {
         guard !blocksWorkspaceSwitch else {
             safeErrorMessage = "Finish or retain the current recording before switching workspaces."
             return
         }
         await perform {
-            pollingTask?.cancel()
-            recordingPollingTask?.cancel()
-            workspace = try await workflow.openOrCreateWorkspace(at: url)
+            let openedWorkspace = try await workflow.openOrCreateWorkspace(at: url)
+            advanceWorkspaceSession()
+            workspace = openedWorkspace
             resetMediaState()
+            sceneState.resetForWorkspaceChange()
             let setup = try await workflow.recordingSetup()
             recordingSetup = setup
             recordingSession = setup.recoverableSession
+            sceneState.selectedMicrophoneDeviceID = setup.microphones.first?.id
         }
     }
 
-    public func inspectMedia(at url: URL) async {
+    public func inspectMedia(
+        at url: URL,
+        using sceneState: MediaReviewSceneState
+    ) async {
         await perform {
             let review = try await workflow.inspectSelectedMedia(at: url)
             pendingMedia = review
-            selectedTrack = review.inspection.audioTracks.count == 1
+            sceneState.selectedTrack = review.inspection.audioTracks.count == 1
                 ? review.inspection.audioTracks.first?.trackIdentifier
                 : nil
-            importedSource = nil
-            job = nil
         }
     }
 
-    public func discardPendingMedia() {
+    public func discardPendingMedia(using sceneState: MediaReviewSceneState) {
         workflow.discardPendingMedia()
         pendingMedia = nil
-        selectedTrack = nil
+        sceneState.selectedTrack = nil
     }
 
-    public func importAndProcess() async {
-        let title = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    public func importAndProcess(using sceneState: MediaReviewSceneState) async {
+        guard !sceneState.isInteractionLocked else {
+            safeErrorMessage = "Wait for the current editor or workspace operation to finish."
+            return
+        }
+        guard !sceneState.hasUnsavedEditorChanges else {
+            safeErrorMessage = "Save or discard every unpublished editor draft before replacing the current media workflow."
+            return
+        }
+        guard !blocksMediaReplacement else {
+            safeErrorMessage = "Wait for the current media workflow to finish before replacing its source."
+            return
+        }
+        let title = sceneState.meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, title.utf8.count <= 2_048 else {
             safeErrorMessage = "Enter a meeting title before importing media."
             return
@@ -151,12 +152,14 @@ public final class MediaReviewStore {
             safeErrorMessage = "Choose a supported local audio or video file first."
             return
         }
-        if pendingMedia.inspection.audioTracks.count > 1, selectedTrack == nil {
+        if pendingMedia.inspection.audioTracks.count > 1, sceneState.selectedTrack == nil {
             safeErrorMessage = "Select one audio track before processing this media."
             return
         }
         let language: LanguageTag?
-        let trimmedLanguage = languageTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLanguage = sceneState.languageTag.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         if trimmedLanguage.isEmpty {
             language = nil
         } else {
@@ -171,12 +174,13 @@ public final class MediaReviewStore {
             let result = try await workflow.importAndProcess(
                 MediaImportSubmission(
                     meetingTitle: title,
-                    dataClassification: dataClassification,
-                    selectedTrack: selectedTrack,
-                    speechSourceKind: speechSourceKind,
+                    dataClassification: sceneState.dataClassification,
+                    selectedTrack: sceneState.selectedTrack,
+                    speechSourceKind: sceneState.speechSourceKind,
                     language: language
                 )
             )
+            resetAcceptedMediaReviewState(using: sceneState)
             importedSource = result.0
             job = result.1
             self.pendingMedia = nil
@@ -199,7 +203,7 @@ public final class MediaReviewStore {
         }
     }
 
-    public func loadRecordingSetup() async {
+    public func loadRecordingSetup(using sceneState: MediaReviewSceneState) async {
         guard workspace != nil else { return }
         await perform {
             let setup = try await workflow.recordingSetup()
@@ -210,19 +214,21 @@ public final class MediaReviewStore {
                     beginRecordingPolling(jobID: recoverable.jobID)
                 }
             }
-            if selectedMicrophoneDeviceID == nil {
-                selectedMicrophoneDeviceID = setup.microphones.first?.id
+            if sceneState.selectedMicrophoneDeviceID == nil {
+                sceneState.selectedMicrophoneDeviceID = setup.microphones.first?.id
             }
         }
     }
 
-    public func startRecording() async {
-        let title = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    public func startRecording(using sceneState: MediaReviewSceneState) async {
+        let title = sceneState.meetingTitle.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         guard !title.isEmpty, title.utf8.count <= 2_048 else {
             safeErrorMessage = "Enter a meeting title before recording."
             return
         }
-        guard recordingAcknowledged else {
+        guard sceneState.recordingAcknowledged else {
             safeErrorMessage = "A visible recording requires the participant, policy, and legal-responsibility acknowledgement."
             return
         }
@@ -231,7 +237,9 @@ public final class MediaReviewStore {
             return
         }
         let language: LanguageTag?
-        let trimmedLanguage = languageTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLanguage = sceneState.languageTag.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         if trimmedLanguage.isEmpty {
             language = nil
         } else {
@@ -242,9 +250,11 @@ public final class MediaReviewStore {
                 return
             }
         }
-        let microphoneID = captureMode.requestedTrackKinds.contains(.microphone)
-            ? selectedMicrophoneDeviceID : nil
-        guard !captureMode.requestedTrackKinds.contains(.microphone) || microphoneID != nil else {
+        let microphoneID = sceneState.captureMode.requestedTrackKinds.contains(.microphone)
+            ? sceneState.selectedMicrophoneDeviceID : nil
+        guard !sceneState.captureMode.requestedTrackKinds.contains(.microphone)
+            || microphoneID != nil
+        else {
             safeErrorMessage = "Select one microphone for this recording session."
             return
         }
@@ -252,11 +262,11 @@ public final class MediaReviewStore {
             recordingSession = try await workflow.startRecording(
                 RecordingStartSubmission(
                     meetingTitle: title,
-                    dataClassification: dataClassification,
-                    mode: captureMode,
+                    dataClassification: sceneState.dataClassification,
+                    mode: sceneState.captureMode,
                     microphoneDeviceID: microphoneID,
-                    microphoneSpeechSourceKind: microphoneSpeechSourceKind,
-                    applicationSpeechSourceKind: applicationSpeechSourceKind,
+                    microphoneSpeechSourceKind: sceneState.microphoneSpeechSourceKind,
+                    applicationSpeechSourceKind: sceneState.applicationSpeechSourceKind,
                     language: language,
                     directUserAcknowledgement: true
                 )
@@ -277,16 +287,16 @@ public final class MediaReviewStore {
         }
     }
 
-    public func resumeRecording() async {
+    public func resumeRecording(using sceneState: MediaReviewSceneState) async {
         guard let recordingSession,
               recordingSession.state == .interrupted || recordingSession.state == .recovering
         else { return }
-        guard recordingAcknowledged else {
+        guard sceneState.recordingAcknowledged else {
             safeErrorMessage = "Resuming requires a fresh visible recording acknowledgement and source selection."
             return
         }
         let microphoneID = recordingSession.activeTrackKinds.contains(.microphone)
-            ? selectedMicrophoneDeviceID : nil
+            ? sceneState.selectedMicrophoneDeviceID : nil
         guard !recordingSession.activeTrackKinds.contains(.microphone) || microphoneID != nil else {
             safeErrorMessage = "Select one microphone before resuming this recording."
             return
@@ -303,13 +313,13 @@ public final class MediaReviewStore {
         }
     }
 
-    public func fetchUNWebTVMetadata() async {
-        let value = unWebTVURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    public func fetchUNWebTVMetadata(using sceneState: MediaReviewSceneState) async {
+        let value = sceneState.unWebTVURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (try? ValidatedUNWebTVAssetURL(value)) != nil else {
             safeErrorMessage = "Use an exact official UN Web TV asset URL such as https://webtv.un.org/en/asset/abc/asset-id."
             return
         }
-        guard unWebTVNetworkAuthorized else {
+        guard sceneState.unWebTVNetworkAuthorized else {
             safeErrorMessage = "Authorize this one foreground official-page metadata request."
             return
         }
@@ -319,23 +329,26 @@ public final class MediaReviewStore {
                 explicitNetworkAuthorization: true
             )
             webMetadataCandidate = candidate
-            reviewedUNTitle = firstMetadataValue(.title, in: candidate)
-            reviewedUNDescription = firstMetadataValue(.description, in: candidate)
-            reviewedUNProductionDate = firstMetadataValue(.productionDate, in: candidate)
-            reviewedUNLanguageAvailability = firstMetadataValue(
+            sceneState.reviewedUNTitle = firstMetadataValue(.title, in: candidate)
+            sceneState.reviewedUNDescription = firstMetadataValue(.description, in: candidate)
+            sceneState.reviewedUNProductionDate = firstMetadataValue(
+                .productionDate,
+                in: candidate
+            )
+            sceneState.reviewedUNLanguageAvailability = firstMetadataValue(
                 .languageAvailability,
                 in: candidate
             )
-            unWebTVNetworkAuthorized = false
+            sceneState.unWebTVNetworkAuthorized = false
         }
     }
 
-    public func refreshTranscriptRoute() async {
+    public func refreshTranscriptRoute(using sceneState: MediaReviewSceneState) async {
         guard let job, job.state == .succeeded else {
             safeErrorMessage = "Finish canonical local audio processing first."
             return
         }
-        guard let submission = transcriptSubmission() else { return }
+        guard let submission = transcriptSubmission(using: sceneState) else { return }
         await perform {
             routeReview = try await workflow.transcriptRoute(
                 canonicalJobID: job.jobID,
@@ -344,12 +357,12 @@ public final class MediaReviewStore {
         }
     }
 
-    public func startTranscript() async {
+    public func startTranscript(using sceneState: MediaReviewSceneState) async {
         guard let job, job.state == .succeeded else {
             safeErrorMessage = "Finish canonical local audio processing first."
             return
         }
-        guard let submission = transcriptSubmission() else { return }
+        guard let submission = transcriptSubmission(using: sceneState) else { return }
         await perform {
             let route = try await workflow.transcriptRoute(
                 canonicalJobID: job.jobID,
@@ -368,18 +381,20 @@ public final class MediaReviewStore {
         }
     }
 
-    public func publishManualTranscript() async {
+    public func publishManualTranscript(using sceneState: MediaReviewSceneState) async {
         guard let job, job.state == .succeeded else {
             safeErrorMessage = "Finish canonical local audio processing first."
             return
         }
-        guard let submission = transcriptSubmission() else { return }
-        let transcript = manualTranscriptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let submission = transcriptSubmission(using: sceneState) else { return }
+        let transcript = sceneState.manualTranscriptText.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         guard !transcript.isEmpty, transcript.utf8.count <= 65_536 else {
             safeErrorMessage = "Enter a manual transcript of at most 65,536 UTF-8 bytes."
             return
         }
-        guard manualCoverageConfirmed else {
+        guard sceneState.manualCoverageConfirmed else {
             safeErrorMessage = "Confirm that the manual text accounts for the complete recording."
             return
         }
@@ -387,7 +402,9 @@ public final class MediaReviewStore {
         if submission.targetLanguage == nil {
             translation = nil
         } else {
-            let value = manualTranslationText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = sceneState.manualTranslationText.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
             guard !value.isEmpty, value.utf8.count <= 65_536 else {
                 safeErrorMessage = "Enter the manual translation for the selected target language."
                 return
@@ -400,9 +417,9 @@ public final class MediaReviewStore {
                 submission: submission,
                 transcriptText: transcript,
                 translatedText: translation,
-                confirmsCompleteCoverage: manualCoverageConfirmed
+                confirmsCompleteCoverage: sceneState.manualCoverageConfirmed
             )
-            selectedSection = .transcript
+            sceneState.selectedSection = .transcript
         }
     }
 
@@ -413,14 +430,15 @@ public final class MediaReviewStore {
         }
     }
 
-    public func correctTranscript(revisionID: RevisionID, text: String) async {
-        guard let job else { return }
+    @discardableResult
+    public func correctTranscript(revisionID: RevisionID, text: String) async -> Bool {
+        guard let job else { return false }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.utf8.count <= 65_536 else {
             safeErrorMessage = "A corrected transcript segment must contain bounded text."
-            return
+            return false
         }
-        await perform {
+        return await perform {
             transcriptReview = try await workflow.correctTranscript(
                 canonicalJobID: job.jobID,
                 revisionID: revisionID,
@@ -429,14 +447,15 @@ public final class MediaReviewStore {
         }
     }
 
-    public func correctTranslation(revisionID: RevisionID, text: String) async {
-        guard let job else { return }
+    @discardableResult
+    public func correctTranslation(revisionID: RevisionID, text: String) async -> Bool {
+        guard let job else { return false }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.utf8.count <= 65_536 else {
             safeErrorMessage = "A corrected translation segment must contain bounded text."
-            return
+            return false
         }
-        await perform {
+        return await perform {
             transcriptReview = try await workflow.correctTranslation(
                 canonicalJobID: job.jobID,
                 revisionID: revisionID,
@@ -445,23 +464,107 @@ public final class MediaReviewStore {
         }
     }
 
+    @discardableResult
     public func confirmSpeaker(
         transcriptRevisionID: RevisionID,
         displayName: String
-    ) async {
-        guard let job else { return }
+    ) async -> Bool {
+        guard let job else { return false }
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.utf8.count <= 512 else {
             safeErrorMessage = "Enter a speaker name of at most 512 UTF-8 bytes."
-            return
+            return false
         }
-        await perform {
+        return await perform {
             transcriptReview = try await workflow.confirmSpeaker(
                 canonicalJobID: job.jobID,
                 transcriptRevisionID: transcriptRevisionID,
                 displayName: trimmed
             )
         }
+    }
+
+    @discardableResult
+    func saveEditorDraft(_ request: MediaReviewDraftSave) async -> Bool {
+        switch request {
+        case let .transcript(revisionID, text):
+            return await correctTranscript(
+                revisionID: revisionID,
+                text: text
+            )
+        case let .translation(revisionID, text):
+            return await correctTranslation(
+                revisionID: revisionID,
+                text: text
+            )
+        case let .speaker(transcriptRevisionID, displayName):
+            return await confirmSpeaker(
+                transcriptRevisionID: transcriptRevisionID,
+                displayName: displayName
+            )
+        case let .position(
+            revisionID,
+            positionType,
+            statement,
+            reservations,
+            conditions
+        ):
+            return await correctPosition(
+                revisionID: revisionID,
+                positionType: positionType,
+                statement: statement,
+                reservations: Self.editorLines(reservations),
+                conditions: Self.editorLines(conditions)
+            )
+        case let .briefing(
+            sectionType,
+            expectedRevisionID,
+            editedTextByItemID,
+            locked
+        ):
+            guard briefingReview?.publication.sections.first(where: {
+                $0.sectionType == sectionType
+            })?.revision.revisionID == expectedRevisionID else {
+                safeErrorMessage = "The Briefing section changed after this draft was opened. Keep the draft, review the new revision, and apply the edit again."
+                return false
+            }
+            return await updateBriefingSection(
+                sectionType,
+                expectedRevisionID: expectedRevisionID,
+                editedTextByItemID: editedTextByItemID,
+                locked: locked
+            )
+        }
+    }
+
+    public func saveAllEditorDrafts(
+        in sceneState: MediaReviewSceneState
+    ) async -> Bool {
+        guard sceneState.prepareForApplicationTerminationSave() else {
+            safeErrorMessage = "Wait for the current editor or workspace operation to finish before quitting."
+            return false
+        }
+
+        guard sceneState.hasUnsavedEditorChanges else { return true }
+        guard let operation = sceneState.beginNextApplicationTerminationSave()
+        else {
+            safeErrorMessage = "Save each unpublished editor draft separately before quitting. BlueMinutes will not partially save drafts whose revisions depend on one another."
+            return false
+        }
+
+        let succeeded = await saveEditorDraft(operation.request)
+        guard sceneState.completeDirectEditorSave(
+            operation,
+            succeeded: succeeded,
+            updatedReviews: editorReviewSnapshot
+        ) else {
+            return false
+        }
+        guard !sceneState.hasUnsavedEditorChanges else {
+            safeErrorMessage = "The editor changed while BlueMinutes was saving. Keep the app open and review the remaining draft."
+            return false
+        }
+        return true
     }
 
     public func refreshAnalysisRoute() async {
@@ -476,7 +579,7 @@ public final class MediaReviewStore {
         }
     }
 
-    public func startAnalysis() async {
+    public func startAnalysis(using sceneState: MediaReviewSceneState) async {
         guard let job, job.state == .succeeded else {
             safeErrorMessage = "Finish canonical local audio processing first."
             return
@@ -488,7 +591,7 @@ public final class MediaReviewStore {
                 safeErrorMessage = "The Apple on-device analysis model is unavailable for this meeting language. Existing local review data remains available."
                 return
             }
-            analysisClaimsConfirmed = false
+            sceneState.analysisClaimsConfirmed = false
             analysisJob = try await workflow.startAnalysis(canonicalJobID: job.jobID)
             if let analysisJob { beginAnalysisPolling(jobID: analysisJob.jobID) }
         }
@@ -501,33 +604,34 @@ public final class MediaReviewStore {
         }
     }
 
-    public func confirmAnalysisReview() async {
-        guard let job, analysisClaimsConfirmed else {
+    public func confirmAnalysisReview(using sceneState: MediaReviewSceneState) async {
+        guard let job, sceneState.analysisClaimsConfirmed else {
             safeErrorMessage = "Confirm that you reviewed every analysis claim before continuing."
             return
         }
         await perform {
             analysisReview = try await workflow.confirmAnalysisReview(
                 canonicalJobID: job.jobID,
-                confirmsEveryClaim: analysisClaimsConfirmed
+                confirmsEveryClaim: sceneState.analysisClaimsConfirmed
             )
         }
     }
 
+    @discardableResult
     public func correctPosition(
         revisionID: RevisionID,
         positionType: PositionType,
         statement: String,
         reservations: [String],
         conditions: [String]
-    ) async {
-        guard let job else { return }
+    ) async -> Bool {
+        guard let job else { return false }
         let trimmedStatement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanReservations = Self.cleanClaims(reservations)
         let cleanConditions = Self.cleanClaims(conditions)
         guard !trimmedStatement.isEmpty, trimmedStatement.utf8.count <= 16_384 else {
             safeErrorMessage = "A corrected position statement must contain at most 16,384 UTF-8 bytes."
-            return
+            return false
         }
         guard cleanReservations.count == reservations.filter({
             !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -537,9 +641,9 @@ public final class MediaReviewStore {
             }).count
         else {
             safeErrorMessage = "Reservations and conditions must be unique bounded statements."
-            return
+            return false
         }
-        await perform {
+        return await perform {
             analysisReview = try await workflow.correctPosition(
                 canonicalJobID: job.jobID,
                 revisionID: revisionID,
@@ -602,25 +706,28 @@ public final class MediaReviewStore {
         }
     }
 
+    @discardableResult
     public func updateBriefingSection(
         _ sectionType: BriefingSectionType,
+        expectedRevisionID: RevisionID,
         editedTextByItemID: [BriefingItemID: String],
         locked: Bool
-    ) async {
-        guard let job else { return }
-        await perform {
+    ) async -> Bool {
+        guard let job else { return false }
+        return await perform {
             briefingReview = try await workflow.updateBriefingSection(
                 canonicalJobID: job.jobID,
                 sectionType: sectionType,
+                expectedRevisionID: expectedRevisionID,
                 editedTextByItemID: editedTextByItemID,
                 locked: locked
             )
         }
     }
 
-    public func exportBriefing() async {
+    public func exportBriefing(using sceneState: MediaReviewSceneState) async {
         guard let job, let briefingReview else { return }
-        let fileName = briefingExportFileName.trimmingCharacters(
+        let fileName = sceneState.briefingExportFileName.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
         guard !fileName.isEmpty else {
@@ -644,42 +751,51 @@ public final class MediaReviewStore {
         }
     }
 
-    public func loadHistoricalReview() async {
+    public func loadHistoricalReview(using sceneState: MediaReviewSceneState) async {
         guard workspace != nil else { return }
         await perform {
             historicalIndex = try await workflow.historicalIndexStatus()
             learnedPreferences = try await workflow.learnedPreferenceState()
             if historicalIndex?.availability == .ready {
                 historicalSearchPage = try await workflow.searchMeetingHistory(
-                    try historicalQuery()
+                    try historicalQuery(using: sceneState)
                 )
             }
         }
     }
 
-    public func rebuildHistoricalIndex() async {
+    public func rebuildHistoricalIndex(
+        using sceneState: MediaReviewSceneState
+    ) async {
         guard workspace != nil else { return }
         await perform {
             historicalIndexJob = try await workflow.rebuildHistoricalIndex()
+            historicalSearchPage = nil
+            historicalComparison = nil
             if let historicalIndexJob {
-                beginHistoricalIndexPolling(jobID: historicalIndexJob.jobID)
+                beginHistoricalIndexPolling(
+                    jobID: historicalIndexJob.jobID,
+                    using: sceneState
+                )
             }
         }
     }
 
-    public func searchMeetingHistory() async {
+    public func searchMeetingHistory(using sceneState: MediaReviewSceneState) async {
         await perform {
             historicalSearchPage = try await workflow.searchMeetingHistory(
-                try historicalQuery()
+                try historicalQuery(using: sceneState)
             )
             historicalComparison = nil
         }
     }
 
-    public func compareSelectedHistoricalPositions() async {
+    public func compareSelectedHistoricalPositions(
+        using sceneState: MediaReviewSceneState
+    ) async {
         guard let results = historicalSearchPage?.results,
-              let currentID = selectedCurrentHistoryRevisionID,
-              let priorID = selectedPriorHistoryRevisionID,
+              let currentID = sceneState.selectedCurrentHistoryRevisionID,
+              let priorID = sceneState.selectedPriorHistoryRevisionID,
               currentID != priorID,
               let current = results.first(where: {
                   $0.position.revision.revisionID == currentID
@@ -713,27 +829,31 @@ public final class MediaReviewStore {
         }
     }
 
-    public func editLearnedPreference(_ record: LearnedPreferenceRecord) {
-        editingLearnedPreferenceID = record.preferenceID
-        editingLearnedPreferenceVersion = record.version
-        learnedPreferenceKind = record.kind
-        learnedPreferenceValue = editablePreferenceValue(record.value)
+    public func editLearnedPreference(
+        _ record: LearnedPreferenceRecord,
+        using sceneState: MediaReviewSceneState
+    ) {
+        sceneState.editingLearnedPreferenceID = record.preferenceID
+        sceneState.editingLearnedPreferenceVersion = record.version
+        sceneState.learnedPreferenceKind = record.kind
+        sceneState.learnedPreferenceValue = editablePreferenceValue(record.value)
     }
 
-    public func saveLearnedPreference() async {
+    public func saveLearnedPreference(using sceneState: MediaReviewSceneState) async {
         do {
-            let value = try parsedPreferenceValue()
-            let preferenceID = editingLearnedPreferenceID ?? LearnedPreferenceID(UUID())
+            let value = try parsedPreferenceValue(using: sceneState)
+            let preferenceID = sceneState.editingLearnedPreferenceID
+                ?? LearnedPreferenceID(UUID())
             await perform {
                 _ = try await workflow.saveLearnedPreference(
                     preferenceID: preferenceID,
                     value: value,
                     enabled: true,
                     sourceAction: "explicit-history-preferences-form",
-                    expectedVersion: editingLearnedPreferenceVersion
+                    expectedVersion: sceneState.editingLearnedPreferenceVersion
                 )
                 learnedPreferences = try await workflow.learnedPreferenceState()
-                clearLearnedPreferenceEditor()
+                clearLearnedPreferenceEditor(in: sceneState)
             }
         } catch {
             safeErrorMessage = "Enter a valid value for the selected learned-preference type."
@@ -752,7 +872,10 @@ public final class MediaReviewStore {
         }
     }
 
-    public func removeLearnedPreference(_ record: LearnedPreferenceRecord) async {
+    public func removeLearnedPreference(
+        _ record: LearnedPreferenceRecord,
+        using sceneState: MediaReviewSceneState
+    ) async {
         await perform {
             try await workflow.removeLearnedPreference(
                 preferenceID: record.preferenceID,
@@ -760,8 +883,8 @@ public final class MediaReviewStore {
                 expectedVersion: record.version
             )
             learnedPreferences = try await workflow.learnedPreferenceState()
-            if editingLearnedPreferenceID == record.preferenceID {
-                clearLearnedPreferenceEditor()
+            if sceneState.editingLearnedPreferenceID == record.preferenceID {
+                clearLearnedPreferenceEditor(in: sceneState)
             }
         }
     }
@@ -777,7 +900,10 @@ public final class MediaReviewStore {
         }
     }
 
-    public func resetLearnedPreferences(confirmedByVisibleDialog: Bool) async {
+    public func resetLearnedPreferences(
+        confirmedByVisibleDialog: Bool,
+        using sceneState: MediaReviewSceneState
+    ) async {
         guard confirmedByVisibleDialog, let state = learnedPreferences else {
             safeErrorMessage = "Reset All requires visible confirmation."
             return
@@ -787,7 +913,7 @@ public final class MediaReviewStore {
                 sourceAction: "explicit-preference-reset-all",
                 expectedSettingsVersion: state.settingsVersion
             )
-            clearLearnedPreferenceEditor()
+            clearLearnedPreferenceEditor(in: sceneState)
         }
     }
 
@@ -820,21 +946,25 @@ public final class MediaReviewStore {
         safeErrorMessage = nil
     }
 
-    private func perform(_ operation: () async throws -> Void) async {
+    @discardableResult
+    private func perform(_ operation: () async throws -> Void) async -> Bool {
         guard !isWorking else {
             safeErrorMessage = "Wait for the current local operation to finish."
-            return
+            return false
         }
         safeErrorMessage = nil
         isWorking = true
         defer { isWorking = false }
         do {
             try await operation()
+            return true
         } catch let error as LocalizedError {
             safeErrorMessage = error.errorDescription
                 ?? "The local operation could not be completed."
+            return false
         } catch {
             safeErrorMessage = "The local operation could not be completed."
+            return false
         }
     }
 
@@ -862,37 +992,50 @@ public final class MediaReviewStore {
         recordingSetup = nil
         recordingSession = nil
         webMetadataCandidate = nil
-        recordingAcknowledged = false
-        unWebTVNetworkAuthorized = false
-        reviewedUNTitle = ""
-        reviewedUNDescription = ""
-        reviewedUNProductionDate = ""
-        reviewedUNLanguageAvailability = ""
-        manualCoverageConfirmed = false
-        analysisClaimsConfirmed = false
-        historyActorOrCountry = ""
-        historyTopic = ""
-        historyBody = ""
-        historyMeetingType = ""
-        historyStartDate = ""
-        historyEndDate = ""
-        selectedCurrentHistoryRevisionID = nil
-        selectedPriorHistoryRevisionID = nil
-        clearLearnedPreferenceEditor()
-        selectedTrack = nil
         safeErrorMessage = nil
+    }
+
+    private func resetAcceptedMediaReviewState(
+        using sceneState: MediaReviewSceneState
+    ) {
+        pollingTask?.cancel()
+        pollingTask = nil
+        importedSource = nil
+        job = nil
+        transcriptJob = nil
+        routeReview = nil
+        transcriptReview = nil
+        analysisJob = nil
+        analysisRouteReview = nil
+        analysisReview = nil
+        briefingJob = nil
+        briefingRouteReview = nil
+        briefingReview = nil
+        lastBriefingExport = nil
+        sceneState.resetForAcceptedMedia()
+    }
+
+    private func advanceWorkspaceSession() {
+        pollingTask?.cancel()
+        pollingTask = nil
+        recordingPollingTask?.cancel()
+        recordingPollingTask = nil
+        workspaceSession &+= 1
     }
 
     private func beginPolling(jobID: JobID) {
         pollingTask?.cancel()
+        let session = workspaceSession
         pollingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 do {
                     let current = try await workflow.jobReview(jobID: jobID)
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     job = current
                     if current.state.isTerminal { return }
                 } catch {
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     safeErrorMessage = "Processing status is temporarily unavailable."
                     return
                 }
@@ -903,14 +1046,17 @@ public final class MediaReviewStore {
 
     private func beginRecordingPolling(jobID: JobID) {
         recordingPollingTask?.cancel()
+        let session = workspaceSession
         recordingPollingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 do {
                     let current = try await workflow.recordingReview(jobID: jobID)
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     recordingSession = current
                     if current.state.isTerminal { return }
                 } catch {
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     safeErrorMessage = "Recording status is temporarily unavailable; sealed local audio remains retained."
                     return
                 }
@@ -921,21 +1067,28 @@ public final class MediaReviewStore {
 
     private func beginTranscriptPolling(jobID: JobID) {
         pollingTask?.cancel()
+        let session = workspaceSession
         pollingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 do {
                     let current = try await workflow.jobReview(jobID: jobID)
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     transcriptJob = current
                     if current.state.isTerminal {
                         if current.state == .succeeded, let canonicalJob = job {
-                            transcriptReview = try await workflow.transcriptReview(
+                            let review = try await workflow.transcriptReview(
                                 canonicalJobID: canonicalJob.jobID
                             )
+                            guard !Task.isCancelled, session == workspaceSession else {
+                                return
+                            }
+                            transcriptReview = review
                         }
                         return
                     }
                 } catch {
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     safeErrorMessage = "Transcript processing status is temporarily unavailable."
                     return
                 }
@@ -946,21 +1099,28 @@ public final class MediaReviewStore {
 
     private func beginAnalysisPolling(jobID: JobID) {
         pollingTask?.cancel()
+        let session = workspaceSession
         pollingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 do {
                     let current = try await workflow.jobReview(jobID: jobID)
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     analysisJob = current
                     if current.state.isTerminal {
                         if current.state == .succeeded, let canonicalJob = job {
-                            analysisReview = try await workflow.analysisReview(
+                            let review = try await workflow.analysisReview(
                                 canonicalJobID: canonicalJob.jobID
                             )
+                            guard !Task.isCancelled, session == workspaceSession else {
+                                return
+                            }
+                            analysisReview = review
                         }
                         return
                     }
                 } catch {
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     safeErrorMessage = "Analysis processing status is temporarily unavailable."
                     return
                 }
@@ -971,21 +1131,28 @@ public final class MediaReviewStore {
 
     private func beginBriefingPolling(jobID: JobID) {
         pollingTask?.cancel()
+        let session = workspaceSession
         pollingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 do {
                     let current = try await workflow.jobReview(jobID: jobID)
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     briefingJob = current
                     if current.state.isTerminal {
                         if current.state == .succeeded, let canonicalJob = job {
-                            briefingReview = try await workflow.briefingReview(
+                            let review = try await workflow.briefingReview(
                                 canonicalJobID: canonicalJob.jobID
                             )
+                            guard !Task.isCancelled, session == workspaceSession else {
+                                return
+                            }
+                            briefingReview = review
                         }
                         return
                     }
                 } catch {
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     safeErrorMessage = "Briefing processing status is temporarily unavailable."
                     return
                 }
@@ -994,24 +1161,42 @@ public final class MediaReviewStore {
         }
     }
 
-    private func beginHistoricalIndexPolling(jobID: JobID) {
+    private func beginHistoricalIndexPolling(
+        jobID: JobID,
+        using sceneState: MediaReviewSceneState
+    ) {
         pollingTask?.cancel()
-        pollingTask = Task { @MainActor [weak self] in
+        let session = workspaceSession
+        pollingTask = Task { @MainActor [weak self, weak sceneState] in
             guard let self else { return }
             while !Task.isCancelled {
                 do {
                     let current = try await workflow.jobReview(jobID: jobID)
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     historicalIndexJob = current
                     if current.state.isTerminal {
-                        historicalIndex = try await workflow.historicalIndexStatus()
-                        if current.state == .succeeded {
-                            historicalSearchPage = try await workflow.searchMeetingHistory(
-                                try historicalQuery()
+                        let index = try await workflow.historicalIndexStatus()
+                        guard !Task.isCancelled, session == workspaceSession else {
+                            return
+                        }
+                        historicalIndex = index
+                        if current.state == .succeeded,
+                           let sceneState
+                        {
+                            let page = try await workflow.searchMeetingHistory(
+                                try historicalQuery(using: sceneState)
                             )
+                            guard !Task.isCancelled,
+                                  session == workspaceSession
+                            else {
+                                return
+                            }
+                            historicalSearchPage = page
                         }
                         return
                     }
                 } catch {
+                    guard !Task.isCancelled, session == workspaceSession else { return }
                     safeErrorMessage = "Meeting History index status is temporarily unavailable."
                     return
                 }
@@ -1020,14 +1205,16 @@ public final class MediaReviewStore {
         }
     }
 
-    private func historicalQuery() throws -> HistoricalSearchQuery {
+    private func historicalQuery(
+        using sceneState: MediaReviewSceneState
+    ) throws -> HistoricalSearchQuery {
         try HistoricalSearchQuery(
-            actorOrCountry: optionalText(historyActorOrCountry),
-            topic: optionalText(historyTopic),
-            meetingBody: optionalText(historyBody),
-            meetingType: optionalText(historyMeetingType),
-            startDate: try optionalDate(historyStartDate),
-            endDate: try optionalDate(historyEndDate),
+            actorOrCountry: optionalText(sceneState.historyActorOrCountry),
+            topic: optionalText(sceneState.historyTopic),
+            meetingBody: optionalText(sceneState.historyBody),
+            meetingType: optionalText(sceneState.historyMeetingType),
+            startDate: try optionalDate(sceneState.historyStartDate),
+            endDate: try optionalDate(sceneState.historyEndDate),
             reviewStatus: .confirmed,
             maximumClassification: .restricted,
             pageSize: 100
@@ -1050,12 +1237,16 @@ public final class MediaReviewStore {
         return try CalendarDate(year: year, month: month, day: day)
     }
 
-    private func parsedPreferenceValue() throws -> LearnedPreferenceValue {
-        let text = learnedPreferenceValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func parsedPreferenceValue(
+        using sceneState: MediaReviewSceneState
+    ) throws -> LearnedPreferenceValue {
+        let text = sceneState.learnedPreferenceValue.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         let commaValues = text.split(separator: ",").map {
             String($0).trimmingCharacters(in: .whitespacesAndNewlines)
         }.filter { !$0.isEmpty }
-        switch learnedPreferenceKind {
+        switch sceneState.learnedPreferenceKind {
         case .actorCountryOrder:
             return .actorCountryOrder(commaValues)
         case .briefingLength:
@@ -1104,10 +1295,10 @@ public final class MediaReviewStore {
         }
     }
 
-    private func clearLearnedPreferenceEditor() {
-        editingLearnedPreferenceID = nil
-        editingLearnedPreferenceVersion = nil
-        learnedPreferenceValue = ""
+    private func clearLearnedPreferenceEditor(in sceneState: MediaReviewSceneState) {
+        sceneState.editingLearnedPreferenceID = nil
+        sceneState.editingLearnedPreferenceVersion = nil
+        sceneState.learnedPreferenceValue = ""
     }
 
     private static func cleanClaims(_ values: [String]) -> [String] {
@@ -1118,6 +1309,10 @@ public final class MediaReviewStore {
         return cleaned
     }
 
+    private static func editorLines(_ value: String) -> [String] {
+        value.split(whereSeparator: \.isNewline).map(String.init)
+    }
+
     private func firstMetadataValue(
         _ field: UNWebTVMetadataField,
         in candidate: UNWebTVMetadataCandidate
@@ -1125,9 +1320,15 @@ public final class MediaReviewStore {
         candidate.fields.first(where: { $0.field == field })?.value ?? ""
     }
 
-    private func transcriptSubmission() -> TranscriptStartSubmission? {
-        let source = transcriptSourceLanguageTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        let target = transcriptTargetLanguageTag.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func transcriptSubmission(
+        using sceneState: MediaReviewSceneState
+    ) -> TranscriptStartSubmission? {
+        let source = sceneState.transcriptSourceLanguageTag.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let target = sceneState.transcriptTargetLanguageTag.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         do {
             let sourceLanguage = try LanguageTag(source)
             let targetLanguage = target.isEmpty ? nil : try LanguageTag(target)

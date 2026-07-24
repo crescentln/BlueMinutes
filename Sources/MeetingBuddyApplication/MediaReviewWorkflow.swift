@@ -343,6 +343,7 @@ public protocol MediaReviewWorkflow: AnyObject {
     func updateBriefingSection(
         canonicalJobID: JobID,
         sectionType: BriefingSectionType,
+        expectedRevisionID: RevisionID,
         editedTextByItemID: [BriefingItemID: String],
         locked: Bool
     ) async throws -> BriefingReviewBundle
@@ -647,6 +648,7 @@ public extension MediaReviewWorkflow {
     func updateBriefingSection(
         canonicalJobID: JobID,
         sectionType: BriefingSectionType,
+        expectedRevisionID: RevisionID,
         editedTextByItemID: [BriefingItemID: String],
         locked: Bool
     ) async throws -> BriefingReviewBundle {

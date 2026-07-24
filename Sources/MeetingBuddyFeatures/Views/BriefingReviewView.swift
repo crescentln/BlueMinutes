@@ -5,9 +5,7 @@ import SwiftUI
 
 struct BriefingReviewView: View {
     @Bindable var store: MediaReviewStore
-    @State private var selectedSectionType: BriefingSectionType?
-    @State private var itemDrafts: [BriefingItemID: String] = [:]
-    @State private var lockRevision = false
+    @Bindable var sceneState: MediaReviewSceneState
 
     var body: some View {
         Group {
@@ -17,10 +15,17 @@ struct BriefingReviewView: View {
                 setupView
             }
         }
-        .onChange(of: selectedSectionType) { _, _ in loadDrafts() }
+        .onAppear {
+            sceneState.briefing.reconcile(with: store.briefingReview)
+        }
+        .onChange(of: sceneState.briefing.selectedSectionType) { _, _ in
+            sceneState.briefing.reconcile(with: store.briefingReview)
+        }
         .onChange(
             of: store.briefingReview?.publication.sections.map(\.revision.revisionID)
-        ) { _, _ in reconcileSelection() }
+        ) { _, _ in
+            sceneState.briefing.reconcile(with: store.briefingReview)
+        }
     }
 
     private var setupView: some View {
@@ -181,7 +186,7 @@ struct BriefingReviewView: View {
     private func sectionEditor(_ review: BriefingReviewBundle) -> some View {
         GroupBox("Independent sections") {
             VStack(alignment: .leading, spacing: 12) {
-                Picker("Section", selection: $selectedSectionType) {
+                Picker("Section", selection: briefingSelection) {
                     Text("Select a section").tag(BriefingSectionType?.none)
                     ForEach(review.publication.sections, id: \.sectionType) { section in
                         Text(section.title).tag(Optional(section.sectionType))
@@ -196,8 +201,18 @@ struct BriefingReviewView: View {
                                 ? "person.crop.circle.badge.checkmark" : "apple.intelligence"
                         )
                         Spacer()
-                        Toggle("Lock this revision", isOn: $lockRevision)
+                        Toggle(
+                            "Lock this revision",
+                            isOn: $sceneState.briefing.isLocked
+                        )
                             .toggleStyle(.switch)
+                    }
+                    if !sceneState.briefing.isSourceRevisionCurrent {
+                        Label(
+                            "This draft is based on an earlier section revision. Keep or copy the draft, then review the current section before saving.",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .foregroundStyle(.orange)
                     }
                     ForEach(section.items, id: \.itemID) { item in
                         VStack(alignment: .leading, spacing: 6) {
@@ -212,23 +227,40 @@ struct BriefingReviewView: View {
                     }
                     HStack {
                         Button("Save and Confirm Section") {
+                            guard let operation =
+                                sceneState.beginDirectBriefingSave()
+                            else { return }
                             Task {
-                                await store.updateBriefingSection(
-                                    section.sectionType,
-                                    editedTextByItemID: itemDrafts,
-                                    locked: lockRevision
+                                let succeeded = await store.saveEditorDraft(
+                                    operation.request
                                 )
+                                if sceneState.completeDirectEditorSave(
+                                    operation,
+                                    succeeded: succeeded,
+                                    updatedReviews: store.editorReviewSnapshot
+                                ) {
+                                    sceneState.briefing.reconcile(
+                                        with: store.briefingReview
+                                    )
+                                }
                             }
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(!draftsAreComplete(section) || store.isWorking)
+                        .disabled(
+                            !draftsAreComplete(section)
+                                || !sceneState.briefing.isSourceRevisionCurrent
+                                || store.isWorking
+                                || store.briefingJob?.state.isTerminal == false
+                        )
                         Button("Regenerate Only This Section") {
                             Task { await store.regenerateBriefingSection(section.sectionType) }
                         }
                         .disabled(
                             section.locked
                                 || section.manualEditStatus == .userEdited
+                                || sceneState.briefing.isDirty
                                 || store.isWorking
+                                || store.briefingJob?.state.isTerminal == false
                         )
                     }
                     if section.locked || section.manualEditStatus == .userEdited {
@@ -262,13 +294,16 @@ struct BriefingReviewView: View {
     private func exportCard(_ review: BriefingReviewBundle) -> some View {
         GroupBox("Explicit local Markdown export") {
             VStack(alignment: .leading, spacing: 10) {
-                TextField("File name", text: $store.briefingExportFileName)
+                TextField(
+                    "File name",
+                    text: $sceneState.briefingExportFileName
+                )
                 LabeledContent(
                     "Destination",
                     value: "Meetings/\(review.publication.finalBriefing.meetingID.canonicalString)/exports/"
                 )
                 Button("Export Validated Markdown") {
-                    Task { await store.exportBriefing() }
+                    Task { await store.exportBriefing(using: sceneState) }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!review.isCurrent || !review.isHumanConfirmed || store.isWorking)
@@ -288,47 +323,31 @@ struct BriefingReviewView: View {
     }
 
     private func selectedSection(in review: BriefingReviewBundle) -> BriefingSectionV1? {
-        review.publication.sections.first { $0.sectionType == selectedSectionType }
+        review.publication.sections.first {
+            $0.sectionType == sceneState.briefing.selectedSectionType
+        }
     }
 
     private func itemBinding(_ item: BriefingSectionItem) -> Binding<String> {
         Binding(
-            get: { itemDrafts[item.itemID] ?? item.claim.text },
-            set: { itemDrafts[item.itemID] = $0 }
+            get: { sceneState.briefing.itemTexts[item.itemID] ?? item.claim.text },
+            set: { sceneState.briefing.itemTexts[item.itemID] = $0 }
         )
     }
 
     private func draftsAreComplete(_ section: BriefingSectionV1) -> Bool {
-        Set(itemDrafts.keys) == Set(section.items.map(\.itemID))
-            && itemDrafts.values.allSatisfy {
+        Set(sceneState.briefing.itemTexts.keys) == Set(section.items.map(\.itemID))
+            && sceneState.briefing.itemTexts.values.allSatisfy {
                 let value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
                 return !value.isEmpty && value == $0 && value.utf8.count <= 16_384
             }
     }
 
-    private func reconcileSelection() {
-        guard let sections = store.briefingReview?.publication.sections else {
-            selectedSectionType = nil
-            itemDrafts = [:]
-            return
-        }
-        if !sections.contains(where: { $0.sectionType == selectedSectionType }) {
-            selectedSectionType = sections.first?.sectionType
-        }
-        loadDrafts()
-    }
-
-    private func loadDrafts() {
-        guard let review = store.briefingReview,
-              let section = selectedSection(in: review) else {
-            itemDrafts = [:]
-            lockRevision = false
-            return
-        }
-        itemDrafts = Dictionary(uniqueKeysWithValues: section.items.map {
-            ($0.itemID, $0.claim.text)
-        })
-        lockRevision = section.locked
+    private var briefingSelection: Binding<BriefingSectionType?> {
+        Binding(
+            get: { sceneState.briefing.selectedSectionType },
+            set: { sceneState.requestBriefingSelection($0) }
+        )
     }
 
     private func short(_ value: String) -> String {

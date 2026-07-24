@@ -156,6 +156,7 @@ struct BriefingPipelineIntegrationTests {
         ).updateSection(
             meetingID: workspace.meetingID,
             sectionType: .meetingOverview,
+            expectedRevisionID: overview.revision.revisionID,
             editedTextByItemID: manualText,
             locked: true,
             changedAt: aiInstant(1_900_000_000_250)
@@ -172,6 +173,24 @@ struct BriefingPipelineIntegrationTests {
         #expect(manuallyLocked.publication.finalBriefing.manualSectionCount == 1)
         #expect(manuallyLocked.publication.finalBriefing.markdown
             .contains("Human\\-confirmed local edit"))
+
+        #expect(throws: BriefingCoverageError.staleSection) {
+            try BriefingManualReviewService(
+                repository: workspace.store
+            ).updateSection(
+                meetingID: workspace.meetingID,
+                sectionType: .meetingOverview,
+                expectedRevisionID: overview.revision.revisionID,
+                editedTextByItemID: manualText,
+                locked: false,
+                changedAt: aiInstant(1_900_000_000_255)
+            )
+        }
+        #expect(
+            try workspace.store.activeBriefingReview(meetingID: workspace.meetingID)?
+                .publication.sections.first { $0.sectionType == .meetingOverview }?
+                .revision.revisionID == lockedOverview.revision.revisionID
+        )
 
         let callsBeforeLockedAttempt = await provider.callCount
         let lockedPlan = try briefingPlan(
@@ -215,6 +234,7 @@ struct BriefingPipelineIntegrationTests {
             ).updateSection(
                 meetingID: workspace.meetingID,
                 sectionType: sectionType,
+                expectedRevisionID: section.revision.revisionID,
                 editedTextByItemID: Dictionary(uniqueKeysWithValues: section.items.map {
                     ($0.itemID, $0.claim.text)
                 }),

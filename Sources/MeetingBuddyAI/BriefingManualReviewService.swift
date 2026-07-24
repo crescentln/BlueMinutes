@@ -14,6 +14,7 @@ public struct BriefingManualReviewService: Sendable {
     public func updateSection(
         meetingID: MeetingID,
         sectionType: BriefingSectionType,
+        expectedRevisionID: RevisionID,
         editedTextByItemID: [BriefingItemID: String],
         locked: Bool,
         changedAt: UTCInstant
@@ -26,6 +27,9 @@ public struct BriefingManualReviewService: Sendable {
               let meetingReference = active.publication.graph.revision.inputRevisions
                 .first(where: { $0.objectType == .meetingProfile })
         else { throw BriefingCoverageError.reviewUnavailable }
+        guard priorSection.revision.revisionID == expectedRevisionID else {
+            throw BriefingCoverageError.staleSection
+        }
 
         let source = try repository.briefingSourceBundle(
             meetingRevision: meetingReference,
@@ -54,7 +58,7 @@ public struct BriefingManualReviewService: Sendable {
         )
         try repository.replaceBriefingSection(
             publication,
-            replacing: priorSection.revision.revisionID,
+            replacing: expectedRevisionID,
             changedAt: changedAt
         )
         guard let updated = try repository.activeBriefingReview(meetingID: meetingID),

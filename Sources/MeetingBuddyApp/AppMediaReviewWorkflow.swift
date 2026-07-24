@@ -964,6 +964,7 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
     func updateBriefingSection(
         canonicalJobID: JobID,
         sectionType: BriefingSectionType,
+        expectedRevisionID: RevisionID,
         editedTextByItemID: [BriefingItemID: String],
         locked: Bool
     ) async throws -> BriefingReviewBundle {
@@ -972,6 +973,7 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         return try BriefingManualReviewService(repository: runtime.store).updateSection(
             meetingID: context.plan.meetingID,
             sectionType: sectionType,
+            expectedRevisionID: expectedRevisionID,
             editedTextByItemID: editedTextByItemID,
             locked: locked,
             changedAt: try currentInstant()

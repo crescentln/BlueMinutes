@@ -511,6 +511,25 @@ struct TranscriptPipelineIntegrationTests {
         #expect(review.translations.first?.translatedText == "Traduction humaine corrigee.")
 
         let priorTranscript = try #require(review.transcriptSegments.first)
+        let priorSpeakerChangedAt = aiInstant(1_900_000_000_115)
+        let priorSpeakerConfirmation =
+            try TranscriptSemanticFactory.speakerConfirmation(
+                transcript: priorTranscript,
+                displayName: "Prior Synthetic Speaker",
+                changedAt: priorSpeakerChangedAt
+            )
+        try workspace.store.publishSpeakerConfirmation(
+            actor: priorSpeakerConfirmation.0,
+            capacity: priorSpeakerConfirmation.1,
+            evidence: priorSpeakerConfirmation.2,
+            assignment: priorSpeakerConfirmation.3,
+            changedAt: priorSpeakerChangedAt
+        )
+        let priorSpeakerReference = try SemanticRevisionReference(
+            logicalID: priorSpeakerConfirmation.3.assignmentID,
+            revisionID: priorSpeakerConfirmation.3.revision.revisionID
+        )
+
         let transcriptChangedAt = aiInstant(1_900_000_000_120)
         let correctedTranscript = try TranscriptSemanticFactory.correctedTranscript(
             prior: priorTranscript,
@@ -534,12 +553,24 @@ struct TranscriptPipelineIntegrationTests {
             revisionID: correctedTranslation.revision.revisionID
         )
         #expect(try !workspace.store.staleMarks(for: correctedTranslationReference).isEmpty)
+        #expect(try !workspace.store.staleMarks(for: priorSpeakerReference).isEmpty)
         let loadedTranscriptReview = try workspace.store.activeTranscriptReview(meetingID: workspace.meetingID)
         review = try #require(loadedTranscriptReview)
         #expect(review.transcriptSegments.first?.text == "Human-confirmed corrected transcript.")
         #expect(review.translations.isEmpty)
 
         let confirmedTranscript = try #require(review.transcriptSegments.first)
+        let confirmedTranscriptReference = try SemanticRevisionReference(
+            logicalID: confirmedTranscript.segmentID,
+            revisionID: confirmedTranscript.revision.revisionID
+        )
+        #expect(
+            review.speakerAssignments.allSatisfy {
+                !$0.transcriptSegmentRevisions.contains(
+                    confirmedTranscriptReference
+                )
+            }
+        )
         let confirmation = try TranscriptSemanticFactory.speakerConfirmation(
             transcript: confirmedTranscript,
             displayName: "Synthetic Speaker",
@@ -554,9 +585,18 @@ struct TranscriptPipelineIntegrationTests {
         )
         let loadedSpeakerReview = try workspace.store.activeTranscriptReview(meetingID: workspace.meetingID)
         review = try #require(loadedSpeakerReview)
-        #expect(review.speakerAssignments.count == 1)
-        #expect(review.speakerAssignments.first?.certainty == .confirmed)
-        #expect(review.speakerAssignments.first?.userConfirmed == true)
+        let currentAssignments = review.speakerAssignments.filter {
+            $0.transcriptSegmentRevisions.contains(
+                confirmedTranscriptReference
+            )
+        }
+        #expect(currentAssignments.count == 1)
+        #expect(
+            currentAssignments.first?.revision.revisionID
+                == confirmation.3.revision.revisionID
+        )
+        #expect(currentAssignments.first?.certainty == .confirmed)
+        #expect(currentAssignments.first?.userConfirmed == true)
     }
 }
 
