@@ -9,27 +9,31 @@ current_task: "011"
 current_status: accepted
 authorized_post_mvp_work:
   task: "public GitHub source publication and long-term maintenance foundation"
-  status: "v0.2.0_release_blocked_pending_pr_18_cancellation_race_fix_gates"
+  status: "v0.2.0_published_post_release_pull_request_20_in_progress"
   rollback_anchor: "5450a916172c07ec2b7054c76fa40c80db17692e"
   public_name_status: "BlueMinutes selected by the maintainer; preliminary exact-name and affiliation-risk screen passed with normal trademark limitations"
   remote_publication_status: "https://github.com/crescentln/BlueMinutes is PUBLIC; the BlueMinutes-first README and v0.1.0 source-release material from Issue #8 and PR #9 were rebased into main at b45b38a, and the exact release baseline is verified by protected-main CI, signed-out HTTP, GitHub API, and anonymous Git access"
   public_conversion_status: "visibility conversion completed under explicit maintainer authorization at e6215373fbefa61f911ca4ee65c33852fd2dea76; main requires Pull Requests, strict Swift build and test status, linear history, conversation resolution, and administrator enforcement, while force-push and branch deletion are disabled"
-  public_source_release_status: "v0.1.0 remains the latest regular GitHub source Release at https://github.com/crescentln/BlueMinutes/releases/tag/v0.1.0 and has no uploaded binary assets; the maintainer has authorized an exact v0.2.0 source-only GitHub Release with zero uploaded assets, PR #12 and release-preparation PR #15 reached protected main through authorized rebase merges, and protected-main CI then exposed the reproducible Issue #17 cancellation optimistic-lock race before any v0.2.0 tag or Release was created"
+  public_source_release_status: "v0.2.0 is the latest regular GitHub source Release at https://github.com/crescentln/BlueMinutes/releases/tag/v0.2.0; its unsigned annotated tag peels to exact protected main f7a25572bc6c2940b99d9064f53ecdc7aaad352d, the Release is non-draft/non-prerelease with zero uploaded assets, and signed-out HTTP returns 200"
   next_source_release:
     version: "v0.2.0"
     distribution_scope: "GitHub source Release only; GitHub-generated source archives and zero uploaded assets"
-    status: "release_blocked_pending_pull_request_18_exact_head_and_post_merge_gates"
+    status: "published_source_only_zero_uploaded_assets"
     github_issue: "Issue #14 at https://github.com/crescentln/BlueMinutes/issues/14 closed automatically when release-preparation PR #15 was rebase-merged"
     pull_request: "PR #15 at https://github.com/crescentln/BlueMinutes/pull/15 was rebase-merged as eight single-parent commits ending at protected main 72d2eb44ca7ddfb097ac8aadcccfca0aaa595fbc"
-    local_branch: "codex/17-fix-cancellation-lock-race"
+    local_branch: "codex/post-release-readme-screenshots"
     implementation_commit: "3832df2f71a83f86038bdf626ef8221f7a5abda0"
-    release_blocker_issue: "Issue #17 at https://github.com/crescentln/BlueMinutes/issues/17"
-    release_blocker_pull_request: "PR #18 at https://github.com/crescentln/BlueMinutes/pull/18"
+    release_blocker_issue: "Issue #17 at https://github.com/crescentln/BlueMinutes/issues/17 closed automatically when the cancellation-race fix merged"
+    release_blocker_pull_request: "PR #18 at https://github.com/crescentln/BlueMinutes/pull/18 was rebase-merged as three single-parent commits ending at release baseline f7a25572bc6c2940b99d9064f53ecdc7aaad352d"
     release_blocker_implementation_commit: "f5e7ea99f56e40ac13b191b131e09efdd6ad0e21"
+    release_url: "https://github.com/crescentln/BlueMinutes/releases/tag/v0.2.0"
+    release_baseline: "f7a25572bc6c2940b99d9064f53ecdc7aaad352d"
+    post_release_issue: "Issue #19 at https://github.com/crescentln/BlueMinutes/issues/19"
+    post_release_pull_request: "PR #20 at https://github.com/crescentln/BlueMinutes/pull/20"
     authorization_scope: "prepare the v0.2.0 source-release Pull Request, update CHANGELOG and release-facing README/version documentation, publish a source-only v0.2.0 GitHub Release after protected-main gates, then replace the README audience tagline and add public-safe synthetic screenshots in a separate post-release Pull Request; no binary build, signing, notarization, application upload, installation, deployment, or other distribution is authorized"
     merge_authority_status: "explicit and conditional: the maintainer authorized rebase merges for PR #12, the v0.2.0 release-preparation Pull Request, and the post-release README/screenshot Pull Request only after all applicable gates pass"
     bundle_version_status: "Configuration/MeetingBuddy-Info.plist remains the separately gated 0.1.0 internal-alpha application-bundle version because this is a source-tree release and the historical 0.1.0-internal-alpha packaging/verifier chain is not being promoted or altered"
-    next_gate: "require exact-head CI, CodeQL, CLEAN/MERGEABLE state, and zero unresolved threads on PR #18; rebase-merge with the exact expected head only while those gates remain green; require exact new-main CI and CodeQL; then create the unsigned annotated v0.2.0 tag and publish only the authorized source Release with zero uploaded assets"
+    next_gate: "require exact-head CI, CodeQL, review, CLEAN/MERGEABLE state, and zero unresolved threads on post-release PR #20; rebase-merge with the exact expected head only while every gate remains green; require exact new-main CI and CodeQL; then stop for a new user-authorized initiative"
 post_mvp_initiatives:
   blue_minutes_meeting_research:
     title: "Blue Minutes Meeting / Research integration"
@@ -54,7 +58,7 @@ post_mvp_initiatives:
     audit_baseline: "d473b7037d7014ef0ae4e18d2c72463847347d8e"
     rollback_anchor: "c30d08ed85bcac736b55d1f39fdf250b1e2b6f44"
     review_remediation_rollback_anchor: "8fc9b1029b9a8f664b6fe9339f4a87c1a3a440c4"
-    next_gate: "release-preparation PR #15 is merged; the v0.2.0 source Release may proceed only after release-blocker PR #18 passes exact-head review/CI/CodeQL/conversation gates, reaches protected main through the authorized rebase path, and exact new-main CI and CodeQL pass; notarization, binary upload, installation, deployment, distribution, and every later initiative remain separately gated"
+    next_gate: "v0.2.0 is published source-only after PR #18 and exact release-main gates passed; complete the separately authorized post-release PR #20 review/CI/CodeQL/conversation/rebase/post-merge gates, then stop because notarization, binary upload, installation, deployment, distribution, and every later initiative remain separately gated"
 accepted_tasks:
   - "001"
   - "002"
@@ -75,8 +79,8 @@ accepted_tasks:
   - "011"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "98d5ee98e879e38b0d2dbcc435ed7ce8dd3f86f6 (published PR #18 execution-ledger reconciliation; this release-note reconciliation is its immediate child)"
-working_tree_status_summary: "protected main 72d2eb44ca7ddfb097ac8aadcccfca0aaa595fbc contains authorized rebase-merged PR #15 and has the same tree as its fully green exact PR head, but new-main CI run 30058156096 reproducibly exposed a pre-existing LocalTaskManager cancellation/checkpoint optimistic-lock race before tagging; isolated warnings-as-errors reproduction failed once in 20 attempts with the same error; Issue #17 and ready PR #18 now track the bounded retry fix on branch codex/17-fix-cancellation-lock-race; implementation commit f5e7ea99f56e40ac13b191b131e09efdd6ad0e21 changes four implementation/test/ROADMAP paths, retries only JobContractError.optimisticLockFailed up to eight times, deterministically injects a real concurrent version advance, proves non-lock errors propagate, and replaces the ROADMAP's premature publication wording with timeless scope wording; the current release-note reconciliation brings the complete PR to seven paths and records the shipped reliability fix in CHANGELOG and v0.2.0 release notes; 2 cancellation tests, 14 focused Task Manager/brand tests, and the complete 285-test/48-suite warnings-as-errors run pass; PR #18 final exact-head review, CI, CodeQL, conversation, mergeability, and post-merge main gates remain pending; no v0.2.0 tag, GitHub Release, README screenshot publication, signing, notarization, binary upload, installation, deployment, or distribution has been performed"
+last_known_git_head: "3f9bea04a989228deb9dce5fd281b9b6ebc090be (post-release product-preview implementation; this execution-ledger reconciliation is its immediate child)"
+working_tree_status_summary: "protected release baseline f7a25572bc6c2940b99d9064f53ecdc7aaad352d contains the authorized PR #18 rebase merge; exact-main CI run 30060770585 and CodeQL run 30060770471 pass; unsigned annotated tag v0.2.0 peels to that exact commit; the latest regular Release is publicly reachable with zero uploaded assets. Issue #19 and ready PR #20 track the separately authorized post-release presentation change on codex/post-release-readme-screenshots: implementation commit 3f9bea04a989228deb9dce5fd281b9b6ebc090be changes exactly README, ROADMAP, PublicBrandPresentationTests, and two previously captured 2384x1664 PNG screenshots from a disposable synthetic empty workspace; the focused 3-test suite, warning-as-error build, complete 286-test/48-suite run, 27 local-link checks, image/privacy/artifact checks, and whitespace gate pass. PR #20 exact-head CI, CodeQL, review, conversation, mergeability, rebase merge, and post-merge main gates remain pending; no Developer ID signing, notarization, binary upload, installation, deployment, or application distribution has been performed"
 last_verification_commands:
   - "Codex Security standard repository scan ec5ba727-af63-4f1a-bd8c-feb3001ed3a2 with 134/134 receipts, validation, reconciliation, attack-path analysis, sealed manifest/findings/coverage/report/SARIF, and completion indexing"
   - "swift test --scratch-path <new temporary directory> -Xswiftc -warnings-as-errors"
@@ -116,6 +120,8 @@ last_verification_commands:
   - "PR #15 final gate and authorized merge: exact head 350008e756d14fbc2810fa53852554abcd577434; Swift CI run 30056365487; CodeQL run 30056363673; seven resolved review threads; CLEAN/MERGEABLE state; expected-head rebase merge into eight single-parent protected-main commits ending at 72d2eb44ca7ddfb097ac8aadcccfca0aaa595fbc; Issue #14 automatically closed"
   - "Issue #17 release-blocker diagnosis and PR #18 local gate: protected-main CI run 30058156096 failed only cancellationIsCooperativeAndCleansJobOwnedTemporaryData with optimisticLockFailed; PR and rebased-main tree hashes match; isolated warnings-as-errors reproduction failed once in 20 runs; bounded lock-only retry plus deterministic concurrent-version and non-lock propagation regressions; 2 cancellation tests, 14 focused Task Manager/brand tests, complete 285-test/48-suite run, dependency resolution, and whitespace checks pass"
   - "PR #18 release-note reconciliation: CHANGELOG and v0.2.0 release notes now describe the bounded cancellation optimistic-lock retry, public-brand tests bind the release copy, ROADMAP no longer claims publication before the Release exists, execution-ledger YAML validates, and the complete Pull Request remains limited to seven source/test/documentation paths"
+  - "authorized PR #18 merge and v0.2.0 publication: final exact-head CI run 30059114394 and CodeQL run 30059112687; expected-head rebase merge into three single-parent commits ending at f7a25572bc6c2940b99d9064f53ecdc7aaad352d; exact new-main CI run 30060770585 and CodeQL run 30060770471; unsigned annotated tag creation and tag-peel inspection; regular/latest Release creation with zero uploaded assets; signed-out HTTP 200 and clean-tree verification"
+  - "post-release product-preview local gate: visually re-review the previously captured Local Media and UN Web TV Metadata PNGs; verify 2384x1664 dimensions, sub-1-MiB size, no embedded user-path/private-key/password string, and no real meeting or user data; resolve 27 local Markdown/HTML targets; run 3 PublicBrandPresentationTests, warning-as-error build, complete 286-test/48-suite run, Package.swift/Package.resolved stability, exact five-path scope, and whitespace checks"
 last_verification_results:
   - "post-MVP documentation reconciliation is committed at 5cd59015277814206ca7328f6cfb89e42c252f4c after the authorized metadata-preserving private-path and GitHub-noreply history sanitizations: exactly 20 governance/architecture/ADR documents changed, all 35 checked local link targets resolve, the stale-reference and secret-pattern gates are clear, and the tracked working tree was clean before this ledger-only refresh; no production code, test, dependency, release artifact, push, tag, release, or distribution changed"
   - "the final new-scratch full run passes 242 tests in 42 suites with warnings as errors; the ordinary run truthfully skips three opt-in installed-model routes, and the separate new-scratch synthetic-only opt-in run passes all three in 6.016 seconds"
@@ -163,7 +169,8 @@ last_verification_results:
   - "exact PR #12 head 26afd9c5b01a815d79c3f29ce34cbada57e8f466 is OPEN, CLEAN, and MERGEABLE; Swift build/test plus all CodeQL checks pass, all four review threads are resolved, and the final exact-head Codex review reports no major issue; repository policy still requires explicit maintainer merge authority despite green gates"
   - "local v0.2.0 release-preparation commit 3832df2f71a83f86038bdf626ef8221f7a5abda0 changes exactly nine documentation/presentation-test paths, adds no binary or generated application asset, and passes two focused public-brand tests plus the complete 284-test/48-suite warning-as-error run with zero failures and three explicit installed-model opt-in skips"
   - "the v0.2.0 release copy describes only a source-tree compatibility and safety foundation: all four Research integration capabilities remain disabled, schema v10 and GRDB 7.11.1 are unchanged, and no Research UI, provider, connector, credential, persistence, migration, executor, CLI/MCP surface, network destination, file-layout change, or user-data behavior is claimed"
-  - "the development bundle remains version 0.1.0 internal alpha and is not promoted, packaged, signed, notarized, uploaded, installed, or distributed by this source-release preparation; the requested README audience sentence and authentic synthetic screenshots remain deliberately deferred until after the source Release"
+  - "v0.2.0 is a regular, latest, non-draft, non-prerelease source Release whose unsigned annotated tag peels to exact protected-main commit f7a25572bc6c2940b99d9064f53ecdc7aaad352d; exact-main CI and CodeQL pass, signed-out HTTP returns 200, and the Release has zero uploaded assets"
+  - "the development bundle remains version 0.1.0 internal alpha and was not promoted, packaged, Developer ID-signed, notarized, uploaded, installed, or distributed; post-release PR #20 adds only the maintainer-approved audience line, two verified public-safe synthetic screenshots, presentation tests, ROADMAP truth, and this execution-ledger reconciliation"
 open_P0_decisions: []
 open_P1_decisions: []
 known_out_of_scope_findings:
@@ -191,6 +198,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
-next_eligible_task: "there is no next numbered MVP task; complete PR #18 exact-head review/CI/CodeQL/conversation gates, use the authorized rebase merge only after every gate passes, then require exact new-main CI and CodeQL before creating the authorized unsigned annotated v0.2.0 tag and source-only GitHub Release with zero uploaded assets; after verified publication, prepare the separately authorized README audience/screenshot Pull Request; binary signing, notarization, upload, installation, deployment, and distribution remain unauthorized"
-last_updated_at: "2026-07-24T01:29:19Z"
+next_eligible_task: "there is no next numbered MVP task; complete post-release PR #20 exact-head review/CI/CodeQL/conversation gates, use the authorized rebase merge only after every gate passes, require exact new-main CI and CodeQL, then stop for new user authority; binary signing, notarization, upload, installation, deployment, distribution, and every later product initiative remain unauthorized"
+last_updated_at: "2026-07-24T02:46:30Z"
 ```
