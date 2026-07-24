@@ -73,7 +73,7 @@ struct MeetingBuddyRootViewStructureTests {
         ] {
             #expect(rootView.contains(titleCase))
         }
-        #expect(rootView.contains("public init(store: MediaReviewStore)"))
+        #expect(rootView.contains("store: MediaReviewStore,"))
         #expect(!rootView.contains("AppCapabilities"))
         for forbiddenVisibleSurface in [
             "Label(\"Research",
@@ -86,6 +86,94 @@ struct MeetingBuddyRootViewStructureTests {
             ".navigationTitle(\"Conversation"
         ] {
             #expect(!rootView.contains(forbiddenVisibleSurface))
+        }
+    }
+
+    @Test
+    func singletonWindowKeepsServicesAppOwnedAndDraftsSceneOwned() throws {
+        let app = try source(
+            "Sources/MeetingBuddyApp/MeetingBuddyApp.swift"
+        )
+        let root = try source(
+            "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
+        )
+        let store = try source(
+            "Sources/MeetingBuddyFeatures/Stores/MediaReviewStore.swift"
+        )
+        let sceneState = try source(
+            "Sources/MeetingBuddyFeatures/Models/MediaReviewSceneState.swift"
+        )
+
+        #expect(app.contains("@State private var store: MediaReviewStore"))
+        #expect(app.contains("Window(\"BlueMinutes\", id: \"main\")"))
+        #expect(!app.contains("WindowGroup"))
+        #expect(app.contains("MainWindowResolver { window in"))
+        #expect(app.contains("installCloseGuard(on: window)"))
+        #expect(app.contains("func windowShouldClose(_ sender: NSWindow)"))
+        #expect(app.contains("guard shouldClose(sender) else"))
+        #expect(app.contains("window?.performClose(nil)"))
+        #expect(app.contains("forwardingTarget(for selector: Selector!)"))
+        #expect(
+            app.contains(
+                "var terminationSceneState: MediaReviewSceneState?"
+            )
+        )
+        #expect(app.contains("onSceneStateAvailable: { sceneState in"))
+        #expect(root.contains("@Bindable private var store: MediaReviewStore"))
+        #expect(!root.contains("@State private var store: MediaReviewStore"))
+        #expect(root.contains("@State private var sceneState: MediaReviewSceneState"))
+        #expect(
+            root.contains(
+                ".disabled(sceneState.isInteractionLocked || store.isWorking)"
+            )
+        )
+        #expect(root.contains("List(selection: sectionSelection)"))
+        #expect(
+            root.components(
+                separatedBy: "sceneState.isDestinationAvailable("
+            ).count - 1 == 3
+        )
+        #expect(!root.contains("$store.selectedSection"))
+        #expect(!store.contains("public var selectedSection"))
+        #expect(sceneState.contains("public var selectedSection"))
+        #expect(!sceneState.contains("@AppStorage"))
+        #expect(!sceneState.contains("@SceneStorage"))
+    }
+
+    @Test
+    func dirtyNavigationAndApplicationTerminationWireEveryResolution() throws {
+        let app = try source(
+            "Sources/MeetingBuddyApp/MeetingBuddyApp.swift"
+        )
+        let root = try source(
+            "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
+        )
+
+        for requiredRootAction in [
+            "Button(\"Save and Continue\")",
+            "sceneState.beginPendingNavigationSave()",
+            "sceneState.resolvePendingNavigationSave(",
+            "sceneState.requestMediaImport()",
+            "case .importPendingMedia:",
+            "Button(\"Discard Changes\", role: .destructive)",
+            "sceneState.discardChangesAndResolvePending()",
+            "Button(\"Keep Editing\", role: .cancel)",
+            "sceneState.cancelPendingNavigation()"
+        ] {
+            #expect(root.contains(requiredRootAction))
+        }
+        for requiredTerminationAction in [
+            "sceneState.applicationTerminationRequirement",
+            "case .operationInFlight:",
+            "case .unsavedEditorChanges:",
+            "Save and Quit",
+            "Discard and Quit",
+            "Keep Editing",
+            "store.saveAllEditorDrafts(in: sceneState)",
+            "sceneState.discardAllEditorChanges()",
+            "return .terminateCancel"
+        ] {
+            #expect(app.contains(requiredTerminationAction))
         }
     }
 

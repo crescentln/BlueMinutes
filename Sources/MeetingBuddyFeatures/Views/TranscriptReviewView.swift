@@ -5,10 +5,7 @@ import SwiftUI
 
 struct TranscriptReviewView: View {
     @Bindable var store: MediaReviewStore
-    @State private var selectedTranscriptRevisionID: RevisionID?
-    @State private var transcriptDraft = ""
-    @State private var translationDraft = ""
-    @State private var speakerName = ""
+    @Bindable var sceneState: MediaReviewSceneState
 
     var body: some View {
         Group {
@@ -18,11 +15,21 @@ struct TranscriptReviewView: View {
                 setupView
             }
         }
-        .onChange(of: selectedTranscriptRevisionID) { _, _ in
-            loadSelectionDrafts()
+        .onAppear {
+            sceneState.transcript.reconcile(with: store.transcriptReview)
         }
-        .onChange(of: store.transcriptReview?.manifest.manifestID) { _, _ in
-            reconcileSelection()
+        .onChange(of: sceneState.transcript.selectedSegmentID) { _, _ in
+            sceneState.transcript.reconcile(with: store.transcriptReview)
+        }
+        .onChange(
+            of: store.transcriptReview?.transcriptSegments.map(\.revision.revisionID)
+        ) { _, _ in
+            sceneState.transcript.reconcile(with: store.transcriptReview)
+        }
+        .onChange(
+            of: store.transcriptReview?.translations.map(\.revision.revisionID)
+        ) { _, _ in
+            sceneState.transcript.reconcile(with: store.transcriptReview)
         }
     }
 
@@ -32,19 +39,24 @@ struct TranscriptReviewView: View {
                 routeCard
                 GroupBox("Languages") {
                     Form {
-                        TextField("Source language", text: $store.transcriptSourceLanguageTag)
+                        TextField(
+                            "Source language",
+                            text: $sceneState.transcriptSourceLanguageTag
+                        )
                         TextField(
                             "Target language (optional)",
-                            text: $store.transcriptTargetLanguageTag
+                            text: $sceneState.transcriptTargetLanguageTag
                         )
                     }
                     .formStyle(.grouped)
                     HStack {
                         Button("Check Installed Models") {
-                            Task { await store.refreshTranscriptRoute() }
+                            Task {
+                                await store.refreshTranscriptRoute(using: sceneState)
+                            }
                         }
                         Button("Transcribe On Device") {
-                            Task { await store.startTranscript() }
+                            Task { await store.startTranscript(using: sceneState) }
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(store.routeReview?.isOnDeviceReady != true || store.isWorking)
@@ -158,24 +170,26 @@ struct TranscriptReviewView: View {
                     .foregroundStyle(.secondary)
                 Text("Transcript")
                     .font(.headline)
-                TextEditor(text: $store.manualTranscriptText)
+                TextEditor(text: $sceneState.manualTranscriptText)
                     .frame(minHeight: 120)
                     .overlay { RoundedRectangle(cornerRadius: 6).stroke(.separator) }
-                if !store.transcriptTargetLanguageTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !sceneState.transcriptTargetLanguageTag.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty {
                     Text("Translation")
                         .font(.headline)
-                    TextEditor(text: $store.manualTranslationText)
+                    TextEditor(text: $sceneState.manualTranslationText)
                         .frame(minHeight: 100)
                         .overlay { RoundedRectangle(cornerRadius: 6).stroke(.separator) }
                 }
                 Toggle(
                     "I confirm this manual text accounts for the complete recording timeline",
-                    isOn: $store.manualCoverageConfirmed
+                    isOn: $sceneState.manualCoverageConfirmed
                 )
                 Button("Publish Manual Transcript") {
-                    Task { await store.publishManualTranscript() }
+                    Task { await store.publishManualTranscript(using: sceneState) }
                 }
-                .disabled(store.isWorking || !store.manualCoverageConfirmed)
+                .disabled(store.isWorking || !sceneState.manualCoverageConfirmed)
             }
             .padding()
         }
@@ -208,7 +222,11 @@ struct TranscriptReviewView: View {
     }
 
     private func segmentList(_ review: TranscriptReviewBundle) -> some View {
-        List(review.transcriptSegments, id: \.revision.revisionID, selection: $selectedTranscriptRevisionID) { segment in
+        List(
+            review.transcriptSegments,
+            id: \.revision.revisionID,
+            selection: transcriptSelection
+        ) { segment in
             VStack(alignment: .leading, spacing: 4) {
                 Text(segment.text)
                     .lineLimit(2)
@@ -219,7 +237,7 @@ struct TranscriptReviewView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
-            .tag(segment.revision.revisionID)
+            .tag(segment.segmentID)
         }
         .listStyle(.inset)
     }
@@ -234,41 +252,51 @@ struct TranscriptReviewView: View {
                             LabeledContent("Time", value: timeLabel(segment.timeRange))
                             LabeledContent("Language", value: segment.detectedLanguage.value)
                             LabeledContent("Provenance", value: segment.revision.createdBy.encodedValue)
-                            TextEditor(text: $transcriptDraft)
+                            TextEditor(text: $sceneState.transcript.transcriptText)
                                 .frame(minHeight: 140)
                                 .overlay { RoundedRectangle(cornerRadius: 6).stroke(.separator) }
                             Button("Save Transcript Correction") {
+                                guard let operation =
+                                    sceneState.beginDirectTranscriptSave()
+                                else { return }
                                 Task {
-                                    await store.correctTranscript(
-                                        revisionID: segment.revision.revisionID,
-                                        text: transcriptDraft
+                                    let succeeded = await store.saveEditorDraft(
+                                        operation.request
                                     )
+                                    if sceneState.completeDirectEditorSave(
+                                        operation,
+                                        succeeded: succeeded,
+                                        updatedReviews: store.editorReviewSnapshot
+                                    ) {
+                                        sceneState.transcript.reconcile(
+                                            with: store.transcriptReview
+                                        )
+                                    }
                                 }
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(store.isWorking || transcriptDraft == segment.text)
+                            .disabled(
+                                store.isWorking
+                                    || !sceneState.transcript.transcriptIsDirty
+                            )
+                            if sceneState.transcript.transcriptIsDirty {
+                                Button("Revert Transcript Draft") {
+                                    sceneState.transcript.discardTranscriptChanges()
+                                }
+                            }
                         }
                         .padding()
                     }
                     if let translation = translation(for: segment, in: review) {
-                        GroupBox("Separate translation revision") {
-                            VStack(alignment: .leading, spacing: 10) {
-                                LabeledContent("Target", value: translation.targetLanguage.value)
-                                TextEditor(text: $translationDraft)
-                                    .frame(minHeight: 120)
-                                    .overlay { RoundedRectangle(cornerRadius: 6).stroke(.separator) }
-                                Button("Save Translation Correction") {
-                                    Task {
-                                        await store.correctTranslation(
-                                            revisionID: translation.revision.revisionID,
-                                            text: translationDraft
-                                        )
-                                    }
-                                }
-                                .disabled(store.isWorking || translationDraft == translation.translatedText)
-                            }
-                            .padding()
-                        }
+                        translationEditor(
+                            targetLabel: translation.targetLanguage.value,
+                            sourceRevisionIsCurrent: true
+                        )
+                    } else if sceneState.transcript.translationIsDirty {
+                        translationEditor(
+                            targetLabel: "retained prior translation",
+                            sourceRevisionIsCurrent: false
+                        )
                     }
                     GroupBox("Speaker review") {
                         VStack(alignment: .leading, spacing: 10) {
@@ -278,16 +306,38 @@ struct TranscriptReviewView: View {
                             } else {
                                 Label("Uncertain speaker — confirmation required", systemImage: "person.crop.circle.badge.questionmark")
                                     .foregroundStyle(.orange)
-                                TextField("Speaker name", text: $speakerName)
+                                TextField(
+                                    "Speaker name",
+                                    text: $sceneState.transcript.speakerName
+                                )
                                 Button("Confirm Speaker") {
+                                    guard let operation =
+                                        sceneState.beginDirectSpeakerSave()
+                                    else { return }
                                     Task {
-                                        await store.confirmSpeaker(
-                                            transcriptRevisionID: segment.revision.revisionID,
-                                            displayName: speakerName
+                                        let succeeded = await store.saveEditorDraft(
+                                            operation.request
                                         )
+                                        if sceneState.completeDirectEditorSave(
+                                            operation,
+                                            succeeded: succeeded,
+                                            updatedReviews: store.editorReviewSnapshot
+                                        ) {
+                                            sceneState.transcript.reconcile(
+                                                with: store.transcriptReview
+                                            )
+                                        }
                                     }
                                 }
-                                .disabled(store.isWorking || speakerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                .disabled(
+                                    store.isWorking
+                                        || !sceneState.transcript.speakerIsDirty
+                                )
+                                if sceneState.transcript.speakerIsDirty {
+                                    Button("Clear Speaker Draft") {
+                                        sceneState.transcript.discardSpeakerChanges()
+                                    }
+                                }
                             }
                         }
                         .padding()
@@ -304,8 +354,64 @@ struct TranscriptReviewView: View {
         }
     }
 
+    private func translationEditor(
+        targetLabel: String,
+        sourceRevisionIsCurrent: Bool
+    ) -> some View {
+        GroupBox("Separate translation revision") {
+            VStack(alignment: .leading, spacing: 10) {
+                LabeledContent("Target", value: targetLabel)
+                if !sourceRevisionIsCurrent {
+                    Label(
+                        "The Transcript revision changed after this draft was written. The draft is retained; an incompatible save fails closed without discarding it.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                }
+                TextEditor(text: $sceneState.transcript.translationText)
+                    .frame(minHeight: 120)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(.separator)
+                    }
+                Button("Save Translation Correction") {
+                    guard let operation =
+                        sceneState.beginDirectTranslationSave()
+                    else { return }
+                    Task {
+                        let succeeded = await store.saveEditorDraft(
+                            operation.request
+                        )
+                        if sceneState.completeDirectEditorSave(
+                            operation,
+                            succeeded: succeeded,
+                            updatedReviews: store.editorReviewSnapshot
+                        ) {
+                            sceneState.transcript.reconcile(
+                                with: store.transcriptReview
+                            )
+                        }
+                    }
+                }
+                .disabled(
+                    store.isWorking
+                        || !sceneState.transcript.translationIsDirty
+                )
+                if sceneState.transcript.translationIsDirty {
+                    Button("Revert Translation Draft") {
+                        sceneState.transcript.discardTranslationChanges()
+                    }
+                }
+            }
+            .padding()
+        }
+    }
+
     private func selectedSegment(_ review: TranscriptReviewBundle) -> TranscriptSegmentV1? {
-        review.transcriptSegments.first { $0.revision.revisionID == selectedTranscriptRevisionID }
+        review.transcriptSegments.first {
+            $0.segmentID == sceneState.transcript.selectedSegmentID
+        }
     }
 
     private func translation(
@@ -335,29 +441,11 @@ struct TranscriptReviewView: View {
         review.transcriptSegments.filter { !hasAssignment(for: $0, in: review) }.count
     }
 
-    private func reconcileSelection() {
-        guard let review = store.transcriptReview else {
-            selectedTranscriptRevisionID = nil
-            return
-        }
-        if selectedSegment(review) == nil {
-            selectedTranscriptRevisionID = review.transcriptSegments.first?.revision.revisionID
-        }
-        loadSelectionDrafts()
-    }
-
-    private func loadSelectionDrafts() {
-        guard let review = store.transcriptReview,
-              let segment = selectedSegment(review)
-        else {
-            transcriptDraft = ""
-            translationDraft = ""
-            speakerName = ""
-            return
-        }
-        transcriptDraft = segment.text
-        translationDraft = translation(for: segment, in: review)?.translatedText ?? ""
-        speakerName = ""
+    private var transcriptSelection: Binding<TranscriptSegmentID?> {
+        Binding(
+            get: { sceneState.transcript.selectedSegmentID },
+            set: { sceneState.requestTranscriptSelection($0) }
+        )
     }
 
     private func timeLabel(_ range: MediaTimeRange) -> String {

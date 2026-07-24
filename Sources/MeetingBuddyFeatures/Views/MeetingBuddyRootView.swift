@@ -4,18 +4,26 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 public struct MeetingBuddyRootView: View {
-    @State private var store: MediaReviewStore
+    @Bindable private var store: MediaReviewStore
+    @State private var sceneState: MediaReviewSceneState
     @State private var fileImporterPurpose = LocalFileImporterPurpose.workspace
     @State private var showFileImporter = false
-    @State private var pendingPermanentDeletion: WorkspaceTrashItem?
+    private let onSceneStateAvailable:
+        @MainActor (MediaReviewSceneState) -> Void
 
-    public init(store: MediaReviewStore) {
-        _store = State(initialValue: store)
+    public init(
+        store: MediaReviewStore,
+        onSceneStateAvailable:
+            @escaping @MainActor (MediaReviewSceneState) -> Void = { _ in }
+    ) {
+        _store = Bindable(wrappedValue: store)
+        _sceneState = State(initialValue: MediaReviewSceneState())
+        self.onSceneStateAvailable = onSceneStateAvailable
     }
 
     public var body: some View {
         NavigationSplitView {
-            List(selection: $store.selectedSection) {
+            List(selection: sectionSelection) {
                 Section("Workspace") {
                     Label(
                         store.workspace?.displayName ?? "No workspace open",
@@ -37,13 +45,19 @@ public struct MeetingBuddyRootView: View {
                         .tag(MediaReviewSection.webMetadata)
                     Label("Transcript Review", systemImage: "text.bubble")
                         .tag(MediaReviewSection.transcript)
-                        .disabled(store.job?.state != .succeeded)
+                        .disabled(
+                            !sceneState.isDestinationAvailable(.transcript)
+                        )
                     Label("Analysis Review", systemImage: "checklist.checked")
                         .tag(MediaReviewSection.analysis)
-                        .disabled(store.transcriptReview == nil)
+                        .disabled(
+                            !sceneState.isDestinationAvailable(.analysis)
+                        )
                     Label("Briefing", systemImage: "doc.text.magnifyingglass")
                         .tag(MediaReviewSection.briefing)
-                        .disabled(store.analysisReview?.isHumanConfirmed != true)
+                        .disabled(
+                            !sceneState.isDestinationAvailable(.briefing)
+                        )
                     Label("Meeting History", systemImage: "clock.arrow.circlepath")
                         .tag(MediaReviewSection.history)
                     Label("Storage", systemImage: "externaldrive")
@@ -70,18 +84,23 @@ public struct MeetingBuddyRootView: View {
                 }
             }
         }
+        .disabled(sceneState.isInteractionLocked || store.isWorking)
         .frame(minWidth: 860, minHeight: 600)
-        .task {
-            await store.restoreWorkspace()
+        .onAppear {
+            onSceneStateAvailable(sceneState)
         }
-        .onChange(of: store.selectedSection) { _, section in
+        .task {
+            await store.restoreWorkspace(using: sceneState)
+            reconcileDestination()
+        }
+        .onChange(of: sceneState.selectedSection) { _, section in
             Task {
                 switch section {
                 case .recording:
-                    await store.loadRecordingSetup()
+                    await store.loadRecordingSetup(using: sceneState)
                 case .transcript:
                     await store.loadTranscriptReview()
-                    await store.refreshTranscriptRoute()
+                    await store.refreshTranscriptRoute(using: sceneState)
                 case .analysis:
                     await store.loadAnalysisReview()
                     await store.refreshAnalysisRoute()
@@ -89,13 +108,20 @@ public struct MeetingBuddyRootView: View {
                     await store.loadBriefingReview()
                     await store.refreshBriefingRoute()
                 case .history:
-                    await store.loadHistoricalReview()
+                    await store.loadHistoricalReview(using: sceneState)
                 case .storage:
                     await store.loadStorageReport()
                 case .intake, .webMetadata, nil:
                     break
                 }
             }
+        }
+        .onChange(of: store.job?.state) { _, _ in reconcileDestination() }
+        .onChange(of: store.transcriptReview?.manifest.manifestID) { _, _ in
+            reconcileDestination()
+        }
+        .onChange(of: store.analysisReview?.isHumanConfirmed) { _, _ in
+            reconcileDestination()
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -105,9 +131,9 @@ public struct MeetingBuddyRootView: View {
             guard case let .success(urls) = result, let url = urls.first else { return }
             switch fileImporterPurpose {
             case .workspace:
-                Task { await store.openOrCreateWorkspace(at: url) }
+                resolveNavigationEffect(sceneState.requestWorkspaceChange(to: url))
             case .media:
-                Task { await store.inspectMedia(at: url) }
+                Task { await store.inspectMedia(at: url, using: sceneState) }
             }
         }
         .alert(
@@ -122,16 +148,48 @@ public struct MeetingBuddyRootView: View {
             Text(store.safeErrorMessage ?? "")
         }
         .confirmationDialog(
-            "Permanently delete this managed file?",
+            "Unsaved Editor Changes",
             isPresented: Binding(
-                get: { pendingPermanentDeletion != nil },
-                set: { if !$0 { pendingPermanentDeletion = nil } }
+                get: { sceneState.isNavigationConfirmationPresented },
+                set: {
+                    sceneState.navigationConfirmationPresentationChanged(
+                        isPresented: $0
+                    )
+                }
             ),
             titleVisibility: .visible
         ) {
-            if let item = pendingPermanentDeletion {
+            if sceneState.canSavePendingChanges {
+                Button("Save and Continue") {
+                    if let operation = sceneState.beginPendingNavigationSave() {
+                        Task {
+                            await savePendingDraftAndResolve(operation)
+                        }
+                    }
+                }
+            }
+            Button("Discard Changes", role: .destructive) {
+                resolveNavigationEffect(
+                    sceneState.discardChangesAndResolvePending()
+                )
+            }
+            Button("Keep Editing", role: .cancel) {
+                sceneState.cancelPendingNavigation()
+            }
+        } message: {
+            Text(sceneState.navigationConfirmationMessage)
+        }
+        .confirmationDialog(
+            "Permanently delete this managed file?",
+            isPresented: Binding(
+                get: { sceneState.pendingPermanentDeletion != nil },
+                set: { if !$0 { sceneState.pendingPermanentDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let item = sceneState.pendingPermanentDeletion {
                 Button("Delete Permanently", role: .destructive) {
-                    pendingPermanentDeletion = nil
+                    sceneState.pendingPermanentDeletion = nil
                     Task {
                         await store.permanentlyDeleteTrashItem(
                             item.storageObjectID,
@@ -141,7 +199,7 @@ public struct MeetingBuddyRootView: View {
                 }
             }
             Button("Cancel", role: .cancel) {
-                pendingPermanentDeletion = nil
+                sceneState.pendingPermanentDeletion = nil
             }
         } message: {
             Text("This removes the verified Workspace Trash file after its retention interval. It preserves immutable audit history and does not guarantee forensic erasure on APFS, SSDs, snapshots, or backups.")
@@ -177,24 +235,24 @@ public struct MeetingBuddyRootView: View {
         if store.workspace == nil {
             workspaceOnboarding
         } else {
-            switch store.selectedSection ?? .intake {
+            switch sceneState.selectedSection ?? .intake {
             case .intake:
                 intakeView
             case .recording:
-                RecordingCaptureView(store: store)
+                RecordingCaptureView(store: store, sceneState: sceneState)
             case .webMetadata:
-                UNWebTVMetadataView(store: store)
+                UNWebTVMetadataView(store: store, sceneState: sceneState)
             case .transcript:
-                TranscriptReviewView(store: store)
+                TranscriptReviewView(store: store, sceneState: sceneState)
             case .analysis:
-                AnalysisReviewView(store: store)
+                AnalysisReviewView(store: store, sceneState: sceneState)
             case .briefing:
-                BriefingReviewView(store: store)
+                BriefingReviewView(store: store, sceneState: sceneState)
             case .history:
-                HistoricalReviewView(store: store)
+                HistoricalReviewView(store: store, sceneState: sceneState)
             case .storage:
                 StorageDashboardView(store: store) { item in
-                    pendingPermanentDeletion = item
+                    sceneState.pendingPermanentDeletion = item
                 }
             }
         }
@@ -217,7 +275,7 @@ public struct MeetingBuddyRootView: View {
     }
 
     private var navigationTitle: String {
-        switch store.selectedSection {
+        switch sceneState.selectedSection {
         case .recording: "Record Audio"
         case .webMetadata: "UN Web TV Metadata"
         case .transcript: "Transcript Review"
@@ -251,13 +309,13 @@ public struct MeetingBuddyRootView: View {
     private var sourceForm: some View {
         GroupBox("Meeting and source policy") {
             Form {
-                TextField("Meeting title", text: $store.meetingTitle)
-                Picker("Classification", selection: $store.dataClassification) {
+                TextField("Meeting title", text: $sceneState.meetingTitle)
+                Picker("Classification", selection: $sceneState.dataClassification) {
                     ForEach(ClassificationChoice.all) { choice in
                         Text(choice.label).tag(choice.value)
                     }
                 }
-                TextField("Language tag (optional)", text: $store.languageTag)
+                TextField("Language tag (optional)", text: $sceneState.languageTag)
                 LabeledContent("Processing route", value: "Local only")
             }
             .formStyle(.grouped)
@@ -281,6 +339,69 @@ public struct MeetingBuddyRootView: View {
         showFileImporter = true
     }
 
+    private var sectionSelection: Binding<MediaReviewSection?> {
+        Binding(
+            get: { sceneState.selectedSection },
+            set: { sceneState.requestSection($0) }
+        )
+    }
+
+    private func reconcileDestination() {
+        sceneState.reconcileDestinationAvailability(
+            canonicalJobSucceeded: store.job?.state == .succeeded,
+            hasTranscriptReview: store.transcriptReview != nil,
+            hasHumanConfirmedAnalysis: store.analysisReview?.isHumanConfirmed == true
+        )
+    }
+
+    private func resolveNavigationEffect(_ effect: MediaReviewNavigationEffect?) {
+        guard let effect else { return }
+        switch effect {
+        case .none:
+            reconcileEditorDrafts()
+        case let .openWorkspace(url):
+            guard let operation = sceneState.beginWorkspaceChange(to: url) else {
+                return
+            }
+            Task {
+                await sceneState.resolveWorkspaceChange(operation) { selectedURL in
+                    await store.openOrCreateWorkspace(
+                        at: selectedURL,
+                        using: sceneState
+                    )
+                }
+                reconcileDestination()
+            }
+        case .importPendingMedia:
+            Task {
+                await store.importAndProcess(using: sceneState)
+                reconcileEditorDrafts()
+                reconcileDestination()
+            }
+        }
+    }
+
+    private func savePendingDraftAndResolve(
+        _ operation: MediaReviewEditorSaveOperation
+    ) async {
+        let effect = await sceneState.resolvePendingNavigationSave(
+            operation,
+            updatedReviews: { store.editorReviewSnapshot }
+        ) { request in
+            await store.saveEditorDraft(request)
+        }
+        if effect != nil {
+            reconcileEditorDrafts()
+        }
+        resolveNavigationEffect(effect)
+    }
+
+    private func reconcileEditorDrafts() {
+        sceneState.transcript.reconcile(with: store.transcriptReview)
+        sceneState.analysis.reconcile(with: store.analysisReview)
+        sceneState.briefing.reconcile(with: store.briefingReview)
+    }
+
     private func pendingMediaCard(_ pending: PendingMediaReview) -> some View {
         GroupBox("Selected source") {
             VStack(alignment: .leading, spacing: 12) {
@@ -290,7 +411,7 @@ public struct MeetingBuddyRootView: View {
                     "Duration",
                     value: durationLabel(pending.inspection.durationFrameCount)
                 )
-                Picker("Audio track", selection: $store.selectedTrack) {
+                Picker("Audio track", selection: $sceneState.selectedTrack) {
                     if pending.inspection.audioTracks.count > 1 {
                         Text("Select a track").tag(Optional<MediaTrackIdentifier>.none)
                     }
@@ -298,21 +419,25 @@ public struct MeetingBuddyRootView: View {
                         Text(trackLabel(track)).tag(Optional(track.trackIdentifier))
                     }
                 }
-                Picker("Speech provenance", selection: $store.speechSourceKind) {
+                Picker("Speech provenance", selection: $sceneState.speechSourceKind) {
                     ForEach(SpeechKindChoice.all) { choice in
                         Text(choice.label).tag(choice.value)
                     }
                 }
                 HStack {
                     Button("Import and Process") {
-                        Task { await store.importAndProcess() }
+                        resolveNavigationEffect(
+                            sceneState.requestMediaImport()
+                        )
                     }
                     .keyboardShortcut(.return, modifiers: .command)
                     .buttonStyle(.borderedProminent)
-                    .disabled(store.isWorking)
+                    .disabled(
+                        store.isWorking || store.blocksMediaReplacement
+                    )
                     .accessibilityHint("Copy, hash, register, and process the selected source locally.")
                     Button("Clear", role: .cancel) {
-                        store.discardPendingMedia()
+                        store.discardPendingMedia(using: sceneState)
                     }
                     .disabled(store.isWorking)
                 }

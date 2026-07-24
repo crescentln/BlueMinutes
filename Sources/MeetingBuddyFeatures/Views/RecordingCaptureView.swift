@@ -4,6 +4,7 @@ import SwiftUI
 
 struct RecordingCaptureView: View {
     @Bindable var store: MediaReviewStore
+    @Bindable var sceneState: MediaReviewSceneState
 
     var body: some View {
         ScrollView {
@@ -46,36 +47,36 @@ struct RecordingCaptureView: View {
     private var captureForm: some View {
         GroupBox("New visible recording") {
             Form {
-                TextField("Meeting title", text: $store.meetingTitle)
-                Picker("Classification", selection: $store.dataClassification) {
+                TextField("Meeting title", text: $sceneState.meetingTitle)
+                Picker("Classification", selection: $sceneState.dataClassification) {
                     ForEach(ClassificationChoice.all) { choice in
                         Text(choice.label).tag(choice.value)
                     }
                 }
-                TextField("Language tag (optional)", text: $store.languageTag)
-                Picker("Capture mode", selection: $store.captureMode) {
+                TextField("Language tag (optional)", text: $sceneState.languageTag)
+                Picker("Capture mode", selection: $sceneState.captureMode) {
                     ForEach(CaptureModeChoice.all) { choice in
                         Text(choice.label).tag(choice.value)
                     }
                 }
                 .disabled(store.blocksWorkspaceSwitch)
 
-                if store.captureMode.requestedTrackKinds.contains(.microphone) {
-                    Picker("Microphone", selection: $store.selectedMicrophoneDeviceID) {
+                if sceneState.captureMode.requestedTrackKinds.contains(.microphone) {
+                    Picker("Microphone", selection: $sceneState.selectedMicrophoneDeviceID) {
                         Text("Select one microphone")
                             .tag(Optional<String>.none)
                         ForEach(store.recordingSetup?.microphones ?? []) { microphone in
                             Text(microphone.displayName).tag(Optional(microphone.id))
                         }
                     }
-                    Picker("Microphone speech provenance", selection: $store.microphoneSpeechSourceKind) {
+                    Picker("Microphone speech provenance", selection: $sceneState.microphoneSpeechSourceKind) {
                         ForEach(SpeechKindChoice.all) { choice in
                             Text(choice.label).tag(choice.value)
                         }
                     }
                 }
-                if store.captureMode.requestedTrackKinds.contains(.applicationAudio) {
-                    Picker("Application speech provenance", selection: $store.applicationSpeechSourceKind) {
+                if sceneState.captureMode.requestedTrackKinds.contains(.applicationAudio) {
+                    Picker("Application speech provenance", selection: $sceneState.applicationSpeechSourceKind) {
                         ForEach(SpeechKindChoice.all) { choice in
                             Text(choice.label).tag(choice.value)
                         }
@@ -86,7 +87,7 @@ struct RecordingCaptureView: View {
                 }
                 Toggle(
                     "I am starting this visible recording directly and acknowledge responsibility for participant notice, consent, venue rules, organization policy, and applicable law.",
-                    isOn: $store.recordingAcknowledged
+                    isOn: $sceneState.recordingAcknowledged
                 )
                 .toggleStyle(.checkbox)
                 .fixedSize(horizontal: false, vertical: true)
@@ -96,18 +97,18 @@ struct RecordingCaptureView: View {
 
             HStack {
                 Button("Refresh Devices") {
-                    Task { await store.loadRecordingSetup() }
+                    Task { await store.loadRecordingSetup(using: sceneState) }
                 }
                 .disabled(store.isWorking || store.blocksWorkspaceSwitch)
                 Spacer()
                 Button("Start Visible Recording") {
-                    Task { await store.startRecording() }
+                    Task { await store.startRecording(using: sceneState) }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(
                     store.isWorking
                         || store.blocksWorkspaceSwitch
-                        || !store.recordingAcknowledged
+                        || !sceneState.recordingAcknowledged
                 )
                 .accessibilityHint(
                     "Create a durable intent, request exact source permission, and then begin local audio capture."
@@ -152,10 +153,10 @@ struct RecordingCaptureView: View {
                     HStack {
                         if session.state == .interrupted || session.state == .recovering {
                             Button("Resume with New Selection") {
-                                Task { await store.resumeRecording() }
+                                Task { await store.resumeRecording(using: sceneState) }
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(store.isWorking || !store.recordingAcknowledged)
+                            .disabled(store.isWorking || !sceneState.recordingAcknowledged)
                             .accessibilityHint(
                                 "Request the source again and persist a new provenance epoch before audio resumes."
                             )

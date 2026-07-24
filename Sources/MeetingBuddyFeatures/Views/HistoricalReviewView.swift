@@ -4,8 +4,7 @@ import SwiftUI
 
 struct HistoricalReviewView: View {
     @Bindable var store: MediaReviewStore
-    @State private var confirmChange = false
-    @State private var confirmReset = false
+    @Bindable var sceneState: MediaReviewSceneState
 
     var body: some View {
         ScrollView {
@@ -21,7 +20,7 @@ struct HistoricalReviewView: View {
         }
         .confirmationDialog(
             "Confirm this possible historical change?",
-            isPresented: $confirmChange,
+            isPresented: $sceneState.confirmHistoricalChange,
             titleVisibility: .visible
         ) {
             Button("Confirm Evidence-Linked Change") {
@@ -33,11 +32,16 @@ struct HistoricalReviewView: View {
         }
         .confirmationDialog(
             "Reset all learned preferences?",
-            isPresented: $confirmReset,
+            isPresented: $sceneState.confirmPreferenceReset,
             titleVisibility: .visible
         ) {
             Button("Reset All", role: .destructive) {
-                Task { await store.resetLearnedPreferences(confirmedByVisibleDialog: true) }
+                Task {
+                    await store.resetLearnedPreferences(
+                        confirmedByVisibleDialog: true,
+                        using: sceneState
+                    )
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -65,10 +69,14 @@ struct HistoricalReviewView: View {
                 }
                 HStack {
                     Button("Reload Status") {
-                        Task { await store.loadHistoricalReview() }
+                        Task { await store.loadHistoricalReview(using: sceneState) }
                     }
                     Button("Rebuild Local Index") {
-                        Task { await store.rebuildHistoricalIndex() }
+                        Task {
+                            await store.rebuildHistoricalIndex(
+                                using: sceneState
+                            )
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(store.isWorking)
@@ -84,16 +92,24 @@ struct HistoricalReviewView: View {
     private var searchCard: some View {
         GroupBox("Historical Context Search") {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-                searchRow("Actor or country", text: $store.historyActorOrCountry)
-                searchRow("Topic or issue", text: $store.historyTopic)
-                searchRow("Organization or body", text: $store.historyBody)
-                searchRow("Meeting type", text: $store.historyMeetingType)
-                searchRow("Start date", text: $store.historyStartDate, prompt: "YYYY-MM-DD")
-                searchRow("End date", text: $store.historyEndDate, prompt: "YYYY-MM-DD")
+                searchRow("Actor or country", text: $sceneState.historyActorOrCountry)
+                searchRow("Topic or issue", text: $sceneState.historyTopic)
+                searchRow("Organization or body", text: $sceneState.historyBody)
+                searchRow("Meeting type", text: $sceneState.historyMeetingType)
+                searchRow(
+                    "Start date",
+                    text: $sceneState.historyStartDate,
+                    prompt: "YYYY-MM-DD"
+                )
+                searchRow(
+                    "End date",
+                    text: $sceneState.historyEndDate,
+                    prompt: "YYYY-MM-DD"
+                )
             }
             .padding(.top, 6)
             Button("Search Confirmed Published History") {
-                Task { await store.searchMeetingHistory() }
+                Task { await store.searchMeetingHistory(using: sceneState) }
             }
             .buttonStyle(.borderedProminent)
             .disabled(store.isWorking || store.historicalIndex?.availability != .ready)
@@ -151,17 +167,23 @@ struct HistoricalReviewView: View {
             Text(result.position.statement.text).lineLimit(4)
             HStack {
                 Button("Use as Current") {
-                    store.selectedCurrentHistoryRevisionID = result.position.revision.revisionID
+                    sceneState.selectedCurrentHistoryRevisionID =
+                        result.position.revision.revisionID
                 }
                 .accessibilityLabel("Use \(result.actor.displayName) at \(dateLabel(result.meeting.meetingDate)) as current position")
                 Button("Use as Previous") {
-                    store.selectedPriorHistoryRevisionID = result.position.revision.revisionID
+                    sceneState.selectedPriorHistoryRevisionID =
+                        result.position.revision.revisionID
                 }
                 .accessibilityLabel("Use \(result.actor.displayName) at \(dateLabel(result.meeting.meetingDate)) as previous position")
-                if store.selectedCurrentHistoryRevisionID == result.position.revision.revisionID {
+                if sceneState.selectedCurrentHistoryRevisionID
+                    == result.position.revision.revisionID
+                {
                     Label("Current", systemImage: "checkmark.circle.fill")
                 }
-                if store.selectedPriorHistoryRevisionID == result.position.revision.revisionID {
+                if sceneState.selectedPriorHistoryRevisionID
+                    == result.position.revision.revisionID
+                {
                     Label("Previous", systemImage: "clock.arrow.circlepath")
                 }
             }
@@ -180,14 +202,18 @@ struct HistoricalReviewView: View {
         GroupBox("Historical Comparison") {
             VStack(alignment: .leading, spacing: 10) {
                 Button("Compare Selected Positions") {
-                    Task { await store.compareSelectedHistoricalPositions() }
+                    Task {
+                        await store.compareSelectedHistoricalPositions(
+                            using: sceneState
+                        )
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(
-                    store.selectedCurrentHistoryRevisionID == nil
-                        || store.selectedPriorHistoryRevisionID == nil
-                        || store.selectedCurrentHistoryRevisionID
-                            == store.selectedPriorHistoryRevisionID
+                    sceneState.selectedCurrentHistoryRevisionID == nil
+                        || sceneState.selectedPriorHistoryRevisionID == nil
+                        || sceneState.selectedCurrentHistoryRevisionID
+                            == sceneState.selectedPriorHistoryRevisionID
                 )
                 if let comparison = store.historicalComparison {
                     Text(comparison.qualifiedSummary)
@@ -211,7 +237,9 @@ struct HistoricalReviewView: View {
                         confidence: comparison.historicalConfidence
                     )
                     if comparison.differenceState == .possibleDifference {
-                        Button("Confirm Possible Change…") { confirmChange = true }
+                        Button("Confirm Possible Change…") {
+                            sceneState.confirmHistoricalChange = true
+                        }
                             .accessibilityHint("Creates a superseding user-confirmed comparison; source positions remain immutable.")
                     }
                 } else {
@@ -307,20 +335,31 @@ struct HistoricalReviewView: View {
                     }
                 }
                 Divider()
-                Picker("Preference type", selection: $store.learnedPreferenceKind) {
+                Picker(
+                    "Preference type",
+                    selection: $sceneState.learnedPreferenceKind
+                ) {
                     ForEach(LearnedPreferenceKind.allCases, id: \.rawValue) { kind in
                         Text(preferenceLabel(kind)).tag(kind)
                     }
                 }
-                TextField(preferencePrompt(store.learnedPreferenceKind), text: $store.learnedPreferenceValue)
+                TextField(
+                    preferencePrompt(sceneState.learnedPreferenceKind),
+                    text: $sceneState.learnedPreferenceValue
+                )
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("Learned preference value")
                 HStack {
-                    Button(store.editingLearnedPreferenceID == nil ? "Add Preference" : "Save Edit") {
-                        Task { await store.saveLearnedPreference() }
+                    Button(
+                        sceneState.editingLearnedPreferenceID == nil
+                            ? "Add Preference" : "Save Edit"
+                    ) {
+                        Task { await store.saveLearnedPreference(using: sceneState) }
                     }
                     .buttonStyle(.borderedProminent)
-                    Button("Reset All…", role: .destructive) { confirmReset = true }
+                    Button("Reset All…", role: .destructive) {
+                        sceneState.confirmPreferenceReset = true
+                    }
                         .disabled(store.learnedPreferences?.preferences.isEmpty != false)
                 }
             }
@@ -336,12 +375,19 @@ struct HistoricalReviewView: View {
                 Text(record.enabled ? "Enabled" : "Disabled")
                     .foregroundStyle(record.enabled ? .green : .secondary)
                 Spacer()
-                Button("Edit") { store.editLearnedPreference(record) }
+                Button("Edit") {
+                    store.editLearnedPreference(record, using: sceneState)
+                }
                 Button(record.enabled ? "Disable" : "Enable") {
                     Task { await store.toggleLearnedPreference(record) }
                 }
                 Button("Remove", role: .destructive) {
-                    Task { await store.removeLearnedPreference(record) }
+                    Task {
+                        await store.removeLearnedPreference(
+                            record,
+                            using: sceneState
+                        )
+                    }
                 }
             }
             Text(record.value.displaySummary).textSelection(.enabled)
