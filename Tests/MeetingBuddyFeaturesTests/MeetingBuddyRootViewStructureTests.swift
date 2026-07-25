@@ -133,16 +133,68 @@ struct MeetingBuddyRootViewStructureTests {
             )
         )
         #expect(root.contains("List(selection: sectionSelection)"))
-        #expect(
-            root.components(
-                separatedBy: "sceneState.isDestinationAvailable("
-            ).count - 1 == 3
-        )
+        for section in ["transcript", "analysis", "briefing"] {
+            #expect(
+                root.components(
+                    separatedBy:
+                        "!sceneState.isDestinationAvailable(.\(section))"
+                ).count - 1 == 1
+            )
+        }
         #expect(!root.contains("$store.selectedSection"))
         #expect(!store.contains("public var selectedSection"))
         #expect(sceneState.contains("public var selectedSection"))
         #expect(!sceneState.contains("@AppStorage"))
         #expect(!sceneState.contains("@SceneStorage"))
+    }
+
+    @Test
+    func sidebarHintsKeepPrerequisiteAndTemporaryReasonsExplicit() throws {
+        let root = try source(
+            "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
+        )
+        let component = try source(
+            "Sources/MeetingBuddyFeatures/DesignSystem/Components/WorkspaceSidebarRow.swift"
+        )
+
+        #expect(
+            root.components(
+                separatedBy: "availability: globalSidebarAvailability"
+            ).count - 1 == 6
+        )
+        #expect(
+            root.components(
+                separatedBy: "availability: sidebarAvailability("
+            ).count - 1 == 3
+        )
+        #expect(
+            root.contains(
+                "prerequisiteReason: sceneState.isDestinationAvailable(destination)"
+            )
+        )
+        #expect(root.contains("if sceneState.isInteractionLocked"))
+        #expect(root.contains("if store.isWorking"))
+        #expect(
+            root.contains(
+                "Temporarily unavailable while BlueMinutes completes a save or workspace change."
+            )
+        )
+        #expect(
+            root.contains(
+                "Temporarily unavailable while BlueMinutes completes the current operation."
+            )
+        )
+        #expect(
+            component.contains(
+                "case prerequisiteUnavailable(reason: String)"
+            )
+        )
+        #expect(
+            component.contains(
+                "case temporarilyUnavailable(reason: String)"
+            )
+        )
+        #expect(!component.contains("@Environment(\\.isEnabled)"))
     }
 
     @Test

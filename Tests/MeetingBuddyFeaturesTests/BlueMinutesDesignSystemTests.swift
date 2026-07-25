@@ -65,8 +65,12 @@ struct BlueMinutesDesignSystemTests {
                 title: "Transcript Review",
                 icon: .transcript,
                 enabledHint: "Open Transcript Review.",
-                disabledReason:
-                    "Available after local media processing succeeds."
+                availability: configuration.1
+                    ? .prerequisiteUnavailable(
+                        reason:
+                            "Available after local media processing succeeds."
+                    )
+                    : .enabled
             )
             .disabled(configuration.1)
             .environment(\.colorScheme, configuration.0)
@@ -82,6 +86,68 @@ struct BlueMinutesDesignSystemTests {
     }
 
     @Test
+    func sidebarAvailabilityKeepsEveryReasonExplicit() {
+        let enabledHint = "Open Transcript Review."
+        let prerequisiteReason =
+            "Available after local media processing succeeds."
+        let interactionLockReason =
+            "Temporarily unavailable while BlueMinutes completes a save or workspace change."
+        let storeWorkReason =
+            "Temporarily unavailable while BlueMinutes completes the current operation."
+
+        let enabled = WorkspaceSidebarRowAvailability.resolve(
+            prerequisiteReason: nil,
+            temporaryReason: nil
+        )
+        #expect(enabled == .enabled)
+        #expect(enabled.resolvedHint(enabledHint: enabledHint) == enabledHint)
+
+        let prerequisiteOnly =
+            WorkspaceSidebarRowAvailability.resolve(
+                prerequisiteReason: prerequisiteReason,
+                temporaryReason: nil
+            )
+        #expect(
+            prerequisiteOnly
+                == .prerequisiteUnavailable(reason: prerequisiteReason)
+        )
+        #expect(
+            prerequisiteOnly.resolvedHint(enabledHint: enabledHint)
+                == prerequisiteReason
+        )
+
+        let prerequisiteAndTemporary =
+            WorkspaceSidebarRowAvailability.resolve(
+                prerequisiteReason: prerequisiteReason,
+                temporaryReason: interactionLockReason
+            )
+        #expect(
+            prerequisiteAndTemporary
+                == .prerequisiteUnavailable(reason: prerequisiteReason)
+        )
+        #expect(
+            prerequisiteAndTemporary.resolvedHint(enabledHint: enabledHint)
+                == prerequisiteReason
+        )
+
+        for temporaryReason in [interactionLockReason, storeWorkReason] {
+            let temporarilyUnavailable =
+                WorkspaceSidebarRowAvailability.resolve(
+                    prerequisiteReason: nil,
+                    temporaryReason: temporaryReason
+                )
+            #expect(
+                temporarilyUnavailable
+                    == .temporarilyUnavailable(reason: temporaryReason)
+            )
+            #expect(
+                temporarilyUnavailable.resolvedHint(enabledHint: enabledHint)
+                    == temporaryReason
+            )
+        }
+    }
+
+    @Test
     func sidebarRowKeepsTextAndAccessibilityIndependentOfColor() throws {
         let component = try source(
             "Sources/MeetingBuddyFeatures/DesignSystem/Components/WorkspaceSidebarRow.swift"
@@ -90,8 +156,17 @@ struct BlueMinutesDesignSystemTests {
         #expect(component.contains("Text(title)"))
         #expect(component.contains(".accessibilityHidden(true)"))
         #expect(component.contains(".accessibilityLabel(title)"))
-        #expect(component.contains(".accessibilityHint(resolvedHint)"))
-        #expect(component.contains("disabledReason"))
+        #expect(
+            component.contains(
+                ".accessibilityHint(availability.resolvedHint(enabledHint: enabledHint))"
+            )
+        )
+        #expect(
+            component.contains(
+                ".help(availability.resolvedHint(enabledHint: enabledHint))"
+            )
+        )
+        #expect(!component.contains("@Environment(\\.isEnabled)"))
         #expect(!component.contains(".foregroundStyle(BlueMinutesColors"))
     }
 
