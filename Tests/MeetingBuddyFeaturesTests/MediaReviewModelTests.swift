@@ -127,6 +127,65 @@ struct MediaReviewModelTests {
     }
 
     @Test @MainActor
+    func cancelledWorkspaceRestoreCanRetryWithoutAllowingOverlap() async throws {
+        let restoreGate = AsyncGate()
+        let restoredWorkspace = WorkspaceReview(
+            workspaceID: featureID(3_001, WorkspaceID.self),
+            displayName: "Restored Workspace"
+        )
+        let workflow = try MediaReviewWorkflowProbe(
+            restoreGate: restoreGate,
+            restoredWorkspace: restoredWorkspace
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+
+        let restoration = Task {
+            await store.restoreWorkspace(using: sceneState)
+        }
+        await restoreGate.waitUntilEntered()
+
+        await store.restoreWorkspace(using: sceneState)
+        #expect(workflow.restoreCallCount == 1)
+
+        restoration.cancel()
+        await restoreGate.release()
+        await restoration.value
+
+        #expect(store.workspace == nil)
+
+        await store.restoreWorkspace(using: sceneState)
+
+        #expect(workflow.restoreCallCount == 2)
+        #expect(store.workspace == restoredWorkspace)
+    }
+
+    @Test @MainActor
+    func transientWorkspaceRestoreFailureCanRetry() async throws {
+        let restoredWorkspace = WorkspaceReview(
+            workspaceID: featureID(3_002, WorkspaceID.self),
+            displayName: "Restored Workspace"
+        )
+        let workflow = try MediaReviewWorkflowProbe(
+            restoredWorkspace: restoredWorkspace,
+            restoreFailuresRemaining: 1
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+
+        await store.restoreWorkspace(using: sceneState)
+        #expect(workflow.restoreCallCount == 1)
+        #expect(store.workspace == nil)
+
+        await store.restoreWorkspace(using: sceneState)
+        await store.restoreWorkspace(using: sceneState)
+
+        #expect(workflow.restoreCallCount == 2)
+        #expect(store.workspace == restoredWorkspace)
+        #expect(store.safeErrorMessage == nil)
+    }
+
+    @Test @MainActor
     func workspaceSwitchClearsPendingPreImportSourceAndSceneAuthorization() async throws {
         let workflow = try MediaReviewWorkflowProbe()
         let store = MediaReviewStore(workflow: workflow)
@@ -1266,10 +1325,13 @@ private func loadSeededReviewState(
 @MainActor
 private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let inspection: MediaInspection
+    private let restoreGate: AsyncGate?
+    private let restoredWorkspace: WorkspaceReview?
     private let openGate: AsyncGate?
     private let pollGate: AsyncGate?
     private let editorSaveGate: AsyncGate?
     private let pollingJob: MediaJobReview?
+    private var restoreFailuresRemaining: Int
     private var currentTranscriptReview: TranscriptReviewBundle?
     private var currentAnalysisReview: AnalysisReviewBundle?
     private var currentBriefingReview: BriefingReviewBundle?
@@ -1286,11 +1348,17 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private(set) var lastUnlinkAcknowledged = false
 
     init(
+        restoreGate: AsyncGate? = nil,
+        restoredWorkspace: WorkspaceReview? = nil,
+        restoreFailuresRemaining: Int = 0,
         openGate: AsyncGate? = nil,
         pollGate: AsyncGate? = nil,
         editorSaveGate: AsyncGate? = nil,
         seededReviewState: Bool = false
     ) throws {
+        self.restoreGate = restoreGate
+        self.restoredWorkspace = restoredWorkspace
+        self.restoreFailuresRemaining = restoreFailuresRemaining
         self.openGate = openGate
         self.pollGate = pollGate
         self.editorSaveGate = editorSaveGate
@@ -1330,7 +1398,12 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
 
     func restoreWorkspace() async throws -> WorkspaceReview? {
         restoreCallCount += 1
-        return nil
+        if let restoreGate { await restoreGate.block() }
+        if restoreFailuresRemaining > 0 {
+            restoreFailuresRemaining -= 1
+            throw ProbeError.transientRestore
+        }
+        return restoredWorkspace
     }
 
     func openOrCreateWorkspace(at _: URL) async throws -> WorkspaceReview {
@@ -1637,6 +1710,21 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             trashItems: [],
             permissionIssueCount: 0,
             scanTruncated: false
+        )
+    }
+
+    func recordingSetup() async throws -> RecordingSetupReview {
+        guard restoredWorkspace != nil else {
+            throw TranscriptWorkflowError.unavailable
+        }
+        return RecordingSetupReview(
+            capability: CaptureCapabilitySnapshot(
+                microphonePermission: .denied,
+                applicationAudioAvailable: false,
+                systemPickerAvailable: false,
+                checkedAt: featureInstant(1_950_000_000_002)
+            ),
+            microphones: []
         )
     }
 }
@@ -2521,4 +2609,5 @@ private enum FeatureEditorSaveCall: Equatable {
 private enum ProbeError: Error {
     case unexpectedCall
     case staleRevision
+    case transientRestore
 }

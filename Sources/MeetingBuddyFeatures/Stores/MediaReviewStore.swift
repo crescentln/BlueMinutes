@@ -40,7 +40,9 @@ public final class MediaReviewStore {
     @ObservationIgnored
     private var recordingPollingTask: Task<Void, Never>?
     @ObservationIgnored
-    private var hasAttemptedWorkspaceRestore = false
+    private var hasCompletedWorkspaceRestore = false
+    @ObservationIgnored
+    private var isWorkspaceRestoreInFlight = false
 
     public var blocksWorkspaceSwitch: Bool {
         recordingSession?.blocksWorkspaceSwitch == true
@@ -70,16 +72,22 @@ public final class MediaReviewStore {
     }
 
     public func restoreWorkspace(using sceneState: MediaReviewSceneState) async {
-        guard !hasAttemptedWorkspaceRestore, workspace == nil else { return }
-        hasAttemptedWorkspaceRestore = true
-        await perform {
+        guard !hasCompletedWorkspaceRestore,
+              !isWorkspaceRestoreInFlight,
+              workspace == nil
+        else { return }
+        isWorkspaceRestoreInFlight = true
+        defer { isWorkspaceRestoreInFlight = false }
+        let completed = await perform {
             let restoredWorkspace = try await workflow.restoreWorkspace()
+            try Task.checkCancellation()
             if let restoredWorkspace {
+                let setup = try await workflow.recordingSetup()
+                try Task.checkCancellation()
                 advanceWorkspaceSession()
                 workspace = restoredWorkspace
                 resetMediaState()
                 sceneState.resetForWorkspaceChange()
-                let setup = try await workflow.recordingSetup()
                 recordingSetup = setup
                 recordingSession = setup.recoverableSession
                 sceneState.selectedMicrophoneDeviceID = setup.microphones.first?.id
@@ -87,6 +95,9 @@ public final class MediaReviewStore {
                     beginRecordingPolling(jobID: session.jobID)
                 }
             }
+        }
+        if completed {
+            hasCompletedWorkspaceRestore = true
         }
     }
 
