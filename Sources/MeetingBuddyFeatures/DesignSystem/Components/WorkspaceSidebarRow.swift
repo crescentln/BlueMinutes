@@ -1,23 +1,50 @@
 import SwiftUI
 
-struct WorkspaceSidebarRow: View {
-    @Environment(\.isEnabled) private var isEnabled
+enum WorkspaceSidebarRowAvailability: Equatable, Sendable {
+    case enabled
+    case prerequisiteUnavailable(reason: String)
+    case temporarilyUnavailable(reason: String)
 
+    static func resolve(
+        prerequisiteReason: String?,
+        temporaryReason: String?
+    ) -> Self {
+        if let prerequisiteReason {
+            return .prerequisiteUnavailable(reason: prerequisiteReason)
+        }
+        if let temporaryReason {
+            return .temporarilyUnavailable(reason: temporaryReason)
+        }
+        return .enabled
+    }
+
+    func resolvedHint(enabledHint: String) -> String {
+        switch self {
+        case .enabled:
+            enabledHint
+        case let .prerequisiteUnavailable(reason),
+             let .temporarilyUnavailable(reason):
+            reason
+        }
+    }
+}
+
+struct WorkspaceSidebarRow: View {
     let title: String
     let icon: BlueMinutesIconRole
     let enabledHint: String
-    let disabledReason: String?
+    let availability: WorkspaceSidebarRowAvailability
 
     init(
         title: String,
         icon: BlueMinutesIconRole,
         enabledHint: String,
-        disabledReason: String? = nil
+        availability: WorkspaceSidebarRowAvailability
     ) {
         self.title = title
         self.icon = icon
         self.enabledHint = enabledHint
-        self.disabledReason = disabledReason
+        self.availability = availability
     }
 
     var body: some View {
@@ -32,14 +59,7 @@ struct WorkspaceSidebarRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
-        .accessibilityHint(resolvedHint)
-        .help(resolvedHint)
-    }
-
-    private var resolvedHint: String {
-        if isEnabled {
-            return enabledHint
-        }
-        return disabledReason ?? "\(title) is unavailable."
+        .accessibilityHint(availability.resolvedHint(enabledHint: enabledHint))
+        .help(availability.resolvedHint(enabledHint: enabledHint))
     }
 }

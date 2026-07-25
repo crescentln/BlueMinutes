@@ -32,7 +32,8 @@ public struct MeetingBuddyRootView: View {
                             : .workspace,
                         enabledHint: store.workspace == nil
                             ? "No local workspace is open."
-                            : "Current local workspace."
+                            : "Current local workspace.",
+                        availability: globalSidebarAvailability
                     )
                     Button("Choose Workspace…") {
                         presentFileImporter(.workspace)
@@ -45,27 +46,33 @@ public struct MeetingBuddyRootView: View {
                     WorkspaceSidebarRow(
                         title: "Local Media",
                         icon: .intake,
-                        enabledHint: "Open Local Media."
+                        enabledHint: "Open Local Media.",
+                        availability: globalSidebarAvailability
                     )
                         .tag(MediaReviewSection.intake)
                     WorkspaceSidebarRow(
                         title: "Record Audio",
                         icon: .recording,
-                        enabledHint: "Open Record Audio."
+                        enabledHint: "Open Record Audio.",
+                        availability: globalSidebarAvailability
                     )
                         .tag(MediaReviewSection.recording)
                     WorkspaceSidebarRow(
                         title: "UN Web TV Metadata",
                         icon: .webMetadata,
-                        enabledHint: "Open UN Web TV Metadata."
+                        enabledHint: "Open UN Web TV Metadata.",
+                        availability: globalSidebarAvailability
                     )
                         .tag(MediaReviewSection.webMetadata)
                     WorkspaceSidebarRow(
                         title: "Transcript Review",
                         icon: .transcript,
                         enabledHint: "Open Transcript Review.",
-                        disabledReason:
+                        availability: sidebarAvailability(
+                            for: .transcript,
+                            prerequisiteReason:
                             "Available after local media processing succeeds."
+                        )
                     )
                         .tag(MediaReviewSection.transcript)
                         .disabled(
@@ -75,8 +82,11 @@ public struct MeetingBuddyRootView: View {
                         title: "Analysis Review",
                         icon: .analysis,
                         enabledHint: "Open Analysis Review.",
-                        disabledReason:
+                        availability: sidebarAvailability(
+                            for: .analysis,
+                            prerequisiteReason:
                             "Available after local media processing succeeds and transcript review is loaded."
+                        )
                     )
                         .tag(MediaReviewSection.analysis)
                         .disabled(
@@ -86,8 +96,11 @@ public struct MeetingBuddyRootView: View {
                         title: "Briefing",
                         icon: .briefing,
                         enabledHint: "Open Briefing.",
-                        disabledReason:
+                        availability: sidebarAvailability(
+                            for: .briefing,
+                            prerequisiteReason:
                             "Available after local media processing succeeds, transcript review is loaded, and analysis is human-confirmed."
+                        )
                     )
                         .tag(MediaReviewSection.briefing)
                         .disabled(
@@ -96,13 +109,15 @@ public struct MeetingBuddyRootView: View {
                     WorkspaceSidebarRow(
                         title: "Meeting History",
                         icon: .history,
-                        enabledHint: "Open Meeting History."
+                        enabledHint: "Open Meeting History.",
+                        availability: globalSidebarAvailability
                     )
                         .tag(MediaReviewSection.history)
                     WorkspaceSidebarRow(
                         title: "Storage",
                         icon: .storage,
-                        enabledHint: "Open Storage."
+                        enabledHint: "Open Storage.",
+                        availability: globalSidebarAvailability
                     )
                         .tag(MediaReviewSection.storage)
                 }
@@ -562,6 +577,35 @@ public struct MeetingBuddyRootView: View {
         if let channels = track.sourceChannelCount { details.append("\(channels) ch") }
         if let rate = track.sourceSampleRateHertz { details.append("\(rate) Hz") }
         return details.joined(separator: " · ")
+    }
+
+    private var globalSidebarAvailability: WorkspaceSidebarRowAvailability {
+        .resolve(
+            prerequisiteReason: nil,
+            temporaryReason: sidebarTemporaryUnavailableReason
+        )
+    }
+
+    private func sidebarAvailability(
+        for destination: MediaReviewSection,
+        prerequisiteReason: String
+    ) -> WorkspaceSidebarRowAvailability {
+        .resolve(
+            prerequisiteReason: sceneState.isDestinationAvailable(destination)
+                ? nil
+                : prerequisiteReason,
+            temporaryReason: sidebarTemporaryUnavailableReason
+        )
+    }
+
+    private var sidebarTemporaryUnavailableReason: String? {
+        if sceneState.isInteractionLocked {
+            return "Temporarily unavailable while BlueMinutes completes a save or workspace change."
+        }
+        if store.isWorking {
+            return "Temporarily unavailable while BlueMinutes completes the current operation."
+        }
+        return nil
     }
 
     private func statusIcon(_ state: JobState) -> BlueMinutesIconRole {
