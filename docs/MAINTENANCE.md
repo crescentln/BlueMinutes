@@ -101,6 +101,14 @@ swift build -Xswiftc -warnings-as-errors
 swift test -Xswiftc -warnings-as-errors
 ```
 
+The hosted workflow may partition this baseline into focused suite invocations
+and one remaining-suite invocation. A test excluded from the remaining-suite
+command must already run in an earlier step of the same required job;
+exclusions are de-duplication, never coverage waivers. In the current workflow,
+`threeHourRetryAcrossManagerRestartPreservesExactCoverageAndTraceability` runs
+through `--filter TranscriptPipelineIntegrationTests` before the
+remaining-suite skip.
+
 Also run every focused suite relevant to the change. At minimum:
 
 | Change area | Focused evidence |
