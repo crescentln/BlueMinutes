@@ -25,9 +25,14 @@ public struct MeetingBuddyRootView: View {
         NavigationSplitView {
             List(selection: sectionSelection) {
                 Section("Workspace") {
-                    Label(
-                        store.workspace?.displayName ?? "No workspace open",
-                        systemImage: store.workspace == nil ? "folder.badge.questionmark" : "folder"
+                    WorkspaceSidebarRow(
+                        title: store.workspace?.displayName ?? "No workspace open",
+                        icon: store.workspace == nil
+                            ? .workspaceUnavailable
+                            : .workspace,
+                        enabledHint: store.workspace == nil
+                            ? "No local workspace is open."
+                            : "Current local workspace."
                     )
                     Button("Choose Workspace…") {
                         presentFileImporter(.workspace)
@@ -37,30 +42,68 @@ public struct MeetingBuddyRootView: View {
                     .accessibilityHint("Open an existing local workspace or create one in an empty folder.")
                 }
                 Section("Workflow") {
-                    Label("Local Media", systemImage: "waveform")
+                    WorkspaceSidebarRow(
+                        title: "Local Media",
+                        icon: .intake,
+                        enabledHint: "Open Local Media."
+                    )
                         .tag(MediaReviewSection.intake)
-                    Label("Record Audio", systemImage: "record.circle")
+                    WorkspaceSidebarRow(
+                        title: "Record Audio",
+                        icon: .recording,
+                        enabledHint: "Open Record Audio."
+                    )
                         .tag(MediaReviewSection.recording)
-                    Label("UN Web TV Metadata", systemImage: "link.badge.plus")
+                    WorkspaceSidebarRow(
+                        title: "UN Web TV Metadata",
+                        icon: .webMetadata,
+                        enabledHint: "Open UN Web TV Metadata."
+                    )
                         .tag(MediaReviewSection.webMetadata)
-                    Label("Transcript Review", systemImage: "text.bubble")
+                    WorkspaceSidebarRow(
+                        title: "Transcript Review",
+                        icon: .transcript,
+                        enabledHint: "Open Transcript Review.",
+                        disabledReason:
+                            "Available after local media processing succeeds."
+                    )
                         .tag(MediaReviewSection.transcript)
                         .disabled(
                             !sceneState.isDestinationAvailable(.transcript)
                         )
-                    Label("Analysis Review", systemImage: "checklist.checked")
+                    WorkspaceSidebarRow(
+                        title: "Analysis Review",
+                        icon: .analysis,
+                        enabledHint: "Open Analysis Review.",
+                        disabledReason:
+                            "Available after local media processing succeeds and transcript review is loaded."
+                    )
                         .tag(MediaReviewSection.analysis)
                         .disabled(
                             !sceneState.isDestinationAvailable(.analysis)
                         )
-                    Label("Briefing", systemImage: "doc.text.magnifyingglass")
+                    WorkspaceSidebarRow(
+                        title: "Briefing",
+                        icon: .briefing,
+                        enabledHint: "Open Briefing.",
+                        disabledReason:
+                            "Available after local media processing succeeds, transcript review is loaded, and analysis is human-confirmed."
+                    )
                         .tag(MediaReviewSection.briefing)
                         .disabled(
                             !sceneState.isDestinationAvailable(.briefing)
                         )
-                    Label("Meeting History", systemImage: "clock.arrow.circlepath")
+                    WorkspaceSidebarRow(
+                        title: "Meeting History",
+                        icon: .history,
+                        enabledHint: "Open Meeting History."
+                    )
                         .tag(MediaReviewSection.history)
-                    Label("Storage", systemImage: "externaldrive")
+                    WorkspaceSidebarRow(
+                        title: "Storage",
+                        icon: .storage,
+                        enabledHint: "Open Storage."
+                    )
                         .tag(MediaReviewSection.storage)
                 }
             }
@@ -69,6 +112,7 @@ public struct MeetingBuddyRootView: View {
         } detail: {
             detailContent
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(BlueMinutesColors.canvas)
             .navigationTitle(navigationTitle)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let recording = store.recordingSession,
@@ -209,7 +253,7 @@ public struct MeetingBuddyRootView: View {
     private func recordingBanner(_ recording: RecordingSessionReview) -> some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(.red)
+                .fill(BlueMinutesColors.recording)
                 .frame(width: 9, height: 9)
                 .accessibilityHidden(true)
             Text(recording.state == .recording ? "Recording" : recording.state.rawValue)
@@ -225,7 +269,7 @@ public struct MeetingBuddyRootView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity)
-        .background(.red.opacity(0.12))
+        .background(BlueMinutesColors.recordingSurface)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Visible recording state: \(recording.state.rawValue)")
     }
@@ -260,7 +304,11 @@ public struct MeetingBuddyRootView: View {
 
     private var workspaceOnboarding: some View {
         ContentUnavailableView {
-            Label("Choose a Workspace", systemImage: "folder.badge.plus")
+            Label(
+                "Choose a Workspace",
+                systemImage: BlueMinutesIconRole.chooseWorkspace
+                    .resolvedSystemName()
+            )
         } description: {
             Text(
                 "Select an existing BlueMinutes workspace or an empty folder for a new local workspace."
@@ -464,7 +512,13 @@ public struct MeetingBuddyRootView: View {
         GroupBox("Canonical audio and chunks") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Label(job.state.rawValue.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: statusSymbol(job.state))
+                    Label(
+                        job.state.rawValue
+                            .replacingOccurrences(of: "_", with: " ")
+                            .capitalized,
+                        systemImage: statusIcon(job.state)
+                            .resolvedSystemName()
+                    )
                     Spacer()
                     Text(job.currentNode ?? "Waiting")
                         .foregroundStyle(.secondary)
@@ -477,7 +531,7 @@ public struct MeetingBuddyRootView: View {
                     .foregroundStyle(.secondary)
                 if let failure = job.safeFailureSummary {
                     Text(failure)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(BlueMinutesColors.error)
                 }
                 HStack {
                     if job.canCancel {
@@ -510,13 +564,13 @@ public struct MeetingBuddyRootView: View {
         return details.joined(separator: " · ")
     }
 
-    private func statusSymbol(_ state: JobState) -> String {
+    private func statusIcon(_ state: JobState) -> BlueMinutesIconRole {
         switch state {
-        case .succeeded: "checkmark.circle.fill"
-        case .failed, .interrupted: "exclamationmark.triangle.fill"
-        case .cancelled: "xmark.circle"
-        case .paused, .pauseRequested: "pause.circle"
-        default: "gearshape.2"
+        case .succeeded: .success
+        case .failed, .interrupted: .failure
+        case .cancelled: .cancelled
+        case .paused, .pauseRequested: .paused
+        default: .working
         }
     }
 }

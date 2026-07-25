@@ -6,7 +6,7 @@ struct Task010HistoricalReviewAccessibilityTests {
     @Test
     func historyAndPreferenceControlsKeepQualificationsAndAssistiveLabelsVisible() throws {
         let root = try source("MeetingBuddyRootView.swift")
-        #expect(root.contains("Label(\"Meeting History\""))
+        #expect(root.contains("title: \"Meeting History\""))
         #expect(root.contains("case .history: \"Meeting History\""))
 
         let history = try source("HistoricalReviewView.swift")
