@@ -59,8 +59,13 @@ struct MeetingBuddyRootViewStructureTests {
             "Meeting History",
             "Storage"
         ] {
-            #expect(rootView.contains("Label(\"\(label)\""))
+            #expect(rootView.contains("title: \"\(label)\""))
         }
+        #expect(
+            rootView.components(
+                separatedBy: "WorkspaceSidebarRow("
+            ).count - 1 == 9
+        )
         for titleCase in [
             "case .recording: \"Record Audio\"",
             "case .webMetadata: \"UN Web TV Metadata\"",
