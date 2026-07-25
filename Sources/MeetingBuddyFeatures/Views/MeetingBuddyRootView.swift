@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 
 public struct MeetingBuddyRootView: View {
     @Bindable private var store: MediaReviewStore
+    @Environment(\.blueMinutesReadingWidth)
+    private var readingWidth
     @State private var sceneState: MediaReviewSceneState
     @State private var fileImporterPurpose = LocalFileImporterPurpose.workspace
     @State private var showFileImporter = false
@@ -365,7 +367,7 @@ public struct MeetingBuddyRootView: View {
                 }
             }
             .padding(28)
-            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: readingWidth.points, alignment: .leading)
         }
     }
 

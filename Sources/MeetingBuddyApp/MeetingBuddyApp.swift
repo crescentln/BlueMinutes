@@ -18,13 +18,15 @@ struct MeetingBuddyDesktopApp: App {
 
     var body: some Scene {
         Window("BlueMinutes", id: "main") {
-            MeetingBuddyRootView(
-                store: store,
-                onSceneStateAvailable: { sceneState in
-                    applicationDelegate.store = store
-                    applicationDelegate.terminationSceneState = sceneState
-                }
-            )
+            BlueMinutesPresentationRoot {
+                MeetingBuddyRootView(
+                    store: store,
+                    onSceneStateAvailable: { sceneState in
+                        applicationDelegate.store = store
+                        applicationDelegate.terminationSceneState = sceneState
+                    }
+                )
+            }
             .background(
                 MainWindowResolver { window in
                     applicationDelegate.installCloseGuard(on: window)
@@ -34,6 +36,12 @@ struct MeetingBuddyDesktopApp: App {
         .defaultSize(width: 1_080, height: 720)
         .commands {
             SidebarCommands()
+        }
+
+        Settings {
+            BlueMinutesPresentationRoot {
+                BlueMinutesSettingsView()
+            }
         }
     }
 }
