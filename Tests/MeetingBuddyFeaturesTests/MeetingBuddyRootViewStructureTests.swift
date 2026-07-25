@@ -149,6 +149,59 @@ struct MeetingBuddyRootViewStructureTests {
     }
 
     @Test
+    func nativeSettingsScenePreservesTheMainWindowContract() throws {
+        let app = try source(
+            "Sources/MeetingBuddyApp/MeetingBuddyApp.swift"
+        )
+        let root = try source(
+            "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
+        )
+        let settings = try source(
+            "Sources/MeetingBuddyFeatures/Views/BlueMinutesSettingsView.swift"
+        )
+
+        #expect(
+            app.components(separatedBy: "Settings {").count - 1 == 1
+        )
+        #expect(app.contains("BlueMinutesSettingsView()"))
+        #expect(
+            app.components(
+                separatedBy: "BlueMinutesPresentationRoot {"
+            ).count - 1 == 2
+        )
+        #expect(app.contains("Window(\"BlueMinutes\", id: \"main\")"))
+        #expect(app.contains(".defaultSize(width: 1_080, height: 720)"))
+        #expect(app.contains("SidebarCommands()"))
+        #expect(!app.contains("WindowGroup"))
+        #expect(!app.contains(".keyboardShortcut(\",\""))
+        #expect(root.contains(".frame(minWidth: 860, minHeight: 600)"))
+        #expect(root.contains("@State private var sceneState"))
+        #expect(
+            root.contains(
+                ".frame(maxWidth: readingWidth.points, alignment: .leading)"
+            )
+        )
+
+        #expect(settings.contains("Label(\"General\""))
+        #expect(settings.contains("Label(\"Appearance\""))
+        #expect(settings.contains("Interface density"))
+        #expect(settings.contains("Reading width"))
+        #expect(settings.contains("Reset UI Preferences"))
+        for omittedPaneOrControl in [
+            "Privacy & Storage",
+            "Processing & Models",
+            "Recording",
+            "Advanced",
+            "Inspector",
+            "Setup Guide"
+        ] {
+            #expect(!settings.contains(omittedPaneOrControl))
+        }
+        #expect(!settings.contains("MediaReviewStore"))
+        #expect(!settings.contains("MediaReviewSceneState"))
+    }
+
+    @Test
     func sidebarHintsKeepPrerequisiteAndTemporaryReasonsExplicit() throws {
         let root = try source(
             "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
