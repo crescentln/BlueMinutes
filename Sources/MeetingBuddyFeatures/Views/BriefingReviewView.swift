@@ -9,51 +9,41 @@ struct BriefingReviewView: View {
 
     var body: some View {
         Group {
-                if let review = store.briefingReview {
-                    reviewWorkspace(review)
+            if let review = store.briefingReview {
+                reviewWorkspace(review)
             } else {
                 setupView
             }
         }
         .onAppear {
-            sceneState.briefing.reconcile(with: store.briefingReview)
-        }
-        .onChange(of: sceneState.briefing.selectedSectionType) { _, _ in
-            sceneState.briefing.reconcile(with: store.briefingReview)
+            reconcileBriefingDraft()
         }
         .onChange(
-            of: store.briefingReview?.publication.sections.map(\.revision.revisionID)
+            of: sceneState.briefing.selectedSectionType
         ) { _, _ in
-            sceneState.briefing.reconcile(with: store.briefingReview)
+            reconcileBriefingDraft()
+        }
+        .onChange(
+            of: store.briefingReview?.publication
+                .sections.map(\.revision.revisionID)
+        ) { _, _ in
+            reconcileBriefingDraft()
         }
     }
 
     private var setupView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                EditorialSectionHeader(
+                    "Create a Briefing",
+                    detail:
+                        "Generate exactly three independent on-device sections from the validated Analysis publication."
+                )
                 routeCard
-                if let job = store.briefingJob { jobCard(job) }
-                GroupBox("Create validated diplomatic briefing") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Generate Briefing is explicit authorization for three independent on-device section runs over validated intelligence claims and evidence identifiers. Publication is atomic and fails closed unless every source segment and conclusion is traceable.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        HStack {
-                            Button("Check Local Briefing Model") {
-                                Task { await store.refreshBriefingRoute() }
-                            }
-                            Button("Generate Briefing") {
-                                Task { await store.startBriefing() }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(
-                                store.briefingRouteReview?.isOnDeviceReady != true
-                                    || store.isWorking
-                            )
-                        }
-                    }
-                    .padding()
+                if let job = store.briefingJob {
+                    jobCard(job)
                 }
+                generationCard
             }
             .padding(28)
             .frame(maxWidth: 920, alignment: .leading)
@@ -66,291 +56,447 @@ struct BriefingReviewView: View {
                 if let route = store.briefingRouteReview {
                     LabeledContent(
                         "Route",
-                        value: route.briefing.route == .appleOnDevice
+                        value:
+                            route.briefing.route
+                                == .appleOnDevice
                             ? "Apple Foundation Models on device"
                             : "No automatic local model"
                     )
-                    LabeledContent("Destination", value: "this Mac")
+                    LabeledContent(
+                        "Destination",
+                        value: "this Mac"
+                    )
                     LabeledContent(
                         "Provider inputs",
-                        value: route.briefing.request.dataCategories
-                            .map(\.rawValue).joined(separator: ", ")
+                        value:
+                            route.briefing.request
+                            .dataCategories
+                            .map(\.rawValue)
+                            .joined(separator: ", ")
                     )
-                    LabeledContent("Policy decision", value: route.briefing.reasonCode)
+                    LabeledContent(
+                        "Policy decision",
+                        value: route.briefing.reasonCode
+                    )
                     LabeledContent(
                         "Runtime",
-                        value: "\(route.runtimeEvidence.operatingSystemVersion) · \(route.runtimeEvidence.adapterVersion)"
+                        value:
+                            "\(route.runtimeEvidence.operatingSystemVersion) · \(route.runtimeEvidence.adapterVersion)"
                     )
                 } else {
-                    Label("Check the local model after validating analysis", systemImage: "lock.shield")
+                    Label(
+                        "Check the local model after validating analysis",
+                        systemImage: "lock.shield"
+                    )
                 }
                 Divider()
-                Text("No raw transcript, audio, cloud adapter, network tool, credential, or provider-retention path is added by this workflow.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "No raw transcript, audio, cloud adapter, network tool, credential, or provider-retention path is added by this workflow."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
             .padding()
         }
     }
 
-    private func jobCard(_ job: MediaJobReview) -> some View {
+    private var generationCard: some View {
+        GroupBox("Validated diplomatic briefing") {
+            VStack(alignment: .leading, spacing: 12) {
+                WorkflowStateView(
+                    title: "Explicit local generation",
+                    detail:
+                        "Generate Briefing authorizes three independent on-device section runs over validated intelligence claims and evidence identifiers. Publication is atomic and fails closed unless every source segment and conclusion is traceable.",
+                    systemImage:
+                        "doc.text.magnifyingglass",
+                    tone: .neutral
+                )
+                HStack {
+                    Button(
+                        "Check Local Briefing Model"
+                    ) {
+                        Task {
+                            await store
+                                .refreshBriefingRoute()
+                        }
+                    }
+                    .disabled(store.isWorking)
+
+                    Button("Generate Briefing") {
+                        Task {
+                            await store.startBriefing()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        store.briefingRouteReview?
+                            .isOnDeviceReady != true
+                            || store.isWorking
+                    )
+                }
+            }
+            .padding()
+        }
+    }
+
+    private func jobCard(
+        _ job: MediaJobReview
+    ) -> some View {
         GroupBox("Local briefing task") {
             VStack(alignment: .leading, spacing: 9) {
                 LabeledContent(
                     "State",
-                    value: job.state.rawValue.replacingOccurrences(of: "_", with: " ")
+                    value: label(job.state.rawValue)
                 )
                 ProgressView(value: job.progressFraction)
                 LabeledContent(
                     "Independent sections",
-                    value: "\(job.completedUnitCount) / \(job.totalUnitCount)"
+                    value:
+                        "\(job.completedUnitCount) / \(job.totalUnitCount)"
                 )
                 if let failure = job.safeFailureSummary {
-                    Text(failure).foregroundStyle(.red)
+                    Text(failure)
+                        .foregroundStyle(
+                            BlueMinutesColors.error
+                        )
                 }
             }
             .padding()
         }
     }
 
-    private func reviewWorkspace(_ review: BriefingReviewBundle) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if !review.isCurrent {
-                    Label(
-                        "This briefing is stale after an upstream correction. Review or regenerate it before export.",
-                        systemImage: "exclamationmark.triangle.fill"
+    @ViewBuilder
+    private func reviewWorkspace(
+        _ review: BriefingReviewBundle
+    ) -> some View {
+        if let sections = canonicalSections(in: review) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    reviewState(review)
+                    BriefingEditorialCanvas(
+                        review: review,
+                        sections: sections,
+                        selectSection: {
+                            sceneState
+                                .requestBriefingSelection($0)
+                        }
                     )
-                    .foregroundStyle(.orange)
-                    .accessibilityLabel("Stale briefing warning")
-                }
-                if !review.isHumanConfirmed {
-                    Label(
-                        "Quarantined generated briefing — review and confirm every section before export.",
-                        systemImage: "exclamationmark.shield.fill"
+                    sectionEditor(
+                        review,
+                        sections: sections
                     )
-                    .foregroundStyle(.orange)
-                    .accessibilityLabel("Unconfirmed briefing warning")
+                    BriefingPublicationProofView(
+                        review: review
+                    )
+                    markdownPreview(review)
+                    exportCard(review)
                 }
-                publicationProof(review)
-                sectionEditor(review)
-                markdownPreview(review)
-                exportCard(review)
+                .padding(24)
+                .frame(
+                    maxWidth: 1_080,
+                    alignment: .leading
+                )
             }
-            .padding(24)
-            .frame(maxWidth: 1_080, alignment: .leading)
+        } else {
+            WorkflowStateView(
+                title:
+                    "Briefing projection failed closed",
+                detail:
+                    "The publication does not expose one unique Meeting Overview, Major Issues, and Major Delegations section in canonical order.",
+                systemImage: "exclamationmark.triangle",
+                tone: .failure
+            )
+            .padding(28)
         }
     }
 
-    private func publicationProof(_ review: BriefingReviewBundle) -> some View {
-        GroupBox("Published briefing proof") {
-            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
-                GridRow {
-                    Text("Validation")
-                    Label(
-                        "\(review.publication.validationReport.checks.count) / \(review.publication.validationReport.checks.count) checks passed",
-                        systemImage: "checkmark.seal.fill"
-                    )
-                    .foregroundStyle(.green)
-                }
-                GridRow {
-                    Text("Source coverage")
-                    Text("\(review.publication.ledger.segments.count) / \(review.publication.ledger.eligibleSegmentRevisions.count) eligible segments")
-                }
-                GridRow {
-                    Text("Conclusion links")
-                    Text(String(review.publication.ledger.conclusionReferences.count))
-                }
-                GridRow {
-                    Text("Issue matrix")
-                    Text("\(review.publication.graph.rows.count) issues · \(review.publication.graph.cells.count) stated-position cells")
-                }
-                GridRow {
-                    Text("Current")
-                    Text(review.isCurrent ? "yes" : "no")
-                }
-                GridRow {
-                    Text("Human confirmation")
-                    Text(review.isHumanConfirmed ? "all sections confirmed" : "incomplete")
-                }
-                GridRow {
-                    Text("Markdown digest")
-                    Text(short(review.publication.finalBriefing.markdownDigest.lowercaseHex))
-                        .monospaced()
-                }
-            }
-            .padding()
+    @ViewBuilder
+    private func reviewState(
+        _ review: BriefingReviewBundle
+    ) -> some View {
+        if !review.isCurrent {
+            WorkflowStateView(
+                title:
+                    "This briefing is stale after an upstream correction",
+                detail:
+                    "Published content remains readable, but section save, regeneration, and export stay blocked until the existing application workflow produces a current Briefing publication.",
+                systemImage:
+                    "exclamationmark.triangle.fill",
+                tone: .warning
+            )
+            .accessibilityLabel("Stale briefing warning")
+        }
+        if !review.isHumanConfirmed {
+            WorkflowStateView(
+                title: "Quarantined generated briefing",
+                detail:
+                    "Review and explicitly confirm every current section before export.",
+                systemImage:
+                    "exclamationmark.shield.fill",
+                tone: .warning
+            )
+            .accessibilityLabel(
+                "Unconfirmed briefing warning"
+            )
         }
     }
 
-    private func sectionEditor(_ review: BriefingReviewBundle) -> some View {
-        GroupBox("Independent sections") {
-            VStack(alignment: .leading, spacing: 12) {
-                Picker("Section", selection: briefingSelection) {
-                    Text("Select a section").tag(BriefingSectionType?.none)
-                    ForEach(review.publication.sections, id: \.sectionType) { section in
-                        Text(section.title).tag(Optional(section.sectionType))
-                    }
-                }
-                if let section = selectedSection(in: review) {
-                    HStack {
-                        Label(
-                            section.manualEditStatus == .userEdited
-                                ? "Preserved user revision" : "Generated revision",
-                            systemImage: section.manualEditStatus == .userEdited
-                                ? "person.crop.circle.badge.checkmark" : "apple.intelligence"
-                        )
-                        Spacer()
-                        Toggle(
-                            "Lock this revision",
-                            isOn: $sceneState.briefing.isLocked
-                        )
-                            .toggleStyle(.switch)
-                    }
-                    if !sceneState.briefing.isSourceRevisionCurrent {
-                        Label(
-                            "This draft is based on an earlier section revision. Keep or copy the draft, then review the current section before saving.",
-                            systemImage: "exclamationmark.triangle.fill"
-                        )
-                        .foregroundStyle(.orange)
-                    }
-                    ForEach(section.items, id: \.itemID) { item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Evidence-linked item · \(item.claim.evidenceRevisions.count) evidence refs")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            TextEditor(text: itemBinding(item))
-                                .font(.body)
-                                .frame(minHeight: 74)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
-                        }
-                    }
-                    HStack {
-                        Button("Save and Confirm Section") {
-                            guard let operation =
-                                sceneState.beginDirectBriefingSave()
-                            else { return }
-                            Task {
-                                let succeeded = await store.saveEditorDraft(
-                                    operation.request
-                                )
-                                if sceneState.completeDirectEditorSave(
-                                    operation,
-                                    succeeded: succeeded,
-                                    updatedReviews: store.editorReviewSnapshot
-                                ) {
-                                    sceneState.briefing.reconcile(
-                                        with: store.briefingReview
-                                    )
-                                }
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(
-                            !draftsAreComplete(section)
-                                || !sceneState.briefing.isSourceRevisionCurrent
-                                || store.isWorking
-                                || store.briefingJob?.state.isTerminal == false
-                        )
-                        Button("Regenerate Only This Section") {
-                            Task { await store.regenerateBriefingSection(section.sectionType) }
-                        }
-                        .disabled(
-                            section.locked
-                                || section.manualEditStatus == .userEdited
-                                || sceneState.briefing.isDirty
-                                || store.isWorking
-                                || store.briefingJob?.state.isTerminal == false
-                        )
-                    }
-                    if section.locked || section.manualEditStatus == .userEdited {
-                        Text("Automatic regeneration cannot overwrite this preserved user revision.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding()
-        }
+    private func sectionEditor(
+        _ review: BriefingReviewBundle,
+        sections: [BriefingSectionV1]
+    ) -> some View {
+        BriefingSectionEditor(
+            review: review,
+            sections: sections,
+            selectedSectionType:
+                briefingSelection,
+            draftItemTexts:
+                $sceneState.briefing.itemTexts,
+            draftIsLocked:
+                $sceneState.briefing.isLocked,
+            draftSourceIsCurrent:
+                sceneState.briefing
+                .isSourceRevisionCurrent,
+            draftIsDirty:
+                sceneState.briefing.isDirty,
+            storeIsWorking: store.isWorking,
+            briefingJobIsActive:
+                store.briefingJob?
+                .state.isTerminal == false,
+            interactionIsLocked:
+                sceneState.isInteractionLocked,
+            navigationIsPending:
+                sceneState
+                .isNavigationConfirmationPresented,
+            save: saveSection,
+            regenerate: regenerateSection
+        )
     }
 
-    private func markdownPreview(_ review: BriefingReviewBundle) -> some View {
-        GroupBox(
+    private func markdownPreview(
+        _ review: BriefingReviewBundle
+    ) -> some View {
+        DisclosureGroup(
             review.isHumanConfirmed
                 ? "Human-confirmed Markdown preview"
                 : "Quarantined Markdown preview"
         ) {
             ScrollView(.horizontal) {
-                Text(review.publication.finalBriefing.markdown)
-                    .textSelection(.enabled)
-                    .font(.system(.callout, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(
+                    review.publication.finalBriefing
+                        .markdown
+                )
+                .textSelection(.enabled)
+                .font(
+                    .system(
+                        .callout,
+                        design: .monospaced
+                    )
+                )
+                .frame(
+                    maxWidth: .infinity,
+                    alignment: .leading
+                )
             }
             .frame(maxHeight: 320)
-            .padding()
+            .padding(.top, 10)
         }
     }
 
-    private func exportCard(_ review: BriefingReviewBundle) -> some View {
-        GroupBox("Explicit local Markdown export") {
+    private func exportCard(
+        _ review: BriefingReviewBundle
+    ) -> some View {
+        let availability = exportAvailability(review)
+        return GroupBox(
+            "Explicit local Markdown export"
+        ) {
             VStack(alignment: .leading, spacing: 10) {
+                if availability.canExport {
+                    WorkflowStateView(
+                        title: "Validated export ready",
+                        detail:
+                            "Export writes the exact confirmed Markdown through the existing application-owned workflow.",
+                        systemImage: "checkmark.seal",
+                        tone: .ready
+                    )
+                } else {
+                    WorkflowStateView(
+                        title: "Export blocked",
+                        detail: exportBlockReason(review),
+                        systemImage: "lock.fill",
+                        tone: .warning
+                    )
+                }
                 TextField(
                     "File name",
-                    text: $sceneState.briefingExportFileName
+                    text:
+                        $sceneState
+                        .briefingExportFileName
                 )
                 LabeledContent(
                     "Destination",
-                    value: "Meetings/\(review.publication.finalBriefing.meetingID.canonicalString)/exports/"
+                    value:
+                        "Meetings/\(review.publication.finalBriefing.meetingID.canonicalString)/exports/"
                 )
                 Button("Export Validated Markdown") {
-                    Task { await store.exportBriefing(using: sceneState) }
+                    Task {
+                        await store.exportBriefing(
+                            using: sceneState
+                        )
+                    }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!review.isCurrent || !review.isHumanConfirmed || store.isWorking)
-                if !review.isHumanConfirmed {
-                    Text("Export remains disabled until all three sections have explicit user-confirmed revisions.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .disabled(!availability.canExport)
                 if let record = store.lastBriefingExport {
-                    Label(record.relativePath.rawValue, systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .textSelection(.enabled)
+                    Label(
+                        record.relativePath.rawValue,
+                        systemImage:
+                            "checkmark.circle.fill"
+                    )
+                    .foregroundStyle(.green)
+                    .textSelection(.enabled)
                 }
             }
             .padding()
         }
     }
 
-    private func selectedSection(in review: BriefingReviewBundle) -> BriefingSectionV1? {
-        review.publication.sections.first {
-            $0.sectionType == sceneState.briefing.selectedSectionType
+    private func canonicalSections(
+        in review: BriefingReviewBundle
+    ) -> [BriefingSectionV1]? {
+        let sections = review.publication.sections.sorted {
+            ($0.order, $0.sectionID.canonicalString)
+                < ($1.order, $1.sectionID.canonicalString)
+        }
+        guard BriefingSectionProjection.isCanonical(
+            sectionTypes: sections.map(\.sectionType),
+            orders: sections.map(\.order),
+            uniqueLogicalIDCount:
+                Set(sections.map(\.sectionID)).count
+        ) else {
+            return nil
+        }
+        return sections
+    }
+
+    private var briefingSelection:
+        Binding<BriefingSectionType?>
+    {
+        Binding(
+            get: {
+                sceneState.briefing
+                    .selectedSectionType
+            },
+            set: {
+                sceneState
+                    .requestBriefingSelection($0)
+            }
+        )
+    }
+
+    private func exportAvailability(
+        _ review: BriefingReviewBundle
+    ) -> BriefingReviewActionAvailability {
+        BriefingReviewActionAvailability(
+            publicationIsCurrent: review.isCurrent,
+            publicationIsHumanConfirmed:
+                review.isHumanConfirmed,
+            draftIsComplete: true,
+            draftIsDirty:
+                sceneState.briefing.isDirty,
+            draftSourceIsCurrent:
+                sceneState.briefing
+                .isSourceRevisionCurrent,
+            sectionIsLocked: false,
+            sectionIsUserEdited: false,
+            storeIsWorking: store.isWorking,
+            briefingJobIsActive:
+                store.briefingJob?
+                .state.isTerminal == false,
+            interactionIsLocked:
+                sceneState.isInteractionLocked,
+            navigationIsPending:
+                sceneState
+                .isNavigationConfirmationPresented
+        )
+    }
+
+    private func exportBlockReason(
+        _ review: BriefingReviewBundle
+    ) -> String {
+        if !review.isCurrent
+            && !review.isHumanConfirmed
+        {
+            return
+                "The publication is stale and all three current sections are not yet explicitly confirmed."
+        }
+        if !review.isCurrent {
+            return
+                "The publication is stale after an upstream correction."
+        }
+        if sceneState.briefing.isDirty {
+            return
+                "Save or discard the local section draft before exporting the published document."
+        }
+        if !sceneState.briefing
+            .isSourceRevisionCurrent
+        {
+            return
+                "The local draft is based on an earlier section revision."
+        }
+        if !review.isHumanConfirmed {
+            return
+                "All three sections need explicit user-confirmed revisions."
+        }
+        return
+            "Wait for the current local operation to finish."
+    }
+
+    private func reconcileBriefingDraft() {
+        sceneState.briefing.reconcile(
+            with: store.briefingReview
+        )
+    }
+
+    private func saveSection() {
+        guard let operation =
+            sceneState.beginDirectBriefingSave()
+        else {
+            return
+        }
+        Task {
+            let succeeded = await store.saveEditorDraft(
+                operation.request
+            )
+            if sceneState.completeDirectEditorSave(
+                operation,
+                succeeded: succeeded,
+                updatedReviews:
+                    store.editorReviewSnapshot
+            ) {
+                reconcileBriefingDraft()
+            }
         }
     }
 
-    private func itemBinding(_ item: BriefingSectionItem) -> Binding<String> {
-        Binding(
-            get: { sceneState.briefing.itemTexts[item.itemID] ?? item.claim.text },
-            set: { sceneState.briefing.itemTexts[item.itemID] = $0 }
-        )
+    private func regenerateSection(
+        _ sectionType: BriefingSectionType
+    ) {
+        Task {
+            await store.regenerateBriefingSection(
+                sectionType
+            )
+        }
     }
 
-    private func draftsAreComplete(_ section: BriefingSectionV1) -> Bool {
-        Set(sceneState.briefing.itemTexts.keys) == Set(section.items.map(\.itemID))
-            && sceneState.briefing.itemTexts.values.allSatisfy {
-                let value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
-                return !value.isEmpty && value == $0 && value.utf8.count <= 16_384
-            }
-    }
-
-    private var briefingSelection: Binding<BriefingSectionType?> {
-        Binding(
-            get: { sceneState.briefing.selectedSectionType },
-            set: { sceneState.requestBriefingSelection($0) }
-        )
-    }
-
-    private func short(_ value: String) -> String {
-        value.count > 18 ? String(value.prefix(18)) + "…" : value
+    private func label(
+        _ rawValue: String
+    ) -> String {
+        rawValue
+            .replacingOccurrences(
+                of: "_",
+                with: " "
+            )
+            .capitalized
     }
 }
