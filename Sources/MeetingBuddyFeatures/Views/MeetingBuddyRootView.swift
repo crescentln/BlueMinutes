@@ -126,6 +126,10 @@ public struct MeetingBuddyRootView: View {
             }
             .navigationTitle("BlueMinutes")
             .listStyle(.sidebar)
+            .disabled(
+                sceneState.isInteractionLocked || store.isWorking
+                    || store.isStoppingRecording
+            )
             .focused($sidebarIsFocused)
             .navigationSplitViewColumnWidth(
                 min: BlueMinutesLayout.sidebarMinimumWidth,
@@ -135,6 +139,10 @@ public struct MeetingBuddyRootView: View {
         } detail: {
             BlueMinutesEditorialCanvas {
                 detailContent
+                    .disabled(
+                        sceneState.isInteractionLocked || store.isWorking
+                            || store.isStoppingRecording
+                    )
             }
             .navigationTitle(navigationTitle)
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -155,7 +163,6 @@ public struct MeetingBuddyRootView: View {
                 )
             }
         }
-        .disabled(sceneState.isInteractionLocked || store.isWorking)
         .frame(minWidth: 860, minHeight: 600)
         .focusedSceneValue(
             \.blueMinutesShellCommandActions,
@@ -295,7 +302,7 @@ public struct MeetingBuddyRootView: View {
             Button("Stop") {
                 Task { await store.stopRecording() }
             }
-            .disabled(store.isWorking || !recording.canStop)
+            .disabled(store.isStoppingRecording || !recording.canStop)
             .accessibilityHint(
                 "Stop packet admission, seal valid audio, and verify the retained result."
             )

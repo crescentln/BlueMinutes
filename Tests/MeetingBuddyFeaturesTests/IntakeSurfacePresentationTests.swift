@@ -88,6 +88,17 @@ struct IntakeSurfacePresentationTests {
         #expect(
             recordingReason(
                 setup: try recordingSetup(
+                    microphonePermission: .notDetermined,
+                    applicationAudioAvailable: true,
+                    systemPickerAvailable: true
+                ),
+                mode: .microphoneOnly,
+                microphoneID: "synthetic-microphone"
+            ) == nil
+        )
+        #expect(
+            recordingReason(
+                setup: try recordingSetup(
                     microphonePermission: .denied,
                     applicationAudioAvailable: true,
                     systemPickerAvailable: true
@@ -212,6 +223,8 @@ struct IntakeSurfacePresentationTests {
         #expect(root.contains("LocalMediaIntakeView("))
         #expect(root.contains("store.recordingIndicatorIsVisible"))
         #expect(root.contains("Button(\"Stop\")"))
+        #expect(root.contains(".disabled(store.isStoppingRecording || !recording.canStop)"))
+        #expect(!root.contains(".disabled(store.isWorking || !recording.canStop)"))
         #expect(local.contains("Import blocked"))
         #expect(local.contains("Ready to import"))
         #expect(local.contains("job.privacyRoute.encodedValue"))
@@ -221,6 +234,7 @@ struct IntakeSurfacePresentationTests {
         #expect(!local.contains("sourceURL"))
         #expect(recording.contains("Checking capture capabilities"))
         #expect(recording.contains("Microphone permission denied"))
+        #expect(recording.contains("visible macOS permission prompt"))
         #expect(recording.contains("One-application audio unavailable"))
         #expect(
             store.components(

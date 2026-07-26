@@ -60,7 +60,7 @@ struct RecordingCaptureView: View {
             WorkflowStateView(
                 title: "Microphone permission not determined",
                 detail:
-                    "Respond to the visible macOS prompt, then refresh devices. BlueMinutes does not assume permission.",
+                    "Starting a microphone recording will present the visible macOS permission prompt. If access is declined, recording fails closed.",
                 systemImage: "questionmark.circle",
                 tone: .warning
             )
@@ -317,7 +317,7 @@ struct RecordingCaptureView: View {
                         Task { await store.stopRecording() }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(store.isWorking)
+                    .disabled(store.isStoppingRecording)
                 }
             }
             if session.state == .interrupted

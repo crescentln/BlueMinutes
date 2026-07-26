@@ -162,7 +162,17 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(root.contains("@State private var sceneState: MediaReviewSceneState"))
         #expect(
             root.contains(
-                ".disabled(sceneState.isInteractionLocked || store.isWorking)"
+                "sceneState.isInteractionLocked || store.isWorking"
+            )
+        )
+        #expect(
+            !root.contains(
+                ".disabled(store.isWorking || !recording.canStop)"
+            )
+        )
+        #expect(
+            root.contains(
+                ".disabled(store.isStoppingRecording || !recording.canStop)"
             )
         )
         #expect(root.contains("List(selection: sectionSelection)"))

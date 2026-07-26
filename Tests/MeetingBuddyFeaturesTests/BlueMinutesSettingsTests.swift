@@ -235,6 +235,8 @@ struct BlueMinutesSettingsTests {
         first.meetingTitle = "Synthetic first scene"
         first.manualTranscriptText = "Synthetic transient draft"
         first.recordingAcknowledged = true
+        first.unWebTVURL =
+            "https://webtv.un.org/en/asset/synthetic/synthetic-id"
         first.unWebTVNetworkAuthorized = true
         first.confirmPreferenceReset = true
 

@@ -76,10 +76,8 @@ enum IntakeSurfacePresentation {
         }
         if mode.requestedTrackKinds.contains(.microphone) {
             switch setup.capability.microphonePermission {
-            case .authorized:
+            case .authorized, .notDetermined:
                 break
-            case .notDetermined:
-                return "Microphone permission is not determined. Refresh devices after responding to the visible system prompt."
             case .denied:
                 return "Microphone permission is denied for this capture mode."
             case .restricted:

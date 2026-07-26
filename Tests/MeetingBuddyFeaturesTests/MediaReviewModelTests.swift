@@ -202,6 +202,8 @@ struct MediaReviewModelTests {
         sceneState.meetingTitle = "Workspace A"
         sceneState.selectedTrack = try MediaTrackIdentifier(2)
         sceneState.recordingAcknowledged = true
+        sceneState.unWebTVURL =
+            "https://webtv.un.org/en/asset/synthetic/synthetic-id"
         sceneState.unWebTVNetworkAuthorized = true
 
         #expect(store.pendingMedia != nil)
@@ -468,6 +470,8 @@ struct MediaReviewModelTests {
         sceneState.meetingTitle = "Workspace A"
         sceneState.selectedTrack = try MediaTrackIdentifier(1)
         sceneState.manualTranscriptText = "Workspace A private draft"
+        sceneState.unWebTVURL =
+            "https://webtv.un.org/en/asset/synthetic/synthetic-id"
         sceneState.unWebTVNetworkAuthorized = true
         sceneState.selectedSection = .transcript
 
@@ -1345,6 +1349,94 @@ struct MediaReviewModelTests {
         #expect(store.recordingSession?.state == .completed)
         #expect(!sceneState.recordingAcknowledged)
     }
+
+    @Test @MainActor
+    func recordingStopRemainsAvailableWhileAnotherLocalOperationIsWorking()
+        async throws
+    {
+        let storageReportGate = AsyncGate()
+        let active = RecordingSessionReview(
+            sessionID: featureID(83, RecordingSessionID.self),
+            jobID: featureID(84, JobID.self),
+            state: .recording,
+            stateVersion: 1,
+            activeTrackKinds: [.applicationAudio],
+            durableThroughNanoseconds: 1_000_000_000,
+            knownGapCount: 0,
+            safeReason: nil
+        )
+        let stopped = RecordingSessionReview(
+            sessionID: active.sessionID,
+            jobID: active.jobID,
+            state: .completed,
+            stateVersion: 2,
+            activeTrackKinds: [.applicationAudio],
+            durableThroughNanoseconds: 2_000_000_000,
+            knownGapCount: 0,
+            safeReason: nil
+        )
+        let workflow = try MediaReviewWorkflowProbe(
+            storageReportGate: storageReportGate,
+            startedRecordingReview: active,
+            stoppedRecordingReview: stopped
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(fileURLWithPath: "/synthetic-recording-workspace"),
+            using: sceneState
+        )
+        sceneState.meetingTitle = "Synthetic recording"
+        sceneState.captureMode = .applicationAudioOnly
+        sceneState.recordingAcknowledged = true
+        await store.startRecording(using: sceneState)
+
+        let reportTask = Task { @MainActor in
+            await store.loadStorageReport()
+        }
+        await storageReportGate.waitUntilEntered()
+        #expect(store.isWorking)
+
+        await store.stopRecording()
+
+        #expect(workflow.recordingStopCallCount == 1)
+        #expect(store.recordingSession?.state == .completed)
+        #expect(!store.isStoppingRecording)
+
+        await storageReportGate.release()
+        await reportTask.value
+    }
+
+    @Test @MainActor
+    func failedUNWebTVRequestConsumesExactURLAuthorization() async throws {
+        let workflow = try MediaReviewWorkflowProbe(
+            webMetadataShouldFail: true
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        sceneState.unWebTVURL =
+            "https://webtv.un.org/en/asset/synthetic/synthetic-id"
+        sceneState.unWebTVNetworkAuthorized = true
+
+        await store.fetchUNWebTVMetadata(using: sceneState)
+
+        #expect(workflow.webMetadataFetchCallCount == 1)
+        #expect(!sceneState.unWebTVNetworkAuthorized)
+
+        await store.fetchUNWebTVMetadata(using: sceneState)
+
+        #expect(workflow.webMetadataFetchCallCount == 1)
+        #expect(
+            store.safeErrorMessage
+                == "Authorize this one foreground official-page metadata request."
+        )
+
+        sceneState.unWebTVNetworkAuthorized = true
+        await store.fetchUNWebTVMetadata(using: sceneState)
+
+        #expect(workflow.webMetadataFetchCallCount == 2)
+        #expect(!sceneState.unWebTVNetworkAuthorized)
+    }
 }
 
 @MainActor
@@ -1374,9 +1466,12 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let openGate: AsyncGate?
     private let pollGate: AsyncGate?
     private let editorSaveGate: AsyncGate?
+    private let storageReportGate: AsyncGate?
     private let pollingJob: MediaJobReview?
     private let recordingSetupReview: RecordingSetupReview
-    private let startedRecordingReview: RecordingSessionReview?
+    private let stoppedRecordingReview: RecordingSessionReview?
+    private let webMetadataShouldFail: Bool
+    private var currentRecordingReview: RecordingSessionReview?
     private var restoreFailuresRemaining: Int
     private var currentTranscriptReview: TranscriptReviewBundle?
     private var currentAnalysisReview: AnalysisReviewBundle?
@@ -1391,6 +1486,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private(set) var editorSaveCalls: [FeatureEditorSaveCall] = []
     private(set) var permanentDeletionCallCount = 0
     private(set) var recordingStartCallCount = 0
+    private(set) var recordingStopCallCount = 0
+    private(set) var webMetadataFetchCallCount = 0
     private(set) var lastDeletionConfirmed = false
     private(set) var lastUnlinkAcknowledged = false
 
@@ -1401,8 +1498,11 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         openGate: AsyncGate? = nil,
         pollGate: AsyncGate? = nil,
         editorSaveGate: AsyncGate? = nil,
+        storageReportGate: AsyncGate? = nil,
         recordingSetupReview: RecordingSetupReview? = nil,
         startedRecordingReview: RecordingSessionReview? = nil,
+        stoppedRecordingReview: RecordingSessionReview? = nil,
+        webMetadataShouldFail: Bool = false,
         seededReviewState: Bool = false
     ) throws {
         self.restoreGate = restoreGate
@@ -1411,6 +1511,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         self.openGate = openGate
         self.pollGate = pollGate
         self.editorSaveGate = editorSaveGate
+        self.storageReportGate = storageReportGate
         self.recordingSetupReview = recordingSetupReview
             ?? RecordingSetupReview(
                 capability: CaptureCapabilitySnapshot(
@@ -1421,7 +1522,9 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
                 ),
                 microphones: []
             )
-        self.startedRecordingReview = startedRecordingReview
+        currentRecordingReview = startedRecordingReview
+        self.stoppedRecordingReview = stoppedRecordingReview
+        self.webMetadataShouldFail = webMetadataShouldFail
         pollingJob = try pollGate == nil && !seededReviewState
             ? nil
             : makeFeatureJobReview(succeeded: seededReviewState)
@@ -1730,7 +1833,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     }
 
     func storageReport() async throws -> WorkspaceStorageReport {
-        try WorkspaceStorageReport(
+        if let storageReportGate { await storageReportGate.block() }
+        return try WorkspaceStorageReport(
             calculatedAt: featureInstant(1_950_000_000_000),
             totalByteCount: 128,
             categories: [
@@ -1781,10 +1885,41 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         _: RecordingStartSubmission
     ) async throws -> RecordingSessionReview {
         recordingStartCallCount += 1
-        guard let startedRecordingReview else {
+        guard let currentRecordingReview else {
             throw TranscriptWorkflowError.unavailable
         }
-        return startedRecordingReview
+        return currentRecordingReview
+    }
+
+    func recordingReview(
+        jobID _: JobID
+    ) async throws -> RecordingSessionReview {
+        guard let currentRecordingReview else {
+            throw TranscriptWorkflowError.unavailable
+        }
+        return currentRecordingReview
+    }
+
+    func stopRecording(
+        jobID _: JobID
+    ) async throws -> RecordingSessionReview {
+        recordingStopCallCount += 1
+        guard let stoppedRecordingReview else {
+            throw TranscriptWorkflowError.unavailable
+        }
+        currentRecordingReview = stoppedRecordingReview
+        return stoppedRecordingReview
+    }
+
+    func fetchUNWebTVMetadata(
+        url _: String,
+        explicitNetworkAuthorization _: Bool
+    ) async throws -> UNWebTVMetadataCandidate {
+        webMetadataFetchCallCount += 1
+        if webMetadataShouldFail {
+            throw ProbeError.unexpectedCall
+        }
+        throw ProbeError.unexpectedCall
     }
 }
 

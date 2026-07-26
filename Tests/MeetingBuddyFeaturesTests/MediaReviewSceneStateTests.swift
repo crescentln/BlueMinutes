@@ -7,6 +7,21 @@ import Testing
 @Suite
 struct MediaReviewSceneStateTests {
     @Test @MainActor
+    func unWebTVAuthorizationIsBoundToOneExactVisibleURL() {
+        let state = MediaReviewSceneState()
+        state.unWebTVURL =
+            "https://webtv.un.org/en/asset/synthetic/first"
+        state.unWebTVNetworkAuthorized = true
+
+        #expect(state.unWebTVNetworkAuthorized)
+
+        state.unWebTVURL =
+            "https://webtv.un.org/en/asset/synthetic/second"
+
+        #expect(!state.unWebTVNetworkAuthorized)
+    }
+
+    @Test @MainActor
     func workspaceChangeResetsEverySceneOwnedDraftAndTransientAuthorization() throws {
         let state = MediaReviewSceneState()
         state.selectedSection = .briefing
