@@ -6,6 +6,7 @@ struct Task007ViewAccessibilityTests {
     @Test
     func implementedVerticalSliceKeepsKeyboardAndAssistiveLabelsVisibleInSource() throws {
         let root = try source("MeetingBuddyRootView.swift")
+        let localMedia = try source("LocalMediaIntakeView.swift")
         let shell = try source("BlueMinutesMainWindowShell.swift")
         #expect(
             shell.contains(
@@ -22,10 +23,10 @@ struct Task007ViewAccessibilityTests {
                 ".keyboardShortcut(\"o\", modifiers: .command)"
             )
         )
-        #expect(root.contains(".keyboardShortcut(\"i\", modifiers: .command)"))
-        #expect(root.contains(".keyboardShortcut(.return, modifiers: .command)"))
-        #expect(root.contains(".accessibilityLabel(\"Canonical audio progress\")"))
-        #expect(root.contains(".accessibilityValue("))
+        #expect(localMedia.contains(".keyboardShortcut(\"i\", modifiers: .command)"))
+        #expect(localMedia.contains(".keyboardShortcut(.return, modifiers: .command)"))
+        #expect(localMedia.contains(".accessibilityLabel(\"Canonical audio progress\")"))
+        #expect(localMedia.contains(".accessibilityValue("))
         #expect(root.contains(".confirmationDialog("))
         #expect(root.contains("role: .destructive"))
 

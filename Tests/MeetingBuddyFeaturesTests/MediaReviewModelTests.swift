@@ -1301,6 +1301,50 @@ struct MediaReviewModelTests {
                 == "The Briefing section changed after this draft was opened. Keep the draft, review the new revision, and apply the edit again."
         )
     }
+
+    @Test @MainActor
+    func successfulRecordingStartConsumesTheSessionAcknowledgement()
+        async throws
+    {
+        let setup = RecordingSetupReview(
+            capability: CaptureCapabilitySnapshot(
+                microphonePermission: .authorized,
+                applicationAudioAvailable: true,
+                systemPickerAvailable: true,
+                checkedAt: featureInstant(1_950_000_000_002)
+            ),
+            microphones: []
+        )
+        let completed = RecordingSessionReview(
+            sessionID: featureID(81, RecordingSessionID.self),
+            jobID: featureID(82, JobID.self),
+            state: .completed,
+            stateVersion: 1,
+            activeTrackKinds: [.applicationAudio],
+            durableThroughNanoseconds: 5_000_000_000,
+            knownGapCount: 0,
+            safeReason: nil
+        )
+        let workflow = try MediaReviewWorkflowProbe(
+            recordingSetupReview: setup,
+            startedRecordingReview: completed
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(fileURLWithPath: "/synthetic-recording-workspace"),
+            using: sceneState
+        )
+        sceneState.meetingTitle = "Synthetic recording"
+        sceneState.captureMode = .applicationAudioOnly
+        sceneState.recordingAcknowledged = true
+
+        await store.startRecording(using: sceneState)
+
+        #expect(workflow.recordingStartCallCount == 1)
+        #expect(store.recordingSession?.state == .completed)
+        #expect(!sceneState.recordingAcknowledged)
+    }
 }
 
 @MainActor
@@ -1331,6 +1375,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let pollGate: AsyncGate?
     private let editorSaveGate: AsyncGate?
     private let pollingJob: MediaJobReview?
+    private let recordingSetupReview: RecordingSetupReview
+    private let startedRecordingReview: RecordingSessionReview?
     private var restoreFailuresRemaining: Int
     private var currentTranscriptReview: TranscriptReviewBundle?
     private var currentAnalysisReview: AnalysisReviewBundle?
@@ -1344,6 +1390,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private(set) var lastHistoricalSearchQuery: HistoricalSearchQuery?
     private(set) var editorSaveCalls: [FeatureEditorSaveCall] = []
     private(set) var permanentDeletionCallCount = 0
+    private(set) var recordingStartCallCount = 0
     private(set) var lastDeletionConfirmed = false
     private(set) var lastUnlinkAcknowledged = false
 
@@ -1354,6 +1401,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         openGate: AsyncGate? = nil,
         pollGate: AsyncGate? = nil,
         editorSaveGate: AsyncGate? = nil,
+        recordingSetupReview: RecordingSetupReview? = nil,
+        startedRecordingReview: RecordingSessionReview? = nil,
         seededReviewState: Bool = false
     ) throws {
         self.restoreGate = restoreGate
@@ -1362,6 +1411,17 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         self.openGate = openGate
         self.pollGate = pollGate
         self.editorSaveGate = editorSaveGate
+        self.recordingSetupReview = recordingSetupReview
+            ?? RecordingSetupReview(
+                capability: CaptureCapabilitySnapshot(
+                    microphonePermission: .denied,
+                    applicationAudioAvailable: false,
+                    systemPickerAvailable: false,
+                    checkedAt: featureInstant(1_950_000_000_002)
+                ),
+                microphones: []
+            )
+        self.startedRecordingReview = startedRecordingReview
         pollingJob = try pollGate == nil && !seededReviewState
             ? nil
             : makeFeatureJobReview(succeeded: seededReviewState)
@@ -1714,18 +1774,17 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     }
 
     func recordingSetup() async throws -> RecordingSetupReview {
-        guard restoredWorkspace != nil else {
+        recordingSetupReview
+    }
+
+    func startRecording(
+        _: RecordingStartSubmission
+    ) async throws -> RecordingSessionReview {
+        recordingStartCallCount += 1
+        guard let startedRecordingReview else {
             throw TranscriptWorkflowError.unavailable
         }
-        return RecordingSetupReview(
-            capability: CaptureCapabilitySnapshot(
-                microphonePermission: .denied,
-                applicationAudioAvailable: false,
-                systemPickerAvailable: false,
-                checkedAt: featureInstant(1_950_000_000_002)
-            ),
-            microphones: []
-        )
+        return startedRecordingReview
     }
 }
 
