@@ -807,6 +807,575 @@ struct BlueMinutesSettingsTests {
         }
     }
 
+    @Test @MainActor
+    func storageLedgerAndTrashActionsExposeNativeRuntimeAccessibility()
+        async throws
+    {
+        let store =
+            try makeFeatureStoreForHostedSettingsTests()
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-storage-workspace"
+            ),
+            using: sceneState
+        )
+        await store.loadStorageReport()
+        let item = try #require(
+            store.storageReport?.trashItems.first
+        )
+        let itemPrefix =
+            "blueminutes.storage.trash."
+            + item.storageObjectID.canonicalString
+        let restoreIdentifier =
+            itemPrefix + ".restore"
+        let deleteIdentifier =
+            itemPrefix + ".delete"
+        let identifiers: Set<String> = [
+            "blueminutes.storage.dashboard",
+            "blueminutes.storage.state.ready",
+            "blueminutes.storage.refresh",
+            "blueminutes.storage.usage-ledger",
+            "blueminutes.storage.integrity",
+            "blueminutes.storage.trash",
+            restoreIdentifier,
+            deleteIdentifier,
+            "blueminutes.storage.deletion-boundary"
+        ]
+        let title =
+            "BlueMinutes Storage AX Probe"
+        let snapshots = try withHostedWindow(
+            title: title,
+            size: CGSize(width: 860, height: 600),
+            content: {
+                StorageDashboardView(
+                    store: store,
+                    requestPermanentDeletion: {
+                        _ in
+                    }
+                )
+            },
+            operation: { _ in
+                try accessibilitySnapshots(
+                    windowTitle: title,
+                    identifiers: identifiers
+                )
+            }
+        )
+
+        for identifier in identifiers {
+            #expect(snapshots[identifier] != nil)
+            #expect(
+                snapshots[identifier]?.frame.width
+                    ?? 0 > 0
+            )
+            #expect(
+                snapshots[identifier]?.frame.height
+                    ?? 0 > 0
+            )
+        }
+        for identifier in [
+            "blueminutes.storage.refresh",
+            restoreIdentifier,
+            deleteIdentifier
+        ] {
+            #expect(
+                snapshots.roleOccurrenceCount(
+                    identifier,
+                    role: kAXButtonRole
+                ) == 1
+            )
+        }
+        #expect(
+            snapshots[
+                "blueminutes.storage.state.ready"
+            ]?.label
+                == "Exact local ledger ready"
+        )
+        #expect(
+            snapshots[
+                "blueminutes.storage.state.ready"
+            ]?.value?
+                .contains(
+                    "passed its configured scan and permission checks"
+                ) == true
+        )
+        #expect(
+            snapshots[restoreIdentifier]?
+                .label
+                == "Restore opaque managed object "
+                    + item.storageObjectID
+                    .canonicalString
+        )
+        #expect(
+            snapshots[restoreIdentifier]?
+                .help
+                == "Restore this exact opaque managed object through the Storage Service."
+        )
+        #expect(
+            snapshots[restoreIdentifier]?
+                .isEnabled == true
+        )
+        #expect(
+            snapshots[deleteIdentifier]?
+                .label
+                == "Delete opaque managed object "
+                    + item.storageObjectID
+                    .canonicalString
+                    + " permanently"
+        )
+        #expect(
+            snapshots[deleteIdentifier]?
+                .help?
+                .contains(
+                    "does not guarantee forensic erasure"
+                ) == true
+        )
+        #expect(
+            snapshots[deleteIdentifier]?
+                .isEnabled == true
+        )
+    }
+
+    @Test @MainActor
+    func storageStateVariantsExposeExactRuntimeAccessibility()
+        async throws
+    {
+        let initialStore =
+            try makeFeatureStoreForHostedStorageTests()
+        await openStorageAXWorkspace(
+            initialStore,
+            suffix: "initial"
+        )
+        let initialSnapshots =
+            try storageAXSnapshots(
+                store: initialStore,
+                title:
+                    "BlueMinutes Storage Initial AX Probe",
+                identifiers: [
+                    "blueminutes.storage.state.initial"
+                ]
+            )
+        #expect(
+            initialSnapshots[
+                "blueminutes.storage.state.initial"
+            ]?.label
+                == "Storage ledger not loaded"
+        )
+        #expect(
+            initialSnapshots[
+                "blueminutes.storage.state.initial"
+            ]?.value?
+                .contains(
+                    "before reviewing usage or changing Workspace Trash"
+                ) == true
+        )
+
+        let loadingGate = AsyncGate()
+        let loadingStore =
+            try makeFeatureStoreForHostedStorageTests(
+                storageReportGate:
+                    loadingGate
+            )
+        await openStorageAXWorkspace(
+            loadingStore,
+            suffix: "loading"
+        )
+        let loadingTask = Task {
+            await loadingStore
+                .loadStorageReport()
+        }
+        await loadingGate.waitUntilEntered()
+        let loadingSnapshots =
+            try storageAXSnapshots(
+                store: loadingStore,
+                title:
+                    "BlueMinutes Storage Loading AX Probe",
+                identifiers: [
+                    "blueminutes.storage.state.loading",
+                    "blueminutes.storage.refresh"
+                ]
+            )
+        #expect(
+            loadingSnapshots[
+                "blueminutes.storage.state.loading"
+            ]?.label
+                == "Calculating the first bounded local storage snapshot"
+        )
+        #expect(
+            loadingSnapshots[
+                "blueminutes.storage.state.loading"
+            ]?.value
+                == "No previous report is available; Workspace Trash actions are unavailable."
+        )
+        #expect(
+            loadingSnapshots[
+                "blueminutes.storage.refresh"
+            ]?.isEnabled == false
+        )
+        await loadingGate.release()
+        await loadingTask.value
+
+        let failedStore =
+            try makeFeatureStoreForHostedStorageTests(
+                storageReportFailureCall: 1
+            )
+        await openStorageAXWorkspace(
+            failedStore,
+            suffix: "failed"
+        )
+        await failedStore.loadStorageReport()
+        let failedSnapshots =
+            try storageAXSnapshots(
+                store: failedStore,
+                title:
+                    "BlueMinutes Storage Failed AX Probe",
+                identifiers: [
+                    "blueminutes.storage.state.failed"
+                ]
+            )
+        #expect(
+            failedSnapshots[
+                "blueminutes.storage.state.failed"
+            ]?.label
+                == "Storage ledger unavailable"
+        )
+        #expect(
+            failedSnapshots[
+                "blueminutes.storage.state.failed"
+            ]?.value
+                == "The exact local storage ledger could not be refreshed. The last successful report, if any, remains read-only."
+        )
+
+        let degradedReport =
+            try storageAXReport(
+                permissionIssueCount: 2,
+                scanTruncated: true
+            )
+        let degradedStore =
+            try makeFeatureStoreForHostedStorageTests(
+                report: degradedReport
+            )
+        await openStorageAXWorkspace(
+            degradedStore,
+            suffix: "degraded"
+        )
+        await degradedStore.loadStorageReport()
+        let degradedSnapshots =
+            try storageAXSnapshots(
+                store: degradedStore,
+                title:
+                    "BlueMinutes Storage Degraded AX Probe",
+                identifiers: [
+                    "blueminutes.storage.state.degraded"
+                ]
+            )
+        #expect(
+            degradedSnapshots[
+                "blueminutes.storage.state.degraded"
+            ]?.label
+                == "Storage integrity needs review"
+        )
+        #expect(
+            degradedSnapshots[
+                "blueminutes.storage.state.degraded"
+            ]?.value?
+                .contains(
+                    "configured scan safety bound was reached"
+                ) == true
+        )
+        #expect(
+            degradedSnapshots[
+                "blueminutes.storage.state.degraded"
+            ]?.value?
+                .contains(
+                    "Permission issues: 2"
+                ) == true
+        )
+
+        let emptyStore =
+            try makeFeatureStoreForHostedStorageTests(
+                report:
+                    storageAXReport(
+                        includesTrashItem:
+                            false
+                    )
+            )
+        await openStorageAXWorkspace(
+            emptyStore,
+            suffix: "empty"
+        )
+        await emptyStore.loadStorageReport()
+        let emptySnapshots =
+            try storageAXSnapshots(
+                store: emptyStore,
+                title:
+                    "BlueMinutes Storage Empty AX Probe",
+                identifiers: [
+                    "blueminutes.storage.trash.empty"
+                ]
+            )
+        #expect(
+            emptySnapshots[
+                "blueminutes.storage.trash.empty"
+            ]?.label
+                == "Workspace Trash is empty"
+        )
+        #expect(
+            emptySnapshots[
+                "blueminutes.storage.trash.empty"
+            ]?.value?
+                .contains(
+                    "No verified managed object"
+                ) == true
+        )
+    }
+
+    @Test @MainActor
+    func storageStaleAndRetentionBlocksExposeExactRuntimeAXReasons()
+        async throws
+    {
+        let staleStore =
+            try makeFeatureStoreForHostedStorageTests(
+                storageReportFailureCall: 2
+            )
+        await openStorageAXWorkspace(
+            staleStore,
+            suffix: "stale"
+        )
+        await staleStore.loadStorageReport()
+        let staleItem = try #require(
+            staleStore.storageReport?
+                .trashItems.first
+        )
+        await staleStore.loadStorageReport()
+        let stalePrefix =
+            "blueminutes.storage.trash."
+            + staleItem.storageObjectID
+            .canonicalString
+        let staleRestore =
+            stalePrefix + ".restore"
+        let staleDelete =
+            stalePrefix + ".delete"
+        let staleSnapshots =
+            try storageAXSnapshots(
+                store: staleStore,
+                title:
+                    "BlueMinutes Storage Stale AX Probe",
+                identifiers: [
+                    "blueminutes.storage.state.stale",
+                    staleRestore,
+                    staleDelete
+                ]
+            )
+        #expect(
+            staleSnapshots[
+                "blueminutes.storage.state.stale"
+            ]?.label
+                == "Last successful ledger is read-only"
+        )
+        #expect(
+            staleSnapshots[
+                "blueminutes.storage.state.stale"
+            ]?.value?
+                .contains(
+                    "Retained snapshot"
+                ) == true
+        )
+        for identifier in [
+            staleRestore,
+            staleDelete
+        ] {
+            #expect(
+                staleSnapshots[identifier]?
+                    .isEnabled == false
+            )
+            #expect(
+                staleSnapshots[identifier]?
+                    .help
+                    == "Refresh the exact ledger before changing Workspace Trash."
+            )
+        }
+
+        let retainedReport =
+            try storageAXReport(
+                retentionIsActive: true
+            )
+        let retainedStore =
+            try makeFeatureStoreForHostedStorageTests(
+                report: retainedReport
+            )
+        await openStorageAXWorkspace(
+            retainedStore,
+            suffix: "retained"
+        )
+        await retainedStore.loadStorageReport()
+        let retainedItem = try #require(
+            retainedStore.storageReport?
+                .trashItems.first
+        )
+        let retainedPrefix =
+            "blueminutes.storage.trash."
+            + retainedItem.storageObjectID
+            .canonicalString
+        let retainedRestore =
+            retainedPrefix + ".restore"
+        let retainedDelete =
+            retainedPrefix + ".delete"
+        let retainedSnapshots =
+            try storageAXSnapshots(
+                store: retainedStore,
+                title:
+                    "BlueMinutes Storage Retention AX Probe",
+                identifiers: [
+                    retainedRestore,
+                    retainedDelete
+                ]
+            )
+        #expect(
+            retainedSnapshots[
+                retainedRestore
+            ]?.isEnabled == true
+        )
+        #expect(
+            retainedSnapshots[
+                retainedDelete
+            ]?.isEnabled == false
+        )
+        #expect(
+            retainedSnapshots[
+                retainedDelete
+            ]?.help?
+                .contains(
+                    "Retention remains active until"
+                ) == true
+        )
+        #expect(
+            retainedSnapshots[
+                retainedDelete
+            ]?.help?
+                .contains(
+                    "this report was calculated"
+                ) == true
+        )
+    }
+
+    @MainActor
+    private func openStorageAXWorkspace(
+        _ store: MediaReviewStore,
+        suffix: String
+    ) async {
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-storage-ax-"
+                    + suffix
+            ),
+            using: MediaReviewSceneState()
+        )
+    }
+
+    @MainActor
+    private func storageAXSnapshots(
+        store: MediaReviewStore,
+        title: String,
+        identifiers: Set<String>
+    ) throws -> BlueMinutesAXSnapshots {
+        try withHostedWindow(
+            title: title,
+            size: CGSize(
+                width: 860,
+                height: 600
+            ),
+            content: {
+                StorageDashboardView(
+                    store: store,
+                    requestPermanentDeletion: {
+                        _ in
+                    }
+                )
+            },
+            operation: { _ in
+                try accessibilitySnapshots(
+                    windowTitle: title,
+                    identifiers: identifiers
+                )
+            }
+        )
+    }
+
+    private func storageAXReport(
+        permissionIssueCount:
+            UInt64 = 0,
+        scanTruncated: Bool = false,
+        includesTrashItem: Bool = true,
+        retentionIsActive: Bool = false
+    ) throws -> WorkspaceStorageReport {
+        let calculatedAt = try UTCInstant(
+            millisecondsSinceUnixEpoch:
+                1_950_000_000_000
+        )
+        let purgeEligibleAt =
+            try UTCInstant(
+                millisecondsSinceUnixEpoch:
+                    retentionIsActive
+                        ? 1_950_000_001_000
+                        : 1_949_000_000_000
+            )
+        let trashItems:
+            [WorkspaceTrashItem]
+        if includesTrashItem {
+            let storageUUID = try #require(
+                UUID(
+                    uuidString:
+                        "00000000-0000-0000-0000-000000000044"
+                )
+            )
+            trashItems = [
+                WorkspaceTrashItem(
+                    storageObjectID:
+                        StorageObjectID(
+                            storageUUID
+                        ),
+                    byteSize: 128,
+                    trashedAt:
+                        try UTCInstant(
+                            millisecondsSinceUnixEpoch:
+                                1_940_000_000_000
+                        ),
+                    purgeEligibleAt:
+                        purgeEligibleAt,
+                    dataClassification:
+                        .sensitive,
+                    retentionClass:
+                        .workspaceManaged
+                )
+            ]
+        } else {
+            trashItems = []
+        }
+        return try WorkspaceStorageReport(
+            calculatedAt: calculatedAt,
+            totalByteCount:
+                includesTrashItem ? 128 : 0,
+            categories:
+                includesTrashItem
+                    ? [
+                        WorkspaceStorageCategoryUsage(
+                            category: .trash,
+                            byteCount: 128,
+                            fileCount: 1
+                        )
+                    ]
+                    : [],
+            trashItems: trashItems,
+            permissionIssueCount:
+                permissionIssueCount,
+            scanTruncated: scanTruncated
+        )
+    }
+
     @Test
     func appStorageAndSceneRestorationStayInsideTheUIOnlyBoundary() throws {
         #expect(
@@ -1189,7 +1758,36 @@ struct BlueMinutesSettingsTests {
         {
             let snapshot = BlueMinutesAXElementSnapshot(
                 role: role,
-                frame: frame
+                frame: frame,
+                label:
+                    axString(
+                        element,
+                        attribute:
+                            kAXDescriptionAttribute
+                    )
+                    ?? axString(
+                        element,
+                        attribute:
+                            kAXTitleAttribute
+                    ),
+                value:
+                    axString(
+                        element,
+                        attribute:
+                            kAXValueAttribute
+                    ),
+                help:
+                    axString(
+                        element,
+                        attribute:
+                            kAXHelpAttribute
+                    ),
+                isEnabled:
+                    axValue(
+                        element,
+                        attribute:
+                            kAXEnabledAttribute
+                    ) as? Bool
             )
             matches[identifier, default: []].append(
                 snapshot
@@ -1916,6 +2514,10 @@ private struct BlueMinutesPresentationProbe: View {
 private struct BlueMinutesAXElementSnapshot {
     let role: String
     let frame: CGRect
+    let label: String?
+    let value: String?
+    let help: String?
+    let isEnabled: Bool?
 }
 
 private struct BlueMinutesAXSnapshots {
