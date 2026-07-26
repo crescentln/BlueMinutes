@@ -64,18 +64,17 @@ public final class MediaReviewSceneState {
     public init() {}
 
     public var validatedUNWebTVURL: URL? {
-        try? ValidatedUNWebTVAssetURL(unWebTVURL).url
+        validatedUNWebTVAssetURL?.url
     }
 
     public var unWebTVNetworkAuthorized: Bool {
         get {
-            guard let validated = try? ValidatedUNWebTVAssetURL(unWebTVURL)
-            else { return false }
+            guard let validated = validatedUNWebTVAssetURL else { return false }
             return unWebTVAuthorizedCanonicalURL == validated.absoluteString
         }
         set {
             guard newValue,
-                  let validated = try? ValidatedUNWebTVAssetURL(unWebTVURL)
+                  let validated = validatedUNWebTVAssetURL
             else {
                 unWebTVAuthorizedCanonicalURL = nil
                 return
@@ -91,6 +90,13 @@ public final class MediaReviewSceneState {
         else { return false }
         unWebTVAuthorizedCanonicalURL = nil
         return true
+    }
+
+    private var validatedUNWebTVAssetURL: ValidatedUNWebTVAssetURL? {
+        let normalized = unWebTVURL.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        return try? ValidatedUNWebTVAssetURL(normalized)
     }
 
     public var hasUnsavedEditorChanges: Bool {
