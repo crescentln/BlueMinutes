@@ -43,13 +43,9 @@ public final class MediaReviewSceneState {
     public var historyEndDate = ""
     public var selectedCurrentHistoryRevisionID: RevisionID?
     public var selectedPriorHistoryRevisionID: RevisionID?
-    public var learnedPreferenceKind: LearnedPreferenceKind = .briefingLength
-    public var learnedPreferenceValue = ""
-    public var editingLearnedPreferenceID: LearnedPreferenceID?
-    public var editingLearnedPreferenceVersion: UInt64?
+    public let learnedPreferenceEditor = LearnedPreferenceEditorState()
     public var pendingPermanentDeletion: WorkspaceTrashItem?
     public var confirmHistoricalChange = false
-    public var confirmPreferenceReset = false
 
     public internal(set) var transcript = TranscriptEditorDraft()
     public internal(set) var analysis = AnalysisEditorDraft()
@@ -62,6 +58,43 @@ public final class MediaReviewSceneState {
     private var destinationAvailability = MediaReviewDestinationAvailability()
 
     public init() {}
+
+    public var learnedPreferenceKind: LearnedPreferenceKind {
+        get { learnedPreferenceEditor.kind }
+        set { learnedPreferenceEditor.kind = newValue }
+    }
+
+    public var learnedPreferenceValue: String {
+        get { learnedPreferenceEditor.value }
+        set { learnedPreferenceEditor.value = newValue }
+    }
+
+    public var editingLearnedPreferenceID: LearnedPreferenceID? {
+        get { learnedPreferenceEditor.editingPreferenceID }
+        set {
+            learnedPreferenceEditor.editingPreferenceID =
+                newValue
+        }
+    }
+
+    public var editingLearnedPreferenceVersion: UInt64? {
+        get { learnedPreferenceEditor.editingPreferenceVersion }
+        set {
+            learnedPreferenceEditor.editingPreferenceVersion =
+                newValue
+        }
+    }
+
+    public var confirmPreferenceReset: Bool {
+        get {
+            learnedPreferenceEditor
+                .isResetConfirmationPresented
+        }
+        set {
+            learnedPreferenceEditor
+                .isResetConfirmationPresented = newValue
+        }
+    }
 
     public var validatedUNWebTVURL: URL? {
         validatedUNWebTVAssetURL?.url
@@ -427,13 +460,9 @@ public final class MediaReviewSceneState {
         historyEndDate = ""
         selectedCurrentHistoryRevisionID = nil
         selectedPriorHistoryRevisionID = nil
-        learnedPreferenceKind = .briefingLength
-        learnedPreferenceValue = ""
-        editingLearnedPreferenceID = nil
-        editingLearnedPreferenceVersion = nil
+        learnedPreferenceEditor.reset()
         pendingPermanentDeletion = nil
         confirmHistoricalChange = false
-        confirmPreferenceReset = false
         pendingNavigation = nil
         isResolvingPendingSave = false
         editorSaveInFlight = nil

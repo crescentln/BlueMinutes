@@ -1,6 +1,8 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import MeetingBuddyApplication
+import MeetingBuddyDomain
 import SwiftUI
 import Testing
 @testable import MeetingBuddyFeatures
@@ -459,6 +461,258 @@ struct BlueMinutesSettingsTests {
         }
     }
 
+    @Test @MainActor
+    func learnedPreferencesTabHostsRepositoryBackedControlsInsideSettings()
+        async throws
+    {
+        let suiteName =
+            "BlueMinutesLearnedSettingsTests.\(UUID().uuidString)"
+        let defaults = try #require(
+            UserDefaults(suiteName: suiteName)
+        )
+        defer {
+            defaults.removePersistentDomain(
+                forName: suiteName
+            )
+        }
+        let store =
+            try makeFeatureStoreForHostedSettingsTests()
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-hosted-settings-workspace"
+            ),
+            using: sceneState
+        )
+        await store.loadLearnedPreferences()
+
+        let title =
+            "BlueMinutes Learned Preferences AX Probe"
+        let identifiers: Set<String> = [
+            "blueminutes.settings",
+            "blueminutes.settings.tab.learned-preferences",
+            "blueminutes.settings.learned-preferences",
+            "blueminutes.settings.learned-preferences.global-toggle",
+            "blueminutes.settings.learned-preferences.kind",
+            "blueminutes.settings.learned-preferences.value",
+            "blueminutes.settings.learned-preferences.save",
+            "blueminutes.settings.learned-preferences.reset"
+        ]
+        let snapshots = try withHostedWindow(
+            title: title,
+            size: CGSize(width: 560, height: 360),
+            content: {
+                BlueMinutesPresentationRoot(
+                    defaults: defaults
+                ) {
+                    BlueMinutesSettingsView(
+                        store: store,
+                        defaults: defaults,
+                        initialTab:
+                            .learnedPreferences
+                    )
+                }
+            },
+            operation: { _ in
+                try accessibilitySnapshots(
+                    windowTitle: title,
+                    identifiers: identifiers
+                )
+            }
+        )
+
+        for identifier in identifiers {
+            #expect(snapshots[identifier] != nil)
+            guard let snapshot =
+                snapshots[identifier]
+            else { continue }
+            #expect(snapshot.frame.width > 0)
+            #expect(snapshot.frame.height > 0)
+            #expect(
+                snapshot.frame.width
+                    <= snapshots.containingFrame.width
+                        + 2
+            )
+        }
+        #expect(
+            snapshots[
+                "blueminutes.settings.tab.learned-preferences"
+            ]?.role == kAXRadioButtonRole
+        )
+        #expect(
+            snapshots[
+                "blueminutes.settings.learned-preferences.kind"
+            ]?.role == kAXPopUpButtonRole
+        )
+        #expect(
+            snapshots[
+                "blueminutes.settings.learned-preferences.value"
+            ]?.role == kAXTextFieldRole
+        )
+        #expect(
+            snapshots[
+                "blueminutes.settings.learned-preferences.save"
+            ]?.role == kAXButtonRole
+        )
+        #expect(
+            snapshots[
+                "blueminutes.settings.learned-preferences.reset"
+            ]?.role == kAXButtonRole
+        )
+    }
+
+    @Test @MainActor
+    func historyStatesAndCommandsExposeNativeRuntimeAccessibility()
+        throws
+    {
+        let indexTitle =
+            "BlueMinutes History Index AX Probe"
+        let indexIdentifiers: Set<String> = [
+            "blueminutes.history.index-search",
+            "blueminutes.history.reload-index",
+            "blueminutes.history.rebuild-index",
+            "blueminutes.history.search"
+        ]
+        let indexSnapshots = try withHostedWindow(
+            title: indexTitle,
+            size: CGSize(width: 860, height: 600),
+            content: {
+                HostedHistoryIndexAccessibilityProbe()
+                    .padding()
+            },
+            operation: { _ in
+                try accessibilitySnapshots(
+                    windowTitle: indexTitle,
+                    identifiers: indexIdentifiers
+                )
+            }
+        )
+        for identifier in indexIdentifiers {
+            #expect(
+                indexSnapshots[identifier] != nil
+            )
+            #expect(
+                indexSnapshots[identifier]?.frame
+                    .width ?? 0 > 0
+            )
+            #expect(
+                indexSnapshots[identifier]?.frame
+                    .height ?? 0 > 0
+            )
+        }
+        for identifier in [
+            "blueminutes.history.reload-index",
+            "blueminutes.history.rebuild-index",
+            "blueminutes.history.search"
+        ] {
+            #expect(
+                indexSnapshots.roleOccurrenceCount(
+                    identifier,
+                    role: kAXButtonRole
+                ) == 1
+            )
+        }
+
+        let reviewTitle =
+            "BlueMinutes History Review AX Probe"
+        let reviewFixture =
+            try HostedHistoryReviewAccessibilityFixture()
+        let reviewIdentifiers: Set<String> = [
+            "blueminutes.history.results",
+            reviewFixture.currentSelectionIdentifier,
+            reviewFixture.previousSelectionIdentifier
+        ]
+        let reviewSnapshots = try withHostedWindow(
+            title: reviewTitle,
+            size: CGSize(width: 860, height: 600),
+            content: {
+                HostedHistoryResultsAccessibilityProbe(
+                    fixture: reviewFixture
+                )
+                    .padding()
+            },
+            operation: { _ in
+                try accessibilitySnapshots(
+                    windowTitle: reviewTitle,
+                    identifiers: reviewIdentifiers
+                )
+            }
+        )
+        for identifier in reviewIdentifiers {
+            #expect(
+                reviewSnapshots[identifier] != nil
+            )
+            #expect(
+                reviewSnapshots[identifier]?.frame
+                    .width ?? 0 > 0
+            )
+            #expect(
+                reviewSnapshots[identifier]?.frame
+                    .height ?? 0 > 0
+            )
+        }
+        for identifier in [
+            reviewFixture.currentSelectionIdentifier,
+            reviewFixture.previousSelectionIdentifier
+        ] {
+            #expect(
+                reviewSnapshots.roleOccurrenceCount(
+                    identifier,
+                    role: kAXButtonRole
+                ) == 1
+            )
+        }
+
+        let comparisonTitle =
+            "BlueMinutes History Comparison AX Probe"
+        let comparisonIdentifiers: Set<String> = [
+            "blueminutes.history.comparison",
+            "blueminutes.history.compare",
+            "blueminutes.history.confirm-change"
+        ]
+        let comparisonSnapshots = try withHostedWindow(
+            title: comparisonTitle,
+            size: CGSize(width: 860, height: 600),
+            content: {
+                HostedHistoryComparisonAccessibilityProbe(
+                    fixture: reviewFixture
+                )
+                    .padding()
+            },
+            operation: { _ in
+                try accessibilitySnapshots(
+                    windowTitle: comparisonTitle,
+                    identifiers: comparisonIdentifiers
+                )
+            }
+        )
+        for identifier in comparisonIdentifiers {
+            #expect(
+                comparisonSnapshots[identifier] != nil
+            )
+            #expect(
+                comparisonSnapshots[identifier]?.frame
+                    .width ?? 0 > 0
+            )
+            #expect(
+                comparisonSnapshots[identifier]?.frame
+                    .height ?? 0 > 0
+            )
+        }
+        for identifier in [
+            "blueminutes.history.compare",
+            "blueminutes.history.confirm-change"
+        ] {
+            #expect(
+                comparisonSnapshots.roleOccurrenceCount(
+                    identifier,
+                    role: kAXButtonRole
+                ) == 1
+            )
+        }
+    }
+
     @Test
     func appStorageAndSceneRestorationStayInsideTheUIOnlyBoundary() throws {
         #expect(
@@ -499,7 +753,7 @@ struct BlueMinutesSettingsTests {
         #expect(!analysisReviewSource.contains("@SceneStorage"))
         #expect(!analysisReviewSource.contains("@AppStorage"))
 
-        let preferenceSources = try [
+        let uiPreferenceSources = try [
             source(
                 "Sources/MeetingBuddyFeatures/DesignSystem/Environment/BlueMinutesUIPreferences.swift"
             ),
@@ -512,31 +766,31 @@ struct BlueMinutesSettingsTests {
         ].joined(separator: "\n")
 
         #expect(
-            preferenceSources.contains(
+            uiPreferenceSources.contains(
                 ".preferredColorScheme(appearance.colorScheme)"
             )
         )
         #expect(
-            preferenceSources.contains(
+            uiPreferenceSources.contains(
                 ".controlSize(interfaceDensity.controlSize)"
             )
         )
         #expect(
-            preferenceSources.contains(
+            uiPreferenceSources.contains(
                 ".environment(\\.blueMinutesReadingWidth, readingWidth)"
             )
         )
         #expect(
-            preferenceSources.contains(
+            uiPreferenceSources.contains(
                 "BlueMinutesUIPreferenceKeys.reset(in: defaults)"
             )
         )
 
-        let normalizedPreferenceSources = preferenceSources.lowercased()
+        let normalizedPreferenceSources =
+            uiPreferenceSources.lowercased()
         for forbidden in [
             "automationsettingsvalues",
             "versionedautomationsettings",
-            "learnedpreference",
             "appcapabilities",
             "credential",
             "token",
@@ -577,7 +831,40 @@ struct BlueMinutesSettingsTests {
         ] {
             #expect(!normalizedPreferenceSources.contains(forbidden))
         }
-        #expect(!preferenceSources.contains("MeetingBuddyPersistence"))
+        #expect(
+            !uiPreferenceSources.contains(
+                "MeetingBuddyPersistence"
+            )
+        )
+
+        let learnedPreferences = try source(
+            "Sources/MeetingBuddyFeatures/Views/LearnedPreferencesSettingsPane.swift"
+        )
+        #expect(!learnedPreferences.contains("@AppStorage"))
+        #expect(!learnedPreferences.contains("@SceneStorage"))
+        #expect(
+            learnedPreferences.contains(
+                "store.loadLearnedPreferences()"
+            )
+        )
+        #expect(
+            learnedPreferences.contains(
+                "Presentation guidance only"
+            )
+        )
+        let settingsView = try source(
+            "Sources/MeetingBuddyFeatures/Views/BlueMinutesSettingsView.swift"
+        )
+        #expect(
+            !settingsView.contains(
+                "safeErrorMessage"
+            )
+        )
+        #expect(
+            normalizedPreferenceSources.contains(
+                "learnedpreferences"
+            )
+        )
     }
 
     @MainActor
@@ -683,15 +970,19 @@ struct BlueMinutesSettingsTests {
         }
 
         var elements: [String: BlueMinutesAXElementSnapshot] = [:]
+        var matches:
+            [String: [BlueMinutesAXElementSnapshot]] = [:]
         collectAccessibilitySnapshots(
             from: matchingWindow,
             identifiers: identifiers,
             depth: 0,
-            into: &elements
+            into: &elements,
+            matches: &matches
         )
         return BlueMinutesAXSnapshots(
             containingFrame: containingFrame,
-            elements: elements
+            elements: elements,
+            matches: matches
         )
     }
 
@@ -700,7 +991,9 @@ struct BlueMinutesSettingsTests {
         from element: AXUIElement,
         identifiers: Set<String>,
         depth: Int,
-        into snapshots: inout [String: BlueMinutesAXElementSnapshot]
+        into snapshots: inout [String: BlueMinutesAXElementSnapshot],
+        matches:
+            inout [String: [BlueMinutesAXElementSnapshot]]
     ) {
         guard depth < 20 else { return }
 
@@ -711,10 +1004,14 @@ struct BlueMinutesSettingsTests {
            let role = axString(element, attribute: kAXRoleAttribute),
            let frame = axFrame(element)
         {
-            snapshots[identifier] = BlueMinutesAXElementSnapshot(
+            let snapshot = BlueMinutesAXElementSnapshot(
                 role: role,
                 frame: frame
             )
+            matches[identifier, default: []].append(
+                snapshot
+            )
+            snapshots[identifier] = snapshot
         }
 
         for child in axElements(
@@ -725,7 +1022,8 @@ struct BlueMinutesSettingsTests {
                 from: child,
                 identifiers: identifiers,
                 depth: depth + 1,
-                into: &snapshots
+                into: &snapshots,
+                matches: &matches
             )
         }
     }
@@ -835,6 +1133,550 @@ struct BlueMinutesSettingsTests {
     }
 }
 
+@MainActor
+private struct HostedHistoryIndexAccessibilityProbe:
+    View
+{
+    @State private var actorOrCountry = ""
+    @State private var topic = ""
+    @State private var organizationOrBody = ""
+    @State private var meetingType = ""
+    @State private var startDate = ""
+    @State private var endDate = ""
+
+    var body: some View {
+        HistoricalIndexSearchView(
+            status: HistoricalIndexStatus(
+                availability: .ready,
+                generation: 7,
+                normalizerVersion: 1,
+                indexedPositionCount: 0,
+                rebuiltAt: nil,
+                sourceFingerprint: nil
+            ),
+            job: nil,
+            isLoading: false,
+            failureMessage: nil,
+            isWorking: false,
+            actorOrCountry: $actorOrCountry,
+            topic: $topic,
+            organizationOrBody:
+                $organizationOrBody,
+            meetingType: $meetingType,
+            startDate: $startDate,
+            endDate: $endDate,
+            reloadStatus: {},
+            rebuildIndex: {},
+            search: {}
+        )
+    }
+}
+
+@MainActor
+private struct HostedHistoryResultsAccessibilityProbe:
+    View
+{
+    let fixture: HostedHistoryReviewAccessibilityFixture
+
+    var body: some View {
+        HistoricalResultsView(
+            page: HistoricalSearchPage(
+                results: [fixture.result],
+                nextCursor: nil,
+                indexGeneration: 7
+            ),
+            isLoading: false,
+            failureMessage: nil,
+            lastSuccessfulFilter: fixture.filter,
+            currentFilter: fixture.filter,
+            selectedCurrentRevisionID:
+                fixture.currentRevisionID,
+            selectedPreviousRevisionID:
+                fixture.previousRevisionID,
+            selectCurrent: { _ in },
+            selectPrevious: { _ in }
+        )
+    }
+}
+
+@MainActor
+private struct HostedHistoryComparisonAccessibilityProbe:
+    View
+{
+    let fixture: HostedHistoryReviewAccessibilityFixture
+
+    var body: some View {
+        HistoricalComparisonView(
+            comparison: fixture.comparison,
+            currentRevisionID:
+                fixture.currentRevisionID,
+            previousRevisionID:
+                fixture.previousRevisionID,
+            isWorking: false,
+            resultsAreCurrent: true,
+            compare: {},
+            requestConfirmation: {}
+        )
+    }
+}
+
+private struct HostedHistoryReviewAccessibilityFixture {
+    let result: HistoricalPositionResult
+    let comparison: HistoricalComparisonV1
+    let currentRevisionID: RevisionID
+    let previousRevisionID: RevisionID
+    let filter = HistoricalSearchFilterSnapshot(
+        actorOrCountry: "",
+        topic: "",
+        organizationOrBody: "",
+        meetingType: "",
+        startDate: "",
+        endDate: ""
+    )
+
+    var currentSelectionIdentifier: String {
+        selectionIdentifier(role: "current")
+    }
+
+    var previousSelectionIdentifier: String {
+        selectionIdentifier(role: "previous")
+    }
+
+    init() throws {
+        let createdAt = try UTCInstant(
+            millisecondsSinceUnixEpoch:
+                1_950_000_000_000
+        )
+        let currentDate = try CalendarDate(
+            year: 2026,
+            month: 7,
+            day: 26
+        )
+        let previousDate = try CalendarDate(
+            year: 2025,
+            month: 7,
+            day: 26
+        )
+
+        let meetingID = historyAXID(
+            1,
+            MeetingID.self
+        )
+        let meetingRevisionID = historyAXID(
+            2,
+            RevisionID.self
+        )
+        let meetingReference = try historyAXReference(
+            meetingID,
+            meetingRevisionID
+        )
+        let meeting = try MeetingProfileV1(
+            revision: historyAXEnvelope(
+                logicalID: meetingID,
+                revisionID: meetingRevisionID,
+                createdAt: createdAt
+            ),
+            title: "Synthetic accessibility meeting",
+            meetingDate: currentDate,
+            outputLanguage: LanguageTag("en"),
+            cloudProcessingPolicy: .localOnly,
+            reviewStatus: .unreviewed,
+            userConfirmed: false
+        )
+
+        let actorID = historyAXID(3, ActorID.self)
+        let actorRevisionID = historyAXID(
+            4,
+            RevisionID.self
+        )
+        let actorReference = try historyAXReference(
+            actorID,
+            actorRevisionID
+        )
+        let actor = try ActorV1(
+            revision: historyAXEnvelope(
+                logicalID: actorID,
+                revisionID: actorRevisionID,
+                createdAt: createdAt
+            ),
+            identity: .other(
+                displayName:
+                    "Synthetic Accessibility Delegation"
+            ),
+            reviewStatus: .unreviewed,
+            userConfirmed: false
+        )
+
+        let issueID = historyAXID(5, IssueID.self)
+        let issueRevisionID = historyAXID(
+            6,
+            RevisionID.self
+        )
+        let issueReference = try historyAXReference(
+            issueID,
+            issueRevisionID
+        )
+        let issue = try IssueV1(
+            revision: historyAXEnvelope(
+                logicalID: issueID,
+                revisionID: issueRevisionID,
+                inputs: [meetingReference],
+                createdAt: createdAt
+            ),
+            meetingID: meetingID,
+            title: EvidenceLinkedClaim(
+                text:
+                    "Synthetic accessibility issue",
+                taxonomy: .meetingBuddyExtraction,
+                supportStatus: .unsupported,
+                evidenceRevisions: [],
+                confidence:
+                    ConfidenceScore(
+                        millionths: 500_000
+                    )
+            ),
+            reviewStatus: .unreviewed,
+            userConfirmed: false
+        )
+
+        let organizationReference =
+            try historyAXReference(
+                historyAXID(
+                    7,
+                    OrganizationID.self
+                ),
+                historyAXID(
+                    8,
+                    RevisionID.self
+                )
+            )
+        let capacityReference =
+            try historyAXReference(
+                historyAXID(
+                    9,
+                    SpeakingCapacityID.self
+                ),
+                historyAXID(
+                    10,
+                    RevisionID.self
+                )
+            )
+        let positionID = historyAXID(
+            11,
+            PositionID.self
+        )
+        let positionRevisionID = historyAXID(
+            12,
+            RevisionID.self
+        )
+        let position = try PositionV1(
+            revision: historyAXEnvelope(
+                logicalID: positionID,
+                revisionID: positionRevisionID,
+                inputs: [
+                    meetingReference,
+                    actorReference,
+                    organizationReference,
+                    capacityReference,
+                    issueReference
+                ],
+                createdAt: createdAt
+            ),
+            meetingID: meetingID,
+            actorRevision: actorReference,
+            representedEntityRevision:
+                organizationReference,
+            speakingCapacityRevision:
+                capacityReference,
+            issueRevision: issueReference,
+            positionType: .supports,
+            statement: EvidenceLinkedClaim(
+                text:
+                    "Synthetic accessibility position",
+                taxonomy: .meetingBuddyExtraction,
+                supportStatus: .unsupported,
+                evidenceRevisions: [],
+                confidence:
+                    ConfidenceScore(
+                        millionths: 500_000
+                    )
+            ),
+            comparisonState: .unknown,
+            reviewStatus: .unreviewed,
+            userConfirmed: false
+        )
+
+        let sensitivityReference =
+            try historyAXReference(
+                historyAXID(
+                    13,
+                    SensitivityLabelID.self
+                ),
+                historyAXID(
+                    14,
+                    RevisionID.self
+                )
+            )
+        let policyReference =
+            try historyAXReference(
+                historyAXID(
+                    15,
+                    AccessPolicyID.self
+                ),
+                historyAXID(
+                    16,
+                    RevisionID.self
+                )
+            )
+        result = HistoricalPositionResult(
+            position: position,
+            meeting: meeting,
+            actor: actor,
+            issue: issue,
+            evidence: [],
+            sensitivityLabelRevision:
+                sensitivityReference,
+            accessPolicyRevision: policyReference,
+            organizationLabel:
+                "Synthetic Organization",
+            meetingType: nil,
+            effectiveClassification: .internal
+        )
+
+        currentRevisionID = positionRevisionID
+        previousRevisionID = historyAXID(
+            17,
+            RevisionID.self
+        )
+        let currentPositionReference =
+            try historyAXReference(
+                positionID,
+                positionRevisionID
+            )
+        let previousPositionReference =
+            try historyAXReference(
+                historyAXID(
+                    18,
+                    PositionID.self
+                ),
+                previousRevisionID
+            )
+        let previousMeetingReference =
+            try historyAXReference(
+                historyAXID(
+                    19,
+                    MeetingID.self
+                ),
+                historyAXID(
+                    20,
+                    RevisionID.self
+                )
+            )
+        let previousActorReference =
+            try historyAXReference(
+                historyAXID(
+                    21,
+                    ActorID.self
+                ),
+                historyAXID(
+                    22,
+                    RevisionID.self
+                )
+            )
+        let previousIssueReference =
+            try historyAXReference(
+                historyAXID(
+                    23,
+                    IssueID.self
+                ),
+                historyAXID(
+                    24,
+                    RevisionID.self
+                )
+            )
+        let previousSensitivityReference =
+            try historyAXReference(
+                historyAXID(
+                    25,
+                    SensitivityLabelID.self
+                ),
+                historyAXID(
+                    26,
+                    RevisionID.self
+                )
+            )
+        let previousPolicyReference =
+            try historyAXReference(
+                historyAXID(
+                    27,
+                    AccessPolicyID.self
+                ),
+                historyAXID(
+                    28,
+                    RevisionID.self
+                )
+            )
+        let currentEvidenceReference =
+            try historyAXReference(
+                historyAXID(
+                    29,
+                    EvidenceID.self
+                ),
+                historyAXID(
+                    30,
+                    RevisionID.self
+                )
+            )
+        let previousEvidenceReference =
+            try historyAXReference(
+                historyAXID(
+                    31,
+                    EvidenceID.self
+                ),
+                historyAXID(
+                    32,
+                    RevisionID.self
+                )
+            )
+        let comparisonInputs = [
+            currentPositionReference,
+            previousPositionReference,
+            meetingReference,
+            previousMeetingReference,
+            actorReference,
+            previousActorReference,
+            issueReference,
+            previousIssueReference,
+            sensitivityReference,
+            previousSensitivityReference,
+            policyReference,
+            previousPolicyReference
+        ]
+        comparison = try HistoricalComparisonV1(
+            revision: historyAXEnvelope(
+                logicalID: historyAXID(
+                    33,
+                    HistoricalComparisonID.self
+                ),
+                revisionID: historyAXID(
+                    34,
+                    RevisionID.self
+                ),
+                inputs: comparisonInputs,
+                evidence: [
+                    currentEvidenceReference,
+                    previousEvidenceReference
+                ],
+                createdAt: createdAt
+            ),
+            currentPositionRevision:
+                currentPositionReference,
+            historicalPositionRevision:
+                previousPositionReference,
+            currentMeetingRevision:
+                meetingReference,
+            historicalMeetingRevision:
+                previousMeetingReference,
+            currentActorRevision: actorReference,
+            historicalActorRevision:
+                previousActorReference,
+            currentIssueRevision: issueReference,
+            historicalIssueRevision:
+                previousIssueReference,
+            currentSensitivityLabelRevision:
+                sensitivityReference,
+            historicalSensitivityLabelRevision:
+                previousSensitivityReference,
+            currentAccessPolicyRevision:
+                policyReference,
+            historicalAccessPolicyRevision:
+                previousPolicyReference,
+            currentEffectiveDate: currentDate,
+            historicalEffectiveDate: previousDate,
+            currentEffectiveTimeRange: nil,
+            historicalEffectiveTimeRange: nil,
+            currentConfidence:
+                ConfidenceScore(
+                    millionths: 800_000
+                ),
+            historicalConfidence:
+                ConfidenceScore(
+                    millionths: 700_000
+                ),
+            currentEvidenceRevisions: [
+                currentEvidenceReference
+            ],
+            historicalEvidenceRevisions: [
+                previousEvidenceReference
+            ],
+            differenceState:
+                .possibleDifference,
+            finding: .possibleChange,
+            reviewStatus: .needsReview,
+            userConfirmed: false
+        )
+    }
+
+    private func selectionIdentifier(
+        role: String
+    ) -> String {
+        "blueminutes.history.result."
+            + currentRevisionID.canonicalString
+            + ".use-"
+            + role
+    }
+}
+
+private func historyAXID<Tag>(
+    _ suffix: Int,
+    _: StableID<Tag>.Type
+) -> StableID<Tag> {
+    StableID<Tag>(
+        UUID(
+            uuidString: String(
+                format:
+                    "52000000-0000-0000-0000-%012d",
+                suffix
+            )
+        )!
+    )
+}
+
+private func historyAXReference<
+    Tag: LogicalObjectIDScope
+>(
+    _ logicalID: StableID<Tag>,
+    _ revisionID: RevisionID
+) throws -> SemanticRevisionReference {
+    try SemanticRevisionReference(
+        logicalID: logicalID,
+        revisionID: revisionID
+    )
+}
+
+private func historyAXEnvelope<
+    Tag: LogicalObjectIDScope
+>(
+    logicalID: StableID<Tag>,
+    revisionID: RevisionID,
+    inputs: [SemanticRevisionReference] = [],
+    evidence: [SemanticRevisionReference] = [],
+    createdAt: UTCInstant
+) throws -> RevisionEnvelope<Tag> {
+    try RevisionEnvelope(
+        logicalID: logicalID,
+        revisionID: revisionID,
+        schemaVersion: .v1,
+        lifecycleStatus: .draft,
+        validationState: .notValidated,
+        createdAt: createdAt,
+        createdBy: .application,
+        inputRevisions: inputs,
+        evidenceRevisions: evidence,
+        dataClassification: .internal
+    )
+}
+
 private struct BlueMinutesPresentationSnapshot: Equatable {
     let colorScheme: ColorScheme
     let controlSize: ControlSize
@@ -886,9 +1728,19 @@ private struct BlueMinutesAXElementSnapshot {
 private struct BlueMinutesAXSnapshots {
     let containingFrame: CGRect
     let elements: [String: BlueMinutesAXElementSnapshot]
+    let matches:
+        [String: [BlueMinutesAXElementSnapshot]]
 
     subscript(_ identifier: String) -> BlueMinutesAXElementSnapshot? {
         elements[identifier]
+    }
+
+    func roleOccurrenceCount(
+        _ identifier: String,
+        role: String
+    ) -> Int {
+        matches[identifier, default: []]
+            .count { $0.role == role }
     }
 }
 

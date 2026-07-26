@@ -25,6 +25,17 @@ public final class MediaReviewStore {
     public private(set) var historicalSearchPage: HistoricalSearchPage?
     public private(set) var historicalComparison: HistoricalComparisonV1?
     public private(set) var learnedPreferences: LearnedPreferenceState?
+    public private(set) var historicalReviewIsLoading = false
+    public private(set) var historicalSearchIsLoading = false
+    public private(set) var learnedPreferencesAreLoading = false
+    private(set) var historicalIndexFailureMessage:
+        String?
+    private(set) var historicalSearchFailureMessage:
+        String?
+    private(set) var historicalSearchFilterSnapshot:
+        HistoricalSearchFilterSnapshot?
+    private(set) var learnedPreferencesFailureMessage:
+        String?
     public private(set) var storageReport: WorkspaceStorageReport?
     public private(set) var recordingSetup: RecordingSetupReview?
     public private(set) var recordingSession: RecordingSessionReview?
@@ -33,6 +44,8 @@ public final class MediaReviewStore {
     public private(set) var isStoppingRecording = false
     public private(set) var safeErrorMessage: String?
     public private(set) var workspaceSession: UInt64 = 0
+    public private(set) var workspaceReadySession:
+        UInt64 = 0
 
     @ObservationIgnored
     private let workflow: any MediaReviewWorkflow
@@ -92,6 +105,8 @@ public final class MediaReviewStore {
                 recordingSetup = setup
                 recordingSession = setup.recoverableSession
                 sceneState.selectedMicrophoneDeviceID = setup.microphones.first?.id
+                workspaceReadySession =
+                    workspaceSession
                 if let session = setup.recoverableSession, !session.state.isTerminal {
                     beginRecordingPolling(jobID: session.jobID)
                 }
@@ -120,6 +135,8 @@ public final class MediaReviewStore {
             recordingSetup = setup
             recordingSession = setup.recoverableSession
             sceneState.selectedMicrophoneDeviceID = setup.microphones.first?.id
+            workspaceReadySession =
+                workspaceSession
         }
     }
 
@@ -781,14 +798,99 @@ public final class MediaReviewStore {
 
     public func loadHistoricalReview(using sceneState: MediaReviewSceneState) async {
         guard workspace != nil else { return }
-        await perform {
-            historicalIndex = try await workflow.historicalIndexStatus()
-            learnedPreferences = try await workflow.learnedPreferenceState()
-            if historicalIndex?.availability == .ready {
+        if let activeJob = historicalIndexJob,
+           !activeJob.state.isTerminal
+        {
+            guard historicalIndexFailureMessage != nil
+            else { return }
+            let filterSnapshot =
+                HistoricalSearchFilterSnapshot(
+                    sceneState: sceneState
+                )
+            historicalSearchFailureMessage = nil
+            let query: HistoricalSearchQuery?
+            do {
+                query = try historicalQuery(
+                    using: sceneState
+                )
+            } catch {
+                query = nil
+                historicalSearchFailureMessage =
+                    "The local index poll will resume, but its automatic search is disabled because the date filters are invalid."
+            }
+            historicalIndexFailureMessage = nil
+            beginHistoricalIndexPolling(
+                jobID: activeJob.jobID,
+                acceptedQuery: query,
+                acceptedFilter: filterSnapshot,
+                using: sceneState
+            )
+            return
+        }
+        if historicalIndexJob?.state.isTerminal == true {
+            historicalIndexJob = nil
+        }
+        let filterSnapshot =
+            HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            )
+        historicalIndexFailureMessage = nil
+        historicalSearchFailureMessage = nil
+        historicalReviewIsLoading = true
+        var loadedIndex = false
+        var attemptedSearch = false
+        defer {
+            historicalReviewIsLoading = false
+            historicalSearchIsLoading = false
+        }
+        let succeeded = await perform {
+            let index =
+                try await workflow.historicalIndexStatus()
+            historicalIndex = index
+            loadedIndex = true
+            if index.availability == .ready {
+                attemptedSearch = true
+                historicalSearchIsLoading = true
                 historicalSearchPage = try await workflow.searchMeetingHistory(
                     try historicalQuery(using: sceneState)
                 )
+                historicalSearchFilterSnapshot =
+                    filterSnapshot
+                reconcileHistoricalSelection(
+                    in: historicalSearchPage,
+                    using: sceneState
+                )
+            } else {
+                historicalSearchPage = nil
+                historicalComparison = nil
+                historicalSearchFilterSnapshot = nil
             }
+        }
+        if !succeeded {
+            let message =
+                safeErrorMessage
+                ?? "The local history review did not load."
+            if !loadedIndex {
+                historicalIndexFailureMessage = message
+            } else if attemptedSearch {
+                historicalSearchFailureMessage = message
+            }
+        }
+    }
+
+    public func loadLearnedPreferences() async {
+        guard workspace != nil,
+              workspaceReadySession
+                == workspaceSession
+        else { return }
+        learnedPreferencesFailureMessage = nil
+        learnedPreferencesAreLoading = true
+        defer {
+            learnedPreferencesAreLoading = false
+        }
+        await performLearnedPreferenceOperation {
+            learnedPreferences =
+                try await workflow.learnedPreferenceState()
         }
     }
 
@@ -796,25 +898,69 @@ public final class MediaReviewStore {
         using sceneState: MediaReviewSceneState
     ) async {
         guard workspace != nil else { return }
-        await perform {
+        guard historicalIndexJob?.state.isTerminal != false
+        else { return }
+        let filterSnapshot =
+            HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            )
+        historicalIndexFailureMessage = nil
+        historicalSearchFailureMessage = nil
+        let query: HistoricalSearchQuery?
+        do {
+            query = try historicalQuery(using: sceneState)
+        } catch {
+            query = nil
+            historicalSearchFailureMessage =
+                "The local index will still rebuild, but the automatic search was skipped because its date filters are invalid."
+        }
+        historicalSearchFilterSnapshot = nil
+        let succeeded = await perform {
             historicalIndexJob = try await workflow.rebuildHistoricalIndex()
             historicalSearchPage = nil
             historicalComparison = nil
             if let historicalIndexJob {
                 beginHistoricalIndexPolling(
                     jobID: historicalIndexJob.jobID,
+                    acceptedQuery: query,
+                    acceptedFilter: filterSnapshot,
                     using: sceneState
                 )
             }
         }
+        if !succeeded {
+            historicalIndexFailureMessage =
+                safeErrorMessage
+                ?? "The local history index rebuild could not be enqueued."
+        }
     }
 
     public func searchMeetingHistory(using sceneState: MediaReviewSceneState) async {
-        await perform {
+        let filterSnapshot =
+            HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            )
+        historicalSearchFailureMessage = nil
+        historicalSearchIsLoading = true
+        defer {
+            historicalSearchIsLoading = false
+        }
+        let succeeded = await perform {
             historicalSearchPage = try await workflow.searchMeetingHistory(
                 try historicalQuery(using: sceneState)
             )
+            historicalSearchFilterSnapshot =
+                filterSnapshot
             historicalComparison = nil
+            reconcileHistoricalSelection(
+                in: historicalSearchPage,
+                using: sceneState
+            )
+        }
+        if !succeeded {
+            historicalSearchFailureMessage =
+                safeErrorMessage
+                    ?? "The local history search did not complete."
         }
     }
 
@@ -843,11 +989,60 @@ public final class MediaReviewStore {
         }
     }
 
-    public func confirmHistoricalChange() async {
+    public func selectHistoricalCurrentRevision(
+        _ revisionID: RevisionID,
+        using sceneState: MediaReviewSceneState
+    ) {
+        if sceneState
+            .selectedCurrentHistoryRevisionID
+            != revisionID
+        {
+            historicalComparison = nil
+        }
+        sceneState.selectedCurrentHistoryRevisionID =
+            revisionID
+    }
+
+    public func selectHistoricalPreviousRevision(
+        _ revisionID: RevisionID,
+        using sceneState: MediaReviewSceneState
+    ) {
+        if sceneState
+            .selectedPriorHistoryRevisionID
+            != revisionID
+        {
+            historicalComparison = nil
+        }
+        sceneState.selectedPriorHistoryRevisionID =
+            revisionID
+    }
+
+    public func confirmHistoricalChange(
+        using sceneState: MediaReviewSceneState
+    ) async {
         guard let comparison = historicalComparison,
-              comparison.differenceState == .possibleDifference
+              comparison.differenceState
+                == .possibleDifference,
+              HistoricalReviewPresentation
+                .comparisonMatchesSelection(
+                    comparisonCurrentRevisionID:
+                        comparison
+                        .currentPositionRevision
+                        .revisionID,
+                    comparisonPreviousRevisionID:
+                        comparison
+                        .historicalPositionRevision
+                        .revisionID,
+                    selectedCurrentRevisionID:
+                        sceneState
+                        .selectedCurrentHistoryRevisionID,
+                    selectedPreviousRevisionID:
+                        sceneState
+                        .selectedPriorHistoryRevisionID
+                )
         else {
-            safeErrorMessage = "Only a possible evidence-linked difference can be confirmed."
+            safeErrorMessage =
+                "Confirm only the possible evidence-linked difference that exactly matches the visible current and previous selections."
             return
         }
         await perform {
@@ -861,35 +1056,69 @@ public final class MediaReviewStore {
         _ record: LearnedPreferenceRecord,
         using sceneState: MediaReviewSceneState
     ) {
-        sceneState.editingLearnedPreferenceID = record.preferenceID
-        sceneState.editingLearnedPreferenceVersion = record.version
-        sceneState.learnedPreferenceKind = record.kind
-        sceneState.learnedPreferenceValue = editablePreferenceValue(record.value)
+        editLearnedPreference(
+            record,
+            using: sceneState.learnedPreferenceEditor
+        )
     }
 
-    public func saveLearnedPreference(using sceneState: MediaReviewSceneState) async {
+    public func editLearnedPreference(
+        _ record: LearnedPreferenceRecord,
+        using editorState: LearnedPreferenceEditorState
+    ) {
+        editorState.editingPreferenceID =
+            record.preferenceID
+        editorState.editingPreferenceVersion =
+            record.version
+        editorState.kind = record.kind
+        editorState.value =
+            editablePreferenceValue(record.value)
+    }
+
+    public func saveLearnedPreference(
+        using sceneState: MediaReviewSceneState
+    ) async {
+        await saveLearnedPreference(
+            using: sceneState.learnedPreferenceEditor
+        )
+    }
+
+    public func saveLearnedPreference(
+        using editorState: LearnedPreferenceEditorState
+    ) async {
+        learnedPreferencesFailureMessage = nil
         do {
-            let value = try parsedPreferenceValue(using: sceneState)
-            let preferenceID = sceneState.editingLearnedPreferenceID
+            let value = try parsedPreferenceValue(
+                using: editorState
+            )
+            let preferenceID =
+                editorState.editingPreferenceID
                 ?? LearnedPreferenceID(UUID())
-            await perform {
+            await performLearnedPreferenceOperation {
                 _ = try await workflow.saveLearnedPreference(
                     preferenceID: preferenceID,
                     value: value,
                     enabled: true,
-                    sourceAction: "explicit-history-preferences-form",
-                    expectedVersion: sceneState.editingLearnedPreferenceVersion
+                    sourceAction:
+                        "explicit-history-preferences-form",
+                    expectedVersion:
+                        editorState.editingPreferenceVersion
                 )
                 learnedPreferences = try await workflow.learnedPreferenceState()
-                clearLearnedPreferenceEditor(in: sceneState)
+                clearLearnedPreferenceEditor(
+                    in: editorState
+                )
             }
         } catch {
-            safeErrorMessage = "Enter a valid value for the selected learned-preference type."
+            let message =
+                "Enter a valid value for the selected learned-preference type."
+            learnedPreferencesFailureMessage = message
         }
     }
 
     public func toggleLearnedPreference(_ record: LearnedPreferenceRecord) async {
-        await perform {
+        learnedPreferencesFailureMessage = nil
+        await performLearnedPreferenceOperation {
             _ = try await workflow.setLearnedPreferenceEnabled(
                 preferenceID: record.preferenceID,
                 enabled: !record.enabled,
@@ -904,22 +1133,38 @@ public final class MediaReviewStore {
         _ record: LearnedPreferenceRecord,
         using sceneState: MediaReviewSceneState
     ) async {
-        await perform {
+        await removeLearnedPreference(
+            record,
+            using: sceneState.learnedPreferenceEditor
+        )
+    }
+
+    public func removeLearnedPreference(
+        _ record: LearnedPreferenceRecord,
+        using editorState: LearnedPreferenceEditorState
+    ) async {
+        learnedPreferencesFailureMessage = nil
+        await performLearnedPreferenceOperation {
             try await workflow.removeLearnedPreference(
                 preferenceID: record.preferenceID,
                 sourceAction: "explicit-preference-remove",
                 expectedVersion: record.version
             )
             learnedPreferences = try await workflow.learnedPreferenceState()
-            if sceneState.editingLearnedPreferenceID == record.preferenceID {
-                clearLearnedPreferenceEditor(in: sceneState)
+            if editorState.editingPreferenceID
+                == record.preferenceID
+            {
+                clearLearnedPreferenceEditor(
+                    in: editorState
+                )
             }
         }
     }
 
     public func setLearnedPreferencesGloballyEnabled(_ enabled: Bool) async {
         guard let state = learnedPreferences else { return }
-        await perform {
+        learnedPreferencesFailureMessage = nil
+        await performLearnedPreferenceOperation {
             learnedPreferences = try await workflow.setLearnedPreferencesGloballyEnabled(
                 enabled,
                 sourceAction: "explicit-preference-global-toggle",
@@ -932,16 +1177,32 @@ public final class MediaReviewStore {
         confirmedByVisibleDialog: Bool,
         using sceneState: MediaReviewSceneState
     ) async {
+        await resetLearnedPreferences(
+            confirmedByVisibleDialog:
+                confirmedByVisibleDialog,
+            using: sceneState.learnedPreferenceEditor
+        )
+    }
+
+    public func resetLearnedPreferences(
+        confirmedByVisibleDialog: Bool,
+        using editorState: LearnedPreferenceEditorState
+    ) async {
         guard confirmedByVisibleDialog, let state = learnedPreferences else {
-            safeErrorMessage = "Reset All requires visible confirmation."
+            let message =
+                "Reset All requires visible confirmation."
+            learnedPreferencesFailureMessage = message
             return
         }
-        await perform {
+        learnedPreferencesFailureMessage = nil
+        await performLearnedPreferenceOperation {
             learnedPreferences = try await workflow.resetLearnedPreferences(
                 sourceAction: "explicit-preference-reset-all",
                 expectedSettingsVersion: state.settingsVersion
             )
-            clearLearnedPreferenceEditor(in: sceneState)
+            clearLearnedPreferenceEditor(
+                in: editorState
+            )
         }
     }
 
@@ -1016,6 +1277,13 @@ public final class MediaReviewStore {
         historicalSearchPage = nil
         historicalComparison = nil
         learnedPreferences = nil
+        historicalReviewIsLoading = false
+        historicalSearchIsLoading = false
+        learnedPreferencesAreLoading = false
+        historicalIndexFailureMessage = nil
+        historicalSearchFailureMessage = nil
+        historicalSearchFilterSnapshot = nil
+        learnedPreferencesFailureMessage = nil
         storageReport = nil
         recordingSetup = nil
         recordingSession = nil
@@ -1192,11 +1460,14 @@ public final class MediaReviewStore {
 
     private func beginHistoricalIndexPolling(
         jobID: JobID,
+        acceptedQuery: HistoricalSearchQuery?,
+        acceptedFilter: HistoricalSearchFilterSnapshot,
         using sceneState: MediaReviewSceneState
     ) {
         pollingTask?.cancel()
         let session = workspaceSession
-        pollingTask = Task { @MainActor [weak self, weak sceneState] in
+        pollingTask = Task {
+            @MainActor [weak self, weak sceneState] in
             guard let self else { return }
             while !Task.isCancelled {
                 do {
@@ -1209,28 +1480,106 @@ public final class MediaReviewStore {
                             return
                         }
                         historicalIndex = index
+                        historicalIndexFailureMessage = nil
                         if current.state == .succeeded,
-                           let sceneState
+                           let acceptedQuery
                         {
-                            let page = try await workflow.searchMeetingHistory(
-                                try historicalQuery(using: sceneState)
-                            )
-                            guard !Task.isCancelled,
-                                  session == workspaceSession
-                            else {
-                                return
+                            do {
+                                let page =
+                                    try await workflow
+                                    .searchMeetingHistory(
+                                        acceptedQuery
+                                    )
+                                guard !Task.isCancelled,
+                                      session
+                                      == workspaceSession
+                                else {
+                                    return
+                                }
+                                historicalSearchPage = page
+                                historicalSearchFilterSnapshot =
+                                    acceptedFilter
+                                historicalSearchFailureMessage = nil
+                                historicalComparison = nil
+                                if let sceneState {
+                                    reconcileHistoricalSelection(
+                                        in: page,
+                                        using: sceneState
+                                    )
+                                }
+                            } catch {
+                                guard !Task.isCancelled,
+                                      session
+                                      == workspaceSession
+                                else {
+                                    return
+                                }
+                                let message =
+                                    "The automatic history search after rebuilding the local index did not complete."
+                                historicalSearchFailureMessage =
+                                    message
+                                safeErrorMessage = message
                             }
-                            historicalSearchPage = page
                         }
                         return
                     }
                 } catch {
                     guard !Task.isCancelled, session == workspaceSession else { return }
-                    safeErrorMessage = "Meeting History index status is temporarily unavailable."
+                    let message =
+                        "Meeting History index status is temporarily unavailable."
+                    historicalIndexFailureMessage = message
+                    safeErrorMessage = message
                     return
                 }
                 try? await Task.sleep(for: .milliseconds(400))
             }
+        }
+    }
+
+    private func reconcileHistoricalSelection(
+        in page: HistoricalSearchPage?,
+        using sceneState: MediaReviewSceneState
+    ) {
+        let revisionIDs = Set(
+            page?.results.map {
+                $0.position.revision.revisionID
+            } ?? []
+        )
+        if let selected =
+            sceneState.selectedCurrentHistoryRevisionID,
+           !revisionIDs.contains(selected)
+        {
+            sceneState
+                .selectedCurrentHistoryRevisionID = nil
+        }
+        if let selected =
+            sceneState.selectedPriorHistoryRevisionID,
+           !revisionIDs.contains(selected)
+        {
+            sceneState
+                .selectedPriorHistoryRevisionID = nil
+        }
+    }
+
+    private func performLearnedPreferenceOperation(
+        _ operation: () async throws -> Void
+    ) async {
+        guard !isWorking else {
+            learnedPreferencesFailureMessage =
+                "Wait for the current local operation to finish, then reload learned preferences."
+            return
+        }
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await operation()
+        } catch let error as LocalizedError {
+            learnedPreferencesFailureMessage =
+                error.errorDescription
+                ?? "The learned-preference repository operation could not be completed."
+        } catch {
+            learnedPreferencesFailureMessage =
+                "The learned-preference repository operation could not be completed."
         }
     }
 
@@ -1267,15 +1616,15 @@ public final class MediaReviewStore {
     }
 
     private func parsedPreferenceValue(
-        using sceneState: MediaReviewSceneState
+        using editorState: LearnedPreferenceEditorState
     ) throws -> LearnedPreferenceValue {
-        let text = sceneState.learnedPreferenceValue.trimmingCharacters(
+        let text = editorState.value.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
         let commaValues = text.split(separator: ",").map {
             String($0).trimmingCharacters(in: .whitespacesAndNewlines)
         }.filter { !$0.isEmpty }
-        switch sceneState.learnedPreferenceKind {
+        switch editorState.kind {
         case .actorCountryOrder:
             return .actorCountryOrder(commaValues)
         case .briefingLength:
@@ -1324,10 +1673,12 @@ public final class MediaReviewStore {
         }
     }
 
-    private func clearLearnedPreferenceEditor(in sceneState: MediaReviewSceneState) {
-        sceneState.editingLearnedPreferenceID = nil
-        sceneState.editingLearnedPreferenceVersion = nil
-        sceneState.learnedPreferenceValue = ""
+    private func clearLearnedPreferenceEditor(
+        in editorState: LearnedPreferenceEditorState
+    ) {
+        editorState.editingPreferenceID = nil
+        editorState.editingPreferenceVersion = nil
+        editorState.value = ""
     }
 
     private static func cleanClaims(_ values: [String]) -> [String] {
