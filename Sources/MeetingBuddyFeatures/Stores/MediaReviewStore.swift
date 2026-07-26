@@ -30,6 +30,7 @@ public final class MediaReviewStore {
     public private(set) var recordingSession: RecordingSessionReview?
     public private(set) var webMetadataCandidate: UNWebTVMetadataCandidate?
     public private(set) var isWorking = false
+    public private(set) var isStoppingRecording = false
     public private(set) var safeErrorMessage: String?
     public private(set) var workspaceSession: UInt64 = 0
 
@@ -291,11 +292,20 @@ public final class MediaReviewStore {
 
     public func stopRecording() async {
         guard let recordingSession, recordingSession.canStop else { return }
-        await perform {
+        guard !isStoppingRecording else { return }
+        safeErrorMessage = nil
+        isStoppingRecording = true
+        defer { isStoppingRecording = false }
+        do {
             self.recordingSession = try await workflow.stopRecording(
                 jobID: recordingSession.jobID
             )
             recordingPollingTask?.cancel()
+        } catch let error as LocalizedError {
+            safeErrorMessage = error.errorDescription
+                ?? "The local operation could not be completed."
+        } catch {
+            safeErrorMessage = "The local operation could not be completed."
         }
     }
 
@@ -328,17 +338,23 @@ public final class MediaReviewStore {
 
     public func fetchUNWebTVMetadata(using sceneState: MediaReviewSceneState) async {
         let value = sceneState.unWebTVURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (try? ValidatedUNWebTVAssetURL(value)) != nil else {
+        guard let validatedURL = try? ValidatedUNWebTVAssetURL(value) else {
             safeErrorMessage = "Use an exact official UN Web TV asset URL such as https://webtv.un.org/en/asset/abc/asset-id."
             return
         }
-        guard sceneState.unWebTVNetworkAuthorized else {
+        guard !isWorking, !isStoppingRecording else {
+            safeErrorMessage = "Wait for the current local operation to finish."
+            return
+        }
+        guard sceneState.consumeUNWebTVNetworkAuthorization(
+            for: validatedURL
+        ) else {
             safeErrorMessage = "Authorize this one foreground official-page metadata request."
             return
         }
         await perform {
             let candidate = try await workflow.fetchUNWebTVMetadata(
-                url: value,
+                url: validatedURL.absoluteString,
                 explicitNetworkAuthorization: true
             )
             webMetadataCandidate = candidate
@@ -352,7 +368,6 @@ public final class MediaReviewStore {
                 .languageAvailability,
                 in: candidate
             )
-            sceneState.unWebTVNetworkAuthorized = false
         }
     }
 
@@ -961,7 +976,7 @@ public final class MediaReviewStore {
 
     @discardableResult
     private func perform(_ operation: () async throws -> Void) async -> Bool {
-        guard !isWorking else {
+        guard !isWorking, !isStoppingRecording else {
             safeErrorMessage = "Wait for the current local operation to finish."
             return false
         }
@@ -1004,6 +1019,7 @@ public final class MediaReviewStore {
         storageReport = nil
         recordingSetup = nil
         recordingSession = nil
+        isStoppingRecording = false
         webMetadataCandidate = nil
         safeErrorMessage = nil
     }

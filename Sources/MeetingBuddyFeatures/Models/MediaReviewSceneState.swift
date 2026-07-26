@@ -24,8 +24,13 @@ public final class MediaReviewSceneState {
     public var microphoneSpeechSourceKind: SpeechSourceKind = .originalSpeakerAudio
     public var applicationSpeechSourceKind: SpeechSourceKind = .originalSpeakerAudio
     public var recordingAcknowledged = false
-    public var unWebTVURL = ""
-    public var unWebTVNetworkAuthorized = false
+    public var unWebTVURL = "" {
+        didSet {
+            guard unWebTVURL != oldValue else { return }
+            unWebTVAuthorizedCanonicalURL = nil
+        }
+    }
+    private var unWebTVAuthorizedCanonicalURL: String?
     public var reviewedUNTitle = ""
     public var reviewedUNDescription = ""
     public var reviewedUNProductionDate = ""
@@ -60,6 +65,32 @@ public final class MediaReviewSceneState {
 
     public var validatedUNWebTVURL: URL? {
         try? ValidatedUNWebTVAssetURL(unWebTVURL).url
+    }
+
+    public var unWebTVNetworkAuthorized: Bool {
+        get {
+            guard let validated = try? ValidatedUNWebTVAssetURL(unWebTVURL)
+            else { return false }
+            return unWebTVAuthorizedCanonicalURL == validated.absoluteString
+        }
+        set {
+            guard newValue,
+                  let validated = try? ValidatedUNWebTVAssetURL(unWebTVURL)
+            else {
+                unWebTVAuthorizedCanonicalURL = nil
+                return
+            }
+            unWebTVAuthorizedCanonicalURL = validated.absoluteString
+        }
+    }
+
+    func consumeUNWebTVNetworkAuthorization(
+        for validatedURL: ValidatedUNWebTVAssetURL
+    ) -> Bool {
+        guard unWebTVAuthorizedCanonicalURL == validatedURL.absoluteString
+        else { return false }
+        unWebTVAuthorizedCanonicalURL = nil
+        return true
     }
 
     public var hasUnsavedEditorChanges: Bool {
@@ -375,7 +406,7 @@ public final class MediaReviewSceneState {
         applicationSpeechSourceKind = .originalSpeakerAudio
         recordingAcknowledged = false
         unWebTVURL = ""
-        unWebTVNetworkAuthorized = false
+        unWebTVAuthorizedCanonicalURL = nil
         reviewedUNTitle = ""
         reviewedUNDescription = ""
         reviewedUNProductionDate = ""

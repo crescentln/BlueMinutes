@@ -91,7 +91,7 @@ struct UNWebTVMetadataView: View {
                 WorkflowStateView(
                     title: "Ready for one metadata request",
                     detail:
-                        "Authorization applies only to this visible foreground request and resets after a candidate is returned.",
+                        "Authorization applies only to this exact visible URL and is consumed when the request begins, whether it succeeds or fails.",
                     systemImage: "checkmark.circle",
                     tone: .ready
                 )
