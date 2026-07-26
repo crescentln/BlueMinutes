@@ -334,17 +334,28 @@ public struct TranscriptReviewBundle: Sendable, Hashable {
     public let transcriptSegments: [TranscriptSegmentV1]
     public let translations: [TranslationSegmentV1]
     public let speakerAssignments: [SpeakerAssignmentV1]
+    public let evidenceRefs: [EvidenceRefV1]
 
     public init(
         manifest: TranscriptCoverageManifest,
         transcriptSegments: [TranscriptSegmentV1],
         translations: [TranslationSegmentV1],
-        speakerAssignments: [SpeakerAssignmentV1] = []
+        speakerAssignments: [SpeakerAssignmentV1] = [],
+        evidenceRefs: [EvidenceRefV1] = []
     ) {
         self.manifest = manifest
         self.transcriptSegments = transcriptSegments
         self.translations = translations
         self.speakerAssignments = speakerAssignments
+        self.evidenceRefs = evidenceRefs.sorted { lhs, rhs in
+            (
+                lhs.revision.createdAt,
+                lhs.revision.revisionID.canonicalString
+            ) < (
+                rhs.revision.createdAt,
+                rhs.revision.revisionID.canonicalString
+            )
+        }
     }
 }
 
