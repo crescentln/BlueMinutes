@@ -245,6 +245,7 @@ struct MediaReviewModelTests {
         await store.loadAnalysisReview()
         await store.loadBriefingReview()
         await store.loadHistoricalReview(using: sceneState)
+        await store.loadLearnedPreferences()
         await store.loadStorageReport()
         sceneState.transcript.reconcile(with: store.transcriptReview)
         sceneState.analysis.reconcile(with: store.analysisReview)
@@ -318,6 +319,7 @@ struct MediaReviewModelTests {
         await store.loadAnalysisReview()
         await store.loadBriefingReview()
         await store.loadHistoricalReview(using: sceneState)
+        await store.loadLearnedPreferences()
         await store.loadStorageReport()
         sceneState.transcript.reconcile(with: store.transcriptReview)
         sceneState.analysis.reconcile(with: store.analysisReview)
@@ -538,6 +540,580 @@ struct MediaReviewModelTests {
         #expect(store.historicalIndexJob?.state == .succeeded)
         #expect(store.historicalIndex != nil)
         #expect(store.historicalSearchPage?.indexGeneration == 7)
+        let filter = HistoricalSearchFilterSnapshot(
+            sceneState: sceneState
+        )
+        #expect(
+            store.historicalSearchFilterSnapshot
+                == filter
+        )
+        #expect(
+            HistoricalReviewPresentation.searchState(
+                page: store.historicalSearchPage,
+                isLoading: false,
+                failureMessage:
+                    store
+                    .historicalSearchFailureMessage,
+                lastSuccessfulFilter:
+                    store
+                    .historicalSearchFilterSnapshot,
+                currentFilter: filter
+            ) == .empty(generation: 7)
+        )
+    }
+
+    @Test @MainActor
+    func settingsReadinessWaitsWithoutHidingTheWorkflowWorkspaceSwitch()
+        async throws
+    {
+        let setupGate = AsyncGate()
+        let workflow = try MediaReviewWorkflowProbe(
+            recordingSetupGate: setupGate
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+
+        let openTask = Task {
+            await store.openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-atomic-workspace"
+                ),
+                using: sceneState
+            )
+        }
+        while workflow.openCallCount == 0 {
+            await Task.yield()
+        }
+
+        #expect(store.workspace != nil)
+        #expect(store.workspaceSession == 1)
+        #expect(store.workspaceReadySession == 0)
+        await store.loadLearnedPreferences()
+        #expect(
+            workflow.learnedPreferenceStateCallCount
+                == 0
+        )
+
+        await setupGate.release()
+        await openTask.value
+
+        #expect(store.workspace != nil)
+        #expect(store.workspaceSession == 1)
+        #expect(store.workspaceReadySession == 1)
+        #expect(store.recordingSetup != nil)
+    }
+
+    @Test @MainActor
+    func setupFailureKeepsStoreAndWorkflowOnTheSameVisibleWorkspace()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe(
+            recordingSetupFailureCall: 2
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-workspace-a"
+            ),
+            using: sceneState
+        )
+        #expect(
+            store.workspace?.displayName
+                == "Synthetic Workspace"
+        )
+        #expect(store.workspaceReadySession == 1)
+
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-workspace-b"
+            ),
+            using: sceneState
+        )
+
+        #expect(
+            store.workspace?.displayName
+                == "Synthetic Workspace B"
+        )
+        #expect(
+            store.workspace?.displayName
+                == workflow
+                .workflowWorkspaceDisplayName
+        )
+        #expect(store.workspaceSession == 2)
+        #expect(store.workspaceReadySession == 1)
+        #expect(store.recordingSetup == nil)
+        #expect(store.safeErrorMessage != nil)
+        await store.loadLearnedPreferences()
+        #expect(
+            workflow.learnedPreferenceStateCallCount
+                == 0
+        )
+    }
+
+    @Test @MainActor
+    func historyLoadDoesNotDependOnTheSettingsPreferenceRepository()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe(
+            learnedPreferenceFailureCall: 1,
+            historicalIndexAvailability: .ready
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-independent-history-workspace"
+            ),
+            using: sceneState
+        )
+
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+
+        #expect(workflow.historicalIndexCallCount == 1)
+        #expect(workflow.historicalSearchCallCount == 1)
+        #expect(
+            workflow.learnedPreferenceStateCallCount
+                == 0
+        )
+        #expect(store.historicalSearchPage != nil)
+        #expect(
+            store.historicalIndexFailureMessage == nil
+        )
+        #expect(
+            store.historicalSearchFailureMessage == nil
+        )
+    }
+
+    @Test @MainActor
+    func failedIndexReloadRetainsOnlyAnExplicitlyStaleSnapshot()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe(
+            historicalIndexFailureCall: 2,
+            historicalIndexAvailability: .ready
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-index-reload-workspace"
+            ),
+            using: sceneState
+        )
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+        let firstIndex = try #require(
+            store.historicalIndex
+        )
+        let firstPage = try #require(
+            store.historicalSearchPage
+        )
+
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+
+        #expect(store.historicalIndex == firstIndex)
+        #expect(store.historicalSearchPage == firstPage)
+        #expect(workflow.historicalIndexCallCount == 2)
+        #expect(workflow.historicalSearchCallCount == 1)
+        #expect(
+            store.historicalIndexFailureMessage != nil
+        )
+        #expect(
+            store.historicalSearchFailureMessage == nil
+        )
+    }
+
+    @Test @MainActor
+    func indexStatusLoadDoesNotClaimASearchBeforeReadinessIsKnown()
+        async throws
+    {
+        let indexGate = AsyncGate()
+        let workflow = try MediaReviewWorkflowProbe(
+            historicalIndexGate: indexGate
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-index-loading-workspace"
+            ),
+            using: sceneState
+        )
+
+        let loadTask = Task {
+            await store.loadHistoricalReview(
+                using: sceneState
+            )
+        }
+        while workflow.historicalIndexCallCount == 0 {
+            await Task.yield()
+        }
+
+        #expect(store.historicalReviewIsLoading)
+        #expect(!store.historicalSearchIsLoading)
+
+        await indexGate.release()
+        await loadTask.value
+
+        #expect(!store.historicalReviewIsLoading)
+        #expect(!store.historicalSearchIsLoading)
+        #expect(workflow.historicalSearchCallCount == 0)
+    }
+
+    @Test @MainActor
+    func activeHistoryRebuildRejectsADuplicateEnqueue()
+        async throws
+    {
+        let pollGate = AsyncGate()
+        let workflow = try MediaReviewWorkflowProbe(
+            pollGate: pollGate,
+            historicalRebuildCompletesImmediately:
+                false
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-rebuild-gate-workspace"
+            ),
+            using: sceneState
+        )
+
+        await store.rebuildHistoricalIndex(
+            using: sceneState
+        )
+        await store.rebuildHistoricalIndex(
+            using: sceneState
+        )
+
+        #expect(workflow.historicalRebuildCallCount == 1)
+        #expect(
+            store.historicalIndexJob?.state
+                == .running
+        )
+
+        await pollGate.release()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-rebuild-gate-workspace-b"
+            ),
+            using: sceneState
+        )
+    }
+
+    @Test @MainActor
+    func failedHistoryPollRetriesTheSameJobWithoutDuplicateRebuild()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe(
+            seededReviewState: true,
+            jobReviewFailureCall: 1,
+            historicalRebuildCompletesImmediately:
+                false
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-poll-retry-workspace"
+            ),
+            using: sceneState
+        )
+
+        await store.rebuildHistoricalIndex(
+            using: sceneState
+        )
+        for _ in 0..<100
+            where store
+                .historicalIndexFailureMessage == nil
+        {
+            await Task.yield()
+        }
+
+        #expect(
+            store.historicalIndexJob?.state
+                == .running
+        )
+        #expect(
+            store.historicalIndexFailureMessage
+                != nil
+        )
+        #expect(workflow.historicalRebuildCallCount == 1)
+        #expect(
+            HistoricalReviewPresentation.indexState(
+                status: store.historicalIndex,
+                job: store.historicalIndexJob,
+                isLoading: false,
+                failureMessage:
+                    store
+                    .historicalIndexFailureMessage
+            ) == .failed(
+                "Meeting History index status is temporarily unavailable."
+            )
+        )
+
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+        for _ in 0..<100
+            where store.historicalIndexJob?.state
+                != .succeeded
+        {
+            await Task.yield()
+        }
+
+        #expect(
+            store.historicalIndexJob?.state
+                == .succeeded
+        )
+        #expect(
+            store.historicalIndexFailureMessage == nil
+        )
+        #expect(workflow.jobReviewCallCount == 2)
+        #expect(workflow.historicalRebuildCallCount == 1)
+    }
+
+    @Test @MainActor
+    func invalidSearchDatesDoNotBlockAnIndependentIndexRebuild()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe(
+            seededReviewState: true
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-invalid-filter-workspace"
+            ),
+            using: sceneState
+        )
+        sceneState.historyStartDate = "not-a-date"
+
+        await store.rebuildHistoricalIndex(
+            using: sceneState
+        )
+        for _ in 0..<20 { await Task.yield() }
+
+        #expect(workflow.historicalRebuildCallCount == 1)
+        #expect(workflow.historicalSearchCallCount == 0)
+        #expect(store.historicalIndexJob?.state == .succeeded)
+        #expect(store.historicalIndex != nil)
+        #expect(
+            store.historicalIndexFailureMessage == nil
+        )
+        #expect(
+            store.historicalSearchFailureMessage != nil
+        )
+    }
+
+    @Test @MainActor
+    func successfulHistorySearchClearsSelectionsMissingFromTheNewPage()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe()
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-selection-workspace"
+            ),
+            using: sceneState
+        )
+        sceneState.selectedCurrentHistoryRevisionID =
+            featureID(7_001, RevisionID.self)
+        sceneState.selectedPriorHistoryRevisionID =
+            featureID(7_002, RevisionID.self)
+
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+
+        #expect(
+            sceneState
+                .selectedCurrentHistoryRevisionID == nil
+        )
+        #expect(
+            sceneState
+                .selectedPriorHistoryRevisionID == nil
+        )
+    }
+
+    @Test @MainActor
+    func settingsPreferenceEditorPreservesVersionedRepositorySemantics()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe()
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        let editorState = LearnedPreferenceEditorState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-preference-workspace"
+            ),
+            using: sceneState
+        )
+        await store.loadLearnedPreferences()
+
+        editorState.kind = .briefingLength
+        editorState.value = "800"
+        await store.saveLearnedPreference(
+            using: editorState
+        )
+
+        let created = try #require(
+            store.learnedPreferences?
+                .preferences.first
+        )
+        #expect(created.value == .briefingLength(800))
+        #expect(created.version == 1)
+        #expect(
+            created.sourceAction
+                == "explicit-history-preferences-form"
+        )
+        #expect(
+            workflow.lastPreferenceExpectedVersion
+                == nil
+        )
+        #expect(editorState.value.isEmpty)
+        #expect(editorState.editingPreferenceID == nil)
+
+        store.editLearnedPreference(
+            created,
+            using: editorState
+        )
+        editorState.value = "900"
+        await store.saveLearnedPreference(
+            using: editorState
+        )
+
+        let edited = try #require(
+            store.learnedPreferences?
+                .preferences.first
+        )
+        #expect(
+            edited.preferenceID
+                == created.preferenceID
+        )
+        #expect(edited.value == .briefingLength(900))
+        #expect(edited.version == 2)
+        #expect(
+            workflow.lastPreferenceExpectedVersion
+                == 1
+        )
+        #expect(workflow.preferenceSaveCallCount == 2)
+    }
+
+    @Test @MainActor
+    func settingsPreferenceFailureStaysOutOfTheMainWindowErrorChannel()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe(
+            learnedPreferenceFailureCall: 1
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-preference-failure-workspace"
+            ),
+            using: sceneState
+        )
+
+        await store.loadLearnedPreferences()
+
+        #expect(
+            store.learnedPreferencesFailureMessage
+                != nil
+        )
+        #expect(store.safeErrorMessage == nil)
+    }
+
+    @Test @MainActor
+    func failedHistoryRefreshRetainsOnlyExplicitlyStalePriorResults()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe(
+            historicalSearchFailureCall: 2
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-history-failure-workspace"
+            ),
+            using: sceneState
+        )
+
+        sceneState.historyTopic = "first"
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        let firstPage = try #require(
+            store.historicalSearchPage
+        )
+        let firstFilter = try #require(
+            store.historicalSearchFilterSnapshot
+        )
+
+        sceneState.historyTopic = "second"
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+
+        #expect(
+            store.historicalSearchPage == firstPage
+        )
+        #expect(
+            store.historicalSearchFilterSnapshot
+                == firstFilter
+        )
+        #expect(
+            store.historicalSearchFailureMessage
+                != nil
+        )
+        #expect(
+            HistoricalReviewPresentation.searchState(
+                page: store.historicalSearchPage,
+                isLoading:
+                    store.historicalSearchIsLoading,
+                failureMessage:
+                    store
+                    .historicalSearchFailureMessage,
+                lastSuccessfulFilter:
+                    store
+                    .historicalSearchFilterSnapshot,
+                currentFilter:
+                    HistoricalSearchFilterSnapshot(
+                        sceneState: sceneState
+                    )
+            ) == .staleResults(
+                count: 0,
+                generation: 7,
+                reason:
+                    "The latest search failed. These are the last successful authorized results. The local operation could not be completed."
+            )
+        )
     }
 
     @Test @MainActor
@@ -1459,6 +2035,15 @@ private func loadSeededReviewState(
 }
 
 @MainActor
+func makeFeatureStoreForHostedSettingsTests()
+    throws -> MediaReviewStore
+{
+    MediaReviewStore(
+        workflow: try MediaReviewWorkflowProbe()
+    )
+}
+
+@MainActor
 private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let inspection: MediaInspection
     private let restoreGate: AsyncGate?
@@ -1467,11 +2052,21 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let pollGate: AsyncGate?
     private let editorSaveGate: AsyncGate?
     private let storageReportGate: AsyncGate?
+    private let recordingSetupGate: AsyncGate?
+    private let historicalIndexGate: AsyncGate?
+    private let recordingSetupFailureCall: Int?
     private let pollingJob: MediaJobReview?
     private let recordingSetupReview: RecordingSetupReview
     private let stoppedRecordingReview: RecordingSessionReview?
     private let webMetadataShouldFail: Bool
     private var currentRecordingReview: RecordingSessionReview?
+    private let historicalSearchFailureCall: Int?
+    private let historicalIndexFailureCall: Int?
+    private let learnedPreferenceFailureCall: Int?
+    private let jobReviewFailureCall: Int?
+    private let historicalIndexAvailability:
+        HistoricalIndexAvailability
+    private let historicalRebuildCompletesImmediately: Bool
     private var restoreFailuresRemaining: Int
     private var currentTranscriptReview: TranscriptReviewBundle?
     private var currentAnalysisReview: AnalysisReviewBundle?
@@ -1481,15 +2076,31 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private(set) var importCallCount = 0
     private(set) var restoreCallCount = 0
     private(set) var historicalRebuildCallCount = 0
+    private(set) var historicalIndexCallCount = 0
     private(set) var historicalSearchCallCount = 0
+    private(set) var learnedPreferenceStateCallCount = 0
+    private(set) var jobReviewCallCount = 0
     private(set) var lastHistoricalSearchQuery: HistoricalSearchQuery?
+    private(set) var preferenceSaveCallCount = 0
+    private(set) var lastPreferenceExpectedVersion:
+        UInt64?
     private(set) var editorSaveCalls: [FeatureEditorSaveCall] = []
     private(set) var permanentDeletionCallCount = 0
     private(set) var recordingStartCallCount = 0
     private(set) var recordingStopCallCount = 0
     private(set) var webMetadataFetchCallCount = 0
+    private(set) var recordingSetupCallCount = 0
     private(set) var lastDeletionConfirmed = false
     private(set) var lastUnlinkAcknowledged = false
+    private(set) var workflowWorkspaceDisplayName:
+        String?
+    private var currentLearnedPreferenceState =
+        LearnedPreferenceState(
+            globallyEnabled: false,
+            settingsVersion: 2,
+            preferences: [],
+            recentEvents: []
+        )
 
     init(
         restoreGate: AsyncGate? = nil,
@@ -1499,11 +2110,23 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         pollGate: AsyncGate? = nil,
         editorSaveGate: AsyncGate? = nil,
         storageReportGate: AsyncGate? = nil,
+        recordingSetupGate: AsyncGate? = nil,
+        historicalIndexGate: AsyncGate? = nil,
+        recordingSetupFailureCall: Int? = nil,
         recordingSetupReview: RecordingSetupReview? = nil,
         startedRecordingReview: RecordingSessionReview? = nil,
         stoppedRecordingReview: RecordingSessionReview? = nil,
         webMetadataShouldFail: Bool = false,
-        seededReviewState: Bool = false
+        seededReviewState: Bool = false,
+        historicalSearchFailureCall: Int? = nil,
+        historicalIndexFailureCall: Int? = nil,
+        learnedPreferenceFailureCall: Int? = nil,
+        jobReviewFailureCall: Int? = nil,
+        historicalIndexAvailability:
+            HistoricalIndexAvailability =
+            .rebuildRequired,
+        historicalRebuildCompletesImmediately:
+            Bool = true
     ) throws {
         self.restoreGate = restoreGate
         self.restoredWorkspace = restoredWorkspace
@@ -1512,6 +2135,10 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         self.pollGate = pollGate
         self.editorSaveGate = editorSaveGate
         self.storageReportGate = storageReportGate
+        self.recordingSetupGate = recordingSetupGate
+        self.historicalIndexGate = historicalIndexGate
+        self.recordingSetupFailureCall =
+            recordingSetupFailureCall
         self.recordingSetupReview = recordingSetupReview
             ?? RecordingSetupReview(
                 capability: CaptureCapabilitySnapshot(
@@ -1525,6 +2152,18 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         currentRecordingReview = startedRecordingReview
         self.stoppedRecordingReview = stoppedRecordingReview
         self.webMetadataShouldFail = webMetadataShouldFail
+        self.historicalSearchFailureCall =
+            historicalSearchFailureCall
+        self.historicalIndexFailureCall =
+            historicalIndexFailureCall
+        self.learnedPreferenceFailureCall =
+            learnedPreferenceFailureCall
+        self.jobReviewFailureCall =
+            jobReviewFailureCall
+        self.historicalIndexAvailability =
+            historicalIndexAvailability
+        self.historicalRebuildCompletesImmediately =
+            historicalRebuildCompletesImmediately
         pollingJob = try pollGate == nil && !seededReviewState
             ? nil
             : makeFeatureJobReview(succeeded: seededReviewState)
@@ -1572,6 +2211,10 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     func openOrCreateWorkspace(at _: URL) async throws -> WorkspaceReview {
         if let openGate { await openGate.block() }
         openCallCount += 1
+        let displayName = openCallCount == 1
+            ? "Synthetic Workspace"
+            : "Synthetic Workspace B"
+        workflowWorkspaceDisplayName = displayName
         return WorkspaceReview(
             workspaceID: WorkspaceID(
                 UUID(
@@ -1581,8 +2224,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
                     )
                 )!
             ),
-            displayName: openCallCount == 1
-                ? "Synthetic Workspace" : "Synthetic Workspace B"
+            displayName: displayName
         )
     }
 
@@ -1614,6 +2256,10 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     }
 
     func jobReview(jobID _: JobID) async throws -> MediaJobReview {
+        jobReviewCallCount += 1
+        if jobReviewCallCount == jobReviewFailureCall {
+            throw ProbeError.unexpectedCall
+        }
         guard let pollingJob else { throw ProbeError.unexpectedCall }
         if let pollGate { await pollGate.block() }
         return pollingJob
@@ -1788,8 +2434,17 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     }
 
     func historicalIndexStatus() async throws -> HistoricalIndexStatus {
-        HistoricalIndexStatus(
-            availability: .rebuildRequired,
+        historicalIndexCallCount += 1
+        if let historicalIndexGate {
+            await historicalIndexGate.block()
+        }
+        if historicalIndexCallCount
+            == historicalIndexFailureCall
+        {
+            throw ProbeError.unexpectedCall
+        }
+        return HistoricalIndexStatus(
+            availability: historicalIndexAvailability,
             generation: 7,
             normalizerVersion: 1,
             indexedPositionCount: 3,
@@ -1799,23 +2454,86 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     }
 
     func learnedPreferenceState() async throws -> LearnedPreferenceState {
-        LearnedPreferenceState(
-            globallyEnabled: false,
-            settingsVersion: 2,
-            preferences: [],
-            recentEvents: []
+        learnedPreferenceStateCallCount += 1
+        if learnedPreferenceStateCallCount
+            == learnedPreferenceFailureCall
+        {
+            throw ProbeError.unexpectedCall
+        }
+        return currentLearnedPreferenceState
+    }
+
+    func saveLearnedPreference(
+        preferenceID: LearnedPreferenceID,
+        value: LearnedPreferenceValue,
+        enabled: Bool,
+        sourceAction: String,
+        expectedVersion: UInt64?
+    ) async throws -> LearnedPreferenceRecord {
+        preferenceSaveCallCount += 1
+        lastPreferenceExpectedVersion = expectedVersion
+        let prior =
+            currentLearnedPreferenceState
+            .preferences.first {
+                $0.preferenceID == preferenceID
+            }
+        guard prior?.version == expectedVersion else {
+            throw HistoricalReviewError
+                .preferenceConflict(preferenceID)
+        }
+        let timestamp = featureInstant(
+            1_950_000_000_100
+                + Int64(preferenceSaveCallCount)
         )
+        let record = try LearnedPreferenceRecord(
+            preferenceID: preferenceID,
+            value: value,
+            enabled: enabled,
+            version: (prior?.version ?? 0) + 1,
+            sourceAction: sourceAction,
+            createdAt: prior?.createdAt ?? timestamp,
+            updatedAt: timestamp
+        )
+        let retained =
+            currentLearnedPreferenceState
+            .preferences.filter {
+                $0.preferenceID != preferenceID
+            }
+        currentLearnedPreferenceState =
+            LearnedPreferenceState(
+                globallyEnabled:
+                    currentLearnedPreferenceState
+                    .globallyEnabled,
+                settingsVersion:
+                    currentLearnedPreferenceState
+                    .settingsVersion,
+                preferences: retained + [record],
+                recentEvents:
+                    currentLearnedPreferenceState
+                    .recentEvents
+            )
+        return record
     }
 
     func rebuildHistoricalIndex() async throws -> MediaJobReview {
         historicalRebuildCallCount += 1
-        return try makeFeatureJobReview(succeeded: true)
+        return try makeFeatureJobReview(
+            succeeded:
+                historicalRebuildCompletesImmediately
+        )
     }
 
     func searchMeetingHistory(
         _ query: HistoricalSearchQuery
     ) async throws -> HistoricalSearchPage {
         historicalSearchCallCount += 1
+        if historicalSearchCallCount
+            == historicalSearchFailureCall
+        {
+            throw HistoricalReviewError.invalidQuery(
+                "Synthetic history search failure."
+            )
+        }
         lastHistoricalSearchQuery = query
         return HistoricalSearchPage(
             results: [],
@@ -1878,7 +2596,16 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     }
 
     func recordingSetup() async throws -> RecordingSetupReview {
-        recordingSetupReview
+        recordingSetupCallCount += 1
+        if let recordingSetupGate {
+            await recordingSetupGate.block()
+        }
+        if recordingSetupCallCount
+            == recordingSetupFailureCall
+        {
+            throw ProbeError.unexpectedCall
+        }
+        return recordingSetupReview
     }
 
     func startRecording(

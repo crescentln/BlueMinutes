@@ -42,7 +42,9 @@ struct MeetingBuddyDesktopApp: App {
 
         Settings {
             BlueMinutesPresentationRoot {
-                BlueMinutesSettingsView()
+                BlueMinutesSettingsView(
+                    store: store
+                )
             }
         }
     }

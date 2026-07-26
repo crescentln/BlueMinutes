@@ -4,6 +4,7 @@ import SwiftUI
 enum BlueMinutesSettingsTab: Hashable {
     case general
     case appearance
+    case learnedPreferences
 }
 
 public struct BlueMinutesSettingsView: View {
@@ -11,19 +12,54 @@ public struct BlueMinutesSettingsView: View {
     @AppStorage private var interfaceDensityRawValue: String
     @AppStorage private var readingWidthRawValue: String
     @State private var selectedTab: BlueMinutesSettingsTab
+    @State private var preferenceEditor:
+        LearnedPreferenceEditorState
 
     private let defaults: UserDefaults
+    private let store: MediaReviewStore?
 
     public init(defaults: UserDefaults = .standard) {
-        self.init(defaults: defaults, initialTab: .general)
+        self.init(
+            store: nil,
+            defaults: defaults,
+            initialTab: .general
+        )
+    }
+
+    public init(
+        store: MediaReviewStore,
+        defaults: UserDefaults = .standard
+    ) {
+        self.init(
+            store: store,
+            defaults: defaults,
+            initialTab: .general
+        )
     }
 
     init(
         defaults: UserDefaults,
         initialTab: BlueMinutesSettingsTab
     ) {
+        self.init(
+            store: nil,
+            defaults: defaults,
+            initialTab: initialTab
+        )
+    }
+
+    init(
+        store: MediaReviewStore?,
+        defaults: UserDefaults,
+        initialTab: BlueMinutesSettingsTab
+    ) {
         self.defaults = defaults
+        self.store = store
         _selectedTab = State(initialValue: initialTab)
+        _preferenceEditor = State(
+            initialValue:
+                LearnedPreferenceEditorState()
+        )
         _appearanceRawValue = AppStorage(
             wrappedValue:
                 BlueMinutesAppearancePreference.compiledDefault.rawValue,
@@ -69,6 +105,27 @@ public struct BlueMinutesSettingsView: View {
                     )
             }
             .tag(BlueMinutesSettingsTab.appearance)
+
+            if let store {
+                LearnedPreferencesSettingsPane(
+                    store: store,
+                    editorState: preferenceEditor
+                )
+                .tabItem {
+                    Label(
+                        "Learned Preferences",
+                        systemImage:
+                            "text.badge.checkmark"
+                    )
+                    .accessibilityIdentifier(
+                        "blueminutes.settings.tab.learned-preferences"
+                    )
+                }
+                .tag(
+                    BlueMinutesSettingsTab
+                        .learnedPreferences
+                )
+            }
         }
         .frame(width: 520, height: 320)
         .scenePadding()

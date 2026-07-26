@@ -209,7 +209,8 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(
             app.components(separatedBy: "Settings {").count - 1 == 1
         )
-        #expect(app.contains("BlueMinutesSettingsView()"))
+        #expect(app.contains("BlueMinutesSettingsView("))
+        #expect(app.contains("store: store"))
         #expect(
             app.components(
                 separatedBy: "BlueMinutesPresentationRoot {"
@@ -253,6 +254,7 @@ struct MeetingBuddyRootViewStructureTests {
 
         #expect(settings.contains("Label(\"General\""))
         #expect(settings.contains("Label(\"Appearance\""))
+        #expect(settings.contains("\"Learned Preferences\""))
         #expect(settings.contains("Interface density"))
         #expect(settings.contains("Reading width"))
         #expect(settings.contains("Reset UI Preferences"))
@@ -266,7 +268,7 @@ struct MeetingBuddyRootViewStructureTests {
         ] {
             #expect(!settings.contains(omittedPaneOrControl))
         }
-        #expect(!settings.contains("MediaReviewStore"))
+        #expect(settings.contains("MediaReviewStore"))
         #expect(!settings.contains("MediaReviewSceneState"))
     }
 
