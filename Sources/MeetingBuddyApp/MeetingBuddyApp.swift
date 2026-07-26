@@ -36,6 +36,7 @@ struct MeetingBuddyDesktopApp: App {
         .defaultSize(width: 1_080, height: 720)
         .commands {
             SidebarCommands()
+            BlueMinutesShellCommands()
         }
 
         Settings {

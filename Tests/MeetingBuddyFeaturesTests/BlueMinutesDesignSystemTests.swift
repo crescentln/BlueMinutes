@@ -74,14 +74,50 @@ struct BlueMinutesDesignSystemTests {
             )
             .disabled(configuration.1)
             .environment(\.colorScheme, configuration.0)
-            .frame(width: 260, height: 44, alignment: .leading)
+            .frame(
+                width: BlueMinutesLayout.sidebarMinimumWidth,
+                height: 44,
+                alignment: .leading
+            )
 
             let renderer = ImageRenderer(content: row)
             renderer.scale = 2
             let image = try #require(renderer.nsImage)
 
-            #expect(image.size.width == 260)
+            #expect(
+                image.size.width == BlueMinutesLayout.sidebarMinimumWidth
+            )
             #expect(image.size.height == 44)
+        }
+    }
+
+    @Test @MainActor
+    func acceptedSidebarLabelsFitTheMinimumNativeColumnBudget() throws {
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let reservedSourceListChrome: CGFloat = 64
+        let labels = [
+            "Local Media",
+            "Record Audio",
+            "UN Web TV Metadata",
+            "Transcript Review",
+            "Analysis Review",
+            "Briefing",
+            "Meeting History",
+            "Storage"
+        ]
+
+        for label in labels {
+            let textWidth = (label as NSString).size(
+                withAttributes: [.font: font]
+            ).width
+            let requiredWidth = reservedSourceListChrome
+                + BlueMinutesLayout.sidebarIconWidth
+                + BlueMinutesLayout.sidebarRowSpacing
+                + textWidth
+            #expect(
+                requiredWidth <= BlueMinutesLayout.sidebarMinimumWidth,
+                "Sidebar label exceeds the 240-point column budget: \(label)"
+            )
         }
     }
 
@@ -174,6 +210,10 @@ struct BlueMinutesDesignSystemTests {
     func designSystemContainsOnlyTheValuesConsumedByTheCurrentShell() {
         #expect(BlueMinutesLayout.sidebarRowSpacing == 8)
         #expect(BlueMinutesLayout.sidebarIconWidth == 16)
+        #expect(BlueMinutesLayout.sidebarMinimumWidth == 240)
+        #expect(BlueMinutesLayout.sidebarIdealWidth == 280)
+        #expect(BlueMinutesLayout.sidebarMaximumWidth == 320)
+        #expect(BlueMinutesLayout.editorialCanvasMinimumWidth == 560)
     }
 
     private struct RGBA {
