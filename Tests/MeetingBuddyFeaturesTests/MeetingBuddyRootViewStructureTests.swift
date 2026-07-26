@@ -346,12 +346,6 @@ struct MeetingBuddyRootViewStructureTests {
             )
         )
         #expect(root.contains("presentFileImporter(.workspace)"))
-        #expect(
-            root.contains(
-                "fileImporterPurpose == .workspace"
-            )
-        )
-        #expect(root.contains("sidebarIsFocused = true"))
         #expect(!shell.contains("selectedSection ="))
         #expect(!shell.contains("MediaReviewStore"))
         #expect(!shell.contains("MediaReviewSceneState"))
@@ -377,6 +371,80 @@ struct MeetingBuddyRootViewStructureTests {
         ] {
             #expect(!production.contains(omittedSurface))
         }
+    }
+
+    @Test
+    func cancellingWorkspacePickerPreservesInvokingEditorFocus() throws {
+        let root = try source(
+            "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
+        )
+        let importerStart = try #require(
+            root.range(of: ".fileImporter(")
+        )
+        let alertStart = try #require(
+            root.range(
+                of: ".alert(",
+                range: importerStart.upperBound ..< root.endIndex
+            )
+        )
+        let importer = String(
+            root[importerStart.lowerBound ..< alertStart.lowerBound]
+        )
+
+        #expect(!root.contains(".onChange(of: showFileImporter)"))
+        #expect(
+            importer.contains(
+                "guard case let .success(urls) = result, let url = urls.first else { return }"
+            )
+        )
+        #expect(!importer.contains("sidebarIsFocused = true"))
+    }
+
+    @Test
+    func successfulWorkspaceChangeMovesFocusToSidebarAfterCompletion() throws {
+        let root = try source(
+            "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
+        )
+        let workspaceCaseStart = try #require(
+            root.range(of: "case let .openWorkspace(url):")
+        )
+        let mediaCaseStart = try #require(
+            root.range(
+                of: "case .importPendingMedia:",
+                range: workspaceCaseStart.upperBound ..< root.endIndex
+            )
+        )
+        let workspaceCase = String(
+            root[
+                workspaceCaseStart.lowerBound ..< mediaCaseStart.lowerBound
+            ]
+        )
+        let resolution = try #require(
+            workspaceCase.range(
+                of: "await sceneState.resolveWorkspaceChange(operation)"
+            )
+        )
+        let successCheck = try #require(
+            workspaceCase.range(
+                of: "if store.workspaceSession != workspaceSessionBeforeChange"
+            )
+        )
+        let focusMove = try #require(
+            workspaceCase.range(of: "sidebarIsFocused = true")
+        )
+
+        #expect(
+            workspaceCase.contains(
+                "let workspaceSessionBeforeChange = store.workspaceSession"
+            )
+        )
+        #expect(resolution.lowerBound < successCheck.lowerBound)
+        #expect(successCheck.lowerBound < focusMove.lowerBound)
+        #expect(
+            root.components(
+                separatedBy: "sidebarIsFocused = true"
+            ).count - 1 == 1
+        )
     }
 
     @Test

@@ -196,14 +196,6 @@ public struct MeetingBuddyRootView: View {
                 }
             }
         }
-        .onChange(of: showFileImporter) { wasPresented, isPresented in
-            if wasPresented,
-               !isPresented,
-               fileImporterPurpose == .workspace
-            {
-                sidebarIsFocused = true
-            }
-        }
         .onChange(of: store.job?.state) { _, _ in reconcileDestination() }
         .onChange(of: store.transcriptReview?.manifest.manifestID) { _, _ in
             reconcileDestination()
@@ -476,6 +468,7 @@ public struct MeetingBuddyRootView: View {
             guard let operation = sceneState.beginWorkspaceChange(to: url) else {
                 return
             }
+            let workspaceSessionBeforeChange = store.workspaceSession
             Task {
                 await sceneState.resolveWorkspaceChange(operation) { selectedURL in
                     await store.openOrCreateWorkspace(
@@ -484,6 +477,9 @@ public struct MeetingBuddyRootView: View {
                     )
                 }
                 reconcileDestination()
+                if store.workspaceSession != workspaceSessionBeforeChange {
+                    sidebarIsFocused = true
+                }
             }
         case .importPendingMedia:
             Task {
