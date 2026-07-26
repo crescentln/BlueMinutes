@@ -9,9 +9,10 @@ current_task: "011"
 current_status: accepted
 authorized_post_mvp_work:
   task: "public GitHub source publication and long-term maintenance foundation"
-  status: "v0.2.0_published_post_release_pull_request_20_completed_ui_foundation_through_slice_d_completed"
+  status: "v0.2.0_published_post_release_pull_request_20_completed_ui_foundation_through_slice_e_completed_later_ui_work_authorized_in_sequence"
   rollback_anchor: "5450a916172c07ec2b7054c76fa40c80db17692e"
-  live_repository_baseline: "protected main 0fc56a58c74ae0215a7443bb9c5b7d847526d222"
+  implementation_baseline: "protected main 18bafa2260fb359d062bf0e230a13bd9dbad58d4 after completed UI Foundation Future Slice E"
+  ledger_carrier: "the commit containing this field is the ledger-bearing state and descends linearly from the implementation baseline; later protected rebase merges may advance main without making the recorded Slice E implementation baseline false"
   public_name_status: "BlueMinutes selected by the maintainer; preliminary exact-name and affiliation-risk screen passed with normal trademark limitations"
   remote_publication_status: "https://github.com/crescentln/BlueMinutes is PUBLIC; the BlueMinutes-first README and v0.1.0 source-release material from Issue #8 and PR #9 were rebased into main at b45b38a, and the exact release baseline is verified by protected-main CI, signed-out HTTP, GitHub API, and anonymous Git access"
   public_conversion_status: "visibility conversion completed under explicit maintainer authorization at e6215373fbefa61f911ca4ee65c33852fd2dea76; main requires Pull Requests, strict Swift build and test status, linear history, conversation resolution, and administrator enforcement, while force-push and branch deletion are disabled"
@@ -35,7 +36,7 @@ authorized_post_mvp_work:
     authorization_scope: "prepare the v0.2.0 source-release Pull Request, update CHANGELOG and release-facing README/version documentation, publish a source-only v0.2.0 GitHub Release after protected-main gates, then replace the README audience tagline and add public-safe synthetic screenshots in a separate post-release Pull Request; no binary build, signing, notarization, application upload, installation, deployment, or other distribution is authorized"
     merge_authority_status: "historical and completed: the maintainer authorized rebase merges for PR #12, the v0.2.0 release-preparation Pull Request, and post-release PR #20 only after all applicable gates passed"
     bundle_version_status: "Configuration/MeetingBuddy-Info.plist remains the separately gated 0.1.0 internal-alpha application-bundle version because this is a source-tree release and the historical 0.1.0-internal-alpha packaging/verifier chain is not being promoted or altered"
-    next_gate: "post-release PR #20 and UI Foundation Slice D through PR #33 are complete; all associated review, CI, CodeQL, conversation, merge, and post-merge gates are historical completed work, and any later initiative requires fresh explicit maintainer authorization"
+    next_gate: "post-release PR #20 and UI Foundation Slice E through PR #38 are complete; later UI work is authorized only in the recorded sequence and remains subject to independent review, exact-head CI/CodeQL, protected-main merge, and exact-new-main gates"
 post_mvp_initiatives:
   blue_minutes_meeting_research:
     title: "Blue Minutes Meeting / Research integration"
@@ -60,7 +61,7 @@ post_mvp_initiatives:
     audit_baseline: "d473b7037d7014ef0ae4e18d2c72463847347d8e"
     rollback_anchor: "c30d08ed85bcac736b55d1f39fdf250b1e2b6f44"
     review_remediation_rollback_anchor: "8fc9b1029b9a8f664b6fe9339f4a87c1a3a440c4"
-    next_gate: "v0.2.0 and the post-release presentation update are complete through rebase-merged PR #20; Change Groups 1 and 2 remain completed historical work, and no later Research phase, Slice E or later UI slice, notarization, binary upload, installation, deployment, distribution, or other initiative is authorized"
+    next_gate: "v0.2.0 and the post-release presentation update are complete through rebase-merged PR #20; Change Groups 1 and 2 remain completed historical work and no later Research phase is authorized; the separately governed UI Foundation sequence does not reopen ADR-0018, while notarization, binary upload, installation, deployment, and distribution remain outside the current authorization"
   blue_minutes_ui_foundation:
     title: "BlueMinutes UI Foundation"
     relationship_to_meeting_research: "independent post-MVP UI initiative; it does not reopen or extend ADR-0018's completed Meeting/Research Phase 1"
@@ -100,7 +101,18 @@ post_mvp_initiatives:
         scope_kind: "completed implementation Slice D for the editorial main-window shell"
         merge_commit: "0fc56a58c74ae0215a7443bb9c5b7d847526d222"
         state: merged
-    live_repository_baseline: "protected main 0fc56a58c74ae0215a7443bb9c5b7d847526d222"
+      - pull_request: 35
+        title: "docs: reconcile execution ledger after UI Foundation Future Slice D"
+        scope_kind: "completed documentation-only execution-ledger reconciliation"
+        merge_commit: "e4255229325e21792452ab72301666856ab109d7"
+        state: merged
+      - pull_request: 38
+        title: "Future Slice E: migrate intake surfaces to the Editorial Dossier"
+        scope_kind: "completed implementation Slice E for Local Media, Record Audio, and UN Web TV Metadata intake surfaces"
+        merge_commit: "18bafa2260fb359d062bf0e230a13bd9dbad58d4"
+        state: merged
+    implementation_baseline: "protected main 18bafa2260fb359d062bf0e230a13bd9dbad58d4 after completed UI Foundation Future Slice E"
+    ledger_carrier: "the commit containing this field carries this reconciliation and descends linearly from the implementation baseline; the protected rebase-merge workflow preserves the reviewed final tree while rewriting branch commits"
     future_slice_d:
       title: "Editorial main-window shell"
       status: completed
@@ -115,14 +127,38 @@ post_mvp_initiatives:
       next_eligible: false
     future_slice_e:
       title: "Intake surfaces"
-      status: not_started
-      authorization_status: not_authorized
+      status: completed
+      authorization_status: completed_under_explicit_authority
+      github_issue: "Issue #36 at https://github.com/crescentln/BlueMinutes/issues/36 closed as completed at 2026-07-26T21:55:26Z"
+      pull_request: "PR #38 at https://github.com/crescentln/BlueMinutes/pull/38 was rebase-merged at 2026-07-26T21:55:25Z"
+      implementation_head: "b591ac0be9903e338b52194faa0ef34da761077f"
+      merge_commit: "18bafa2260fb359d062bf0e230a13bd9dbad58d4"
+      tree_equivalence: "PR head and protected new main both have tree a37118d46bd6c40f6af5c1296f9716633110e88a"
+      new_main_ci: "GitHub Actions CI run 30222070711 completed successfully on exact protected main"
+      new_main_codeql: "CodeQL run 30222070679 completed successfully for Swift and Actions on exact protected main; analysis IDs 1529350682 and 1529313515 report zero results and no errors"
       next_eligible: false
+    future_slice_f:
+      title: "Transcript review"
+      status: "authorized local candidate pending clean replay, validation, independent review, publication, and protected-main gates"
+      authorization_status: authorized_in_sequence
+      github_issue: "Issue #37 at https://github.com/crescentln/BlueMinutes/issues/37"
+      local_branch: "codex/37-ui-slice-f-transcript-review"
+      local_candidate_head: "c5e0e5d73796d05e8ba26f137958d388cb6bec2c"
+      publication_status: "not pushed; the stacked local candidate must be replayed onto the protected ledger-bearing main before publication"
+      next_eligible_after_ledger_merge: true
     later_ui_work:
-      status: not_started
-      authorization_status: not_authorized
+      status: "authorized sequential local development; not accepted on protected main"
+      authorization_status: authorized_in_sequence
+      local_candidates:
+        - "Future Slice G-A Analysis, Issue #39, local candidate 4fd2373ea771c53aadcc2bdf78bcaa9db0fa7855"
+        - "Future Slice G-B Briefing, Issue #40, local candidate 24af93ae5c6e28e1b87153b9f4abc3d93549e653"
+        - "Future Slice H1 Meeting History and learned preferences, Issue #41, local development in progress"
+      pending_after_predecessor_gates:
+        - "Future Slice H2 Storage"
+        - "Future Slice I visual and accessibility closure"
+      publication_order: "F, G-A, G-B, H1, H2, I; no slice may be published or merged before its predecessor is accepted on protected main"
       next_eligible: false
-    next_gate: "none; Slice D is completed through PR #33, while Future Slice E and all later UI/product work are not started, not authorized, and not next eligible; any later initiative requires fresh explicit maintainer authorization"
+    next_gate: "merge this documentation-only reconciliation after its exact-head gates, verify exact new main, then replay Future Slice F onto that protected main and complete its independent review, Pull Request, exact-head CI/CodeQL, merge, and exact-new-main gates"
 accepted_tasks:
   - "001"
   - "002"
@@ -143,8 +179,8 @@ accepted_tasks:
   - "011"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "the commit containing this field carries the ledger-bearing state and descends linearly from protected-main baseline 0fc56a58c74ae0215a7443bb9c5b7d847526d222; the repository's rebase-merge workflow rewrites commit and intermediate parent SHAs while preserving the reviewed final tree"
-working_tree_status_summary: "at this ledger-bearing post-commit state commit, the tracked worktree is clean and the cumulative branch diff changes exactly docs/CODEX_EXECUTION_STATE.md relative to protected-main baseline 0fc56a58c74ae0215a7443bb9c5b7d847526d222. Protected main records completed PR #20 at d786b3302a250a588e1c98e22a1b23ea3c37fd19, documentation-only UI contract PR #22 at 9821708e72dc942ee416182d76b4c2bf903e83f3, implementation Slices A/B/C through PR #24 at 444a20c7ca545acab550ab99ef2ae0fd681df476, PR #26 at 25a20ecfc73c8d405967530af351a9edaf703e82, and PR #28 at d164c075ba12b74596ddb6d7e109d07649a8b0a8, documentation-only maintenance-policy PR #29 at b651b0bd55892d266b968d038f370608eebc10db, and completed Slice D PR #33 at the live baseline. Future Slice E and all later UI/product work are not started or authorized. No Developer ID signing, notarization, binary upload, installation, deployment, or application distribution has been performed"
+last_known_git_head: "the commit containing this field is the self-relative ledger carrier and descends linearly from exact Slice E implementation baseline 18bafa2260fb359d062bf0e230a13bd9dbad58d4; later rebase merges advance protected main without altering the historical baseline or reviewed tree-equivalence evidence recorded here"
+working_tree_status_summary: "at this ledger-bearing post-commit state, the tracked worktree is clean and the cumulative branch diff changes exactly docs/CODEX_EXECUTION_STATE.md relative to exact Slice E implementation baseline 18bafa2260fb359d062bf0e230a13bd9dbad58d4. Protected main records the prior UI Foundation progression through Slice D and documentation PR #35, then completed Slice E PR #38 at the implementation baseline. Future Slice F and later G/H/I work are authorized sequential local candidates or pending slices but remain unaccepted and must not be published out of order. No Developer ID signing, notarization, binary upload, installation, deployment, or application distribution has been performed"
 last_verification_commands:
   - "Codex Security standard repository scan ec5ba727-af63-4f1a-bd8c-feb3001ed3a2 with 134/134 receipts, validation, reconciliation, attack-path analysis, sealed manifest/findings/coverage/report/SARIF, and completion indexing"
   - "swift test --scratch-path <new temporary directory> -Xswiftc -warnings-as-errors"
@@ -270,6 +306,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
-next_eligible_task: "there is no next numbered MVP task; Future Slice E and all later UI/product work are not started, not authorized, and not next eligible; any later initiative requires fresh explicit maintainer authorization, while binary signing, notarization, upload, installation, deployment, distribution, and every other product initiative remain unauthorized"
-last_updated_at: "2026-07-26T18:30:49Z"
+next_eligible_task: "there is no next numbered MVP task; after this documentation-only ledger carrier is accepted, Future Slice F is next in the explicitly authorized UI sequence, followed only after independent predecessor gates by G-A, G-B, H1, H2, and I; binary signing, notarization, upload, installation, deployment, distribution, and unrelated product initiatives remain outside the current authorization"
+last_updated_at: "2026-07-26T22:29:45Z"
 ```
