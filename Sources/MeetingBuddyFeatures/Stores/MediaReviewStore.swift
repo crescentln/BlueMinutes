@@ -282,6 +282,7 @@ public final class MediaReviewStore {
                     directUserAcknowledgement: true
                 )
             )
+            sceneState.recordingAcknowledged = false
             if let recordingSession {
                 beginRecordingPolling(jobID: recordingSession.jobID)
             }
@@ -320,6 +321,7 @@ public final class MediaReviewStore {
                     directUserAcknowledgement: true
                 )
             )
+            sceneState.recordingAcknowledged = false
             beginRecordingPolling(jobID: recordingSession.jobID)
         }
     }

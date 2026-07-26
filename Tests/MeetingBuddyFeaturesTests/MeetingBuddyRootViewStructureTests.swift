@@ -189,6 +189,9 @@ struct MeetingBuddyRootViewStructureTests {
         let root = try source(
             "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
         )
+        let localMedia = try source(
+            "Sources/MeetingBuddyFeatures/Views/LocalMediaIntakeView.swift"
+        )
         let settings = try source(
             "Sources/MeetingBuddyFeatures/Views/BlueMinutesSettingsView.swift"
         )
@@ -230,8 +233,9 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(root.contains("@FocusState private var sidebarIsFocused"))
         #expect(root.contains(".focused($sidebarIsFocused)"))
         #expect(root.contains("@State private var sceneState"))
+        #expect(root.contains("LocalMediaIntakeView("))
         #expect(
-            root.contains(
+            localMedia.contains(
                 ".frame(maxWidth: readingWidth.points, alignment: .leading)"
             )
         )

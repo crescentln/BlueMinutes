@@ -5,55 +5,129 @@ import SwiftUI
 struct RecordingCaptureView: View {
     @Bindable var store: MediaReviewStore
     @Bindable var sceneState: MediaReviewSceneState
+    @Environment(\.blueMinutesReadingWidth)
+    private var readingWidth
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                capabilityCard
-                captureForm
+            VStack(alignment: .leading, spacing: 28) {
+                capabilitySection
+                captureSection
                 if let session = store.recordingSession {
-                    sessionCard(session)
+                    sessionSection(session)
                 }
             }
             .padding(28)
-            .frame(maxWidth: 780, alignment: .leading)
+            .frame(maxWidth: readingWidth.points, alignment: .leading)
         }
     }
 
-    private var capabilityCard: some View {
-        GroupBox("Local audio capture boundary") {
-            VStack(alignment: .leading, spacing: 8) {
-                LabeledContent(
-                    "Microphone permission",
-                    value: store.recordingSetup?.capability.microphonePermission.rawValue
-                        ?? "Checking"
-                )
-                LabeledContent(
-                    "One-application audio",
-                    value: store.recordingSetup?.capability.applicationAudioAvailable == true
-                        ? "Available with system picker" : "Unavailable on this macOS build"
-                )
-                Text(
+    private var capabilitySection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            EditorialSectionHeader(
+                "Local audio capture boundary",
+                detail:
                     "Audio only. BlueMinutes never requests a screen track, all-system audio, multiple applications, hidden capture, or persistent capture authority."
+            )
+            if let setup = store.recordingSetup {
+                microphoneCapability(setup.capability.microphonePermission)
+                applicationAudioCapability(setup.capability)
+            } else {
+                WorkflowStateView(
+                    title: "Checking capture capabilities",
+                    detail:
+                        "BlueMinutes is checking the current microphone permission, device list, and one-application audio picker.",
+                    systemImage: "hourglass",
+                    tone: .working
                 )
-                .font(.callout)
-                .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 4)
         }
     }
 
-    private var captureForm: some View {
-        GroupBox("New visible recording") {
+    private func microphoneCapability(
+        _ permission: CapturePermissionState
+    ) -> some View {
+        switch permission {
+        case .authorized:
+            WorkflowStateView(
+                title: "Microphone ready",
+                detail:
+                    "A microphone may be selected explicitly for this recording session.",
+                systemImage: "mic.circle",
+                tone: .ready
+            )
+        case .notDetermined:
+            WorkflowStateView(
+                title: "Microphone permission not determined",
+                detail:
+                    "Respond to the visible macOS prompt, then refresh devices. BlueMinutes does not assume permission.",
+                systemImage: "questionmark.circle",
+                tone: .warning
+            )
+        case .denied:
+            WorkflowStateView(
+                title: "Microphone permission denied",
+                detail:
+                    "Microphone capture is blocked. Application-only capture remains separate when available.",
+                systemImage: "mic.slash",
+                tone: .failure
+            )
+        case .restricted:
+            WorkflowStateView(
+                title: "Microphone access restricted",
+                detail:
+                    "The current macOS policy prevents microphone capture.",
+                systemImage: "lock.circle",
+                tone: .failure
+            )
+        }
+    }
+
+    private func applicationAudioCapability(
+        _ capability: CaptureCapabilitySnapshot
+    ) -> some View {
+        if capability.applicationAudioAvailable,
+           capability.systemPickerAvailable
+        {
+            WorkflowStateView(
+                title: "One-application audio ready",
+                detail:
+                    "Apple's foreground system picker will require one exact application selection for this session.",
+                systemImage: "macwindow",
+                tone: .ready
+            )
+        } else {
+            WorkflowStateView(
+                title: "One-application audio unavailable",
+                detail:
+                    "This macOS build or current capability snapshot cannot provide the bounded system picker.",
+                systemImage: "macwindow.badge.exclamationmark",
+                tone: .warning
+            )
+        }
+    }
+
+    private var captureSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            EditorialSectionHeader(
+                "New visible recording",
+                detail:
+                    "Every start and resumed capture epoch requires a fresh visible acknowledgement and exact source selection."
+            )
             Form {
                 TextField("Meeting title", text: $sceneState.meetingTitle)
-                Picker("Classification", selection: $sceneState.dataClassification) {
+                Picker(
+                    "Classification",
+                    selection: $sceneState.dataClassification
+                ) {
                     ForEach(ClassificationChoice.all) { choice in
                         Text(choice.label).tag(choice.value)
                     }
                 }
-                TextField("Language tag (optional)", text: $sceneState.languageTag)
+                TextField(
+                    "Language tag (optional)",
+                    text: $sceneState.languageTag
+                )
                 Picker("Capture mode", selection: $sceneState.captureMode) {
                     ForEach(CaptureModeChoice.all) { choice in
                         Text(choice.label).tag(choice.value)
@@ -61,29 +135,47 @@ struct RecordingCaptureView: View {
                 }
                 .disabled(store.blocksWorkspaceSwitch)
 
-                if sceneState.captureMode.requestedTrackKinds.contains(.microphone) {
-                    Picker("Microphone", selection: $sceneState.selectedMicrophoneDeviceID) {
+                if sceneState.captureMode.requestedTrackKinds
+                    .contains(.microphone)
+                {
+                    Picker(
+                        "Microphone",
+                        selection: $sceneState.selectedMicrophoneDeviceID
+                    ) {
                         Text("Select one microphone")
                             .tag(Optional<String>.none)
-                        ForEach(store.recordingSetup?.microphones ?? []) { microphone in
-                            Text(microphone.displayName).tag(Optional(microphone.id))
+                        ForEach(
+                            store.recordingSetup?.microphones ?? []
+                        ) { microphone in
+                            Text(microphone.displayName)
+                                .tag(Optional(microphone.id))
                         }
                     }
-                    Picker("Microphone speech provenance", selection: $sceneState.microphoneSpeechSourceKind) {
+                    Picker(
+                        "Microphone speech provenance",
+                        selection: $sceneState.microphoneSpeechSourceKind
+                    ) {
                         ForEach(SpeechKindChoice.all) { choice in
                             Text(choice.label).tag(choice.value)
                         }
                     }
                 }
-                if sceneState.captureMode.requestedTrackKinds.contains(.applicationAudio) {
-                    Picker("Application speech provenance", selection: $sceneState.applicationSpeechSourceKind) {
+                if sceneState.captureMode.requestedTrackKinds
+                    .contains(.applicationAudio)
+                {
+                    Picker(
+                        "Application speech provenance",
+                        selection: $sceneState.applicationSpeechSourceKind
+                    ) {
                         ForEach(SpeechKindChoice.all) { choice in
                             Text(choice.label).tag(choice.value)
                         }
                     }
-                    Text("Apple's system picker will require one foreground application selection. The selection is not saved for reuse.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "Apple's system picker requires one foreground application selection. The selection is not saved for reuse."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 Toggle(
                     "I am starting this visible recording directly and acknowledge responsibility for participant notice, consent, venue rules, organization policy, and applicable law.",
@@ -91,151 +183,230 @@ struct RecordingCaptureView: View {
                 )
                 .toggleStyle(.checkbox)
                 .fixedSize(horizontal: false, vertical: true)
-                LabeledContent("Storage and processing", value: "Private local workspace only")
+                LabeledContent(
+                    "Storage and processing",
+                    value: "Private local workspace only"
+                )
             }
-            .formStyle(.grouped)
+            .formStyle(.columns)
+
+            recordingReadiness
 
             HStack {
                 Button("Refresh Devices") {
-                    Task { await store.loadRecordingSetup(using: sceneState) }
+                    Task {
+                        await store.loadRecordingSetup(using: sceneState)
+                    }
                 }
                 .disabled(store.isWorking || store.blocksWorkspaceSwitch)
                 Spacer()
                 Button("Start Visible Recording") {
-                    Task { await store.startRecording(using: sceneState) }
+                    Task {
+                        await store.startRecording(using: sceneState)
+                    }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(
-                    store.isWorking
-                        || store.blocksWorkspaceSwitch
-                        || !sceneState.recordingAcknowledged
-                )
+                .disabled(recordingStartBlockedReason != nil)
                 .accessibilityHint(
-                    "Create a durable intent, request exact source permission, and then begin local audio capture."
+                    recordingStartBlockedReason
+                        ?? "Create a durable intent, request exact source permission, and then begin local audio capture."
                 )
             }
-            .padding([.horizontal, .bottom])
         }
     }
 
-    private func sessionCard(_ session: RecordingSessionReview) -> some View {
-        GroupBox("Recording status") {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    if !session.state.isTerminal {
-                        Circle().fill(.red).frame(width: 10, height: 10)
-                    }
-                    Text(stateTitle(session.state))
-                        .font(.headline)
-                    if session.state == .incomplete {
-                        Text("INCOMPLETE")
-                            .font(.caption.bold())
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(.orange.opacity(0.2), in: Capsule())
-                    }
-                }
-                Text(stateExplanation(session.state))
-                    .foregroundStyle(session.state == .incomplete ? .orange : .secondary)
-                LabeledContent(
-                    "Tracks",
-                    value: session.activeTrackKinds.map(trackLabel).joined(separator: ", ")
+    private var recordingReadiness: some View {
+        Group {
+            if let recordingStartBlockedReason {
+                WorkflowStateView(
+                    title: "Recording blocked",
+                    detail: recordingStartBlockedReason,
+                    systemImage: "exclamationmark.circle",
+                    tone: .warning
                 )
-                LabeledContent(
-                    "Durable through",
-                    value: session.durableThroughNanoseconds.map(durationLabel) ?? "No sealed interval yet"
+            } else {
+                WorkflowStateView(
+                    title: "Ready for visible recording",
+                    detail:
+                        "Starting will persist the local intent before requesting the exact source selection.",
+                    systemImage: "record.circle",
+                    tone: .ready
                 )
-                LabeledContent("Known gaps", value: String(session.knownGapCount))
-                if let reason = session.safeReason {
-                    Text(reason).font(.callout).foregroundStyle(.secondary)
-                }
-                if session.canStop {
-                    HStack {
-                        if session.state == .interrupted || session.state == .recovering {
-                            Button("Resume with New Selection") {
-                                Task { await store.resumeRecording(using: sceneState) }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(store.isWorking || !sceneState.recordingAcknowledged)
-                            .accessibilityHint(
-                                "Request the source again and persist a new provenance epoch before audio resumes."
-                            )
-                        }
-                        Button(
-                            session.state == .interrupted || session.state == .recovering
-                                ? "Finish Retained Recording" : "Stop Recording"
-                        ) {
-                            Task { await store.stopRecording() }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(store.isWorking)
-                    }
-                }
-                if session.state == .interrupted || session.state == .recovering {
-                    Text(
-                        "Resume always opens a fresh system source selection and records a new epoch. Leaving this session here retains its verified local bytes without resuming or publishing it as complete."
-                    )
+            }
+        }
+        .accessibilityIdentifier("BlueMinutes.Recording.Readiness")
+    }
+
+    private func sessionSection(
+        _ session: RecordingSessionReview
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            EditorialSectionHeader(
+                "Recording status",
+                detail:
+                    "The root-level Stop control remains visible from every destination while this session is active."
+            )
+            WorkflowStateView(
+                title:
+                    IntakeSurfacePresentation.recordingStateTitle(
+                        session.state
+                    ),
+                detail:
+                    IntakeSurfacePresentation.recordingStateExplanation(
+                        session.state
+                    ),
+                systemImage: sessionStateIcon(session.state),
+                tone: sessionStateTone(session.state)
+            )
+            if session.state == .incomplete {
+                Text("INCOMPLETE")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.orange.opacity(0.2), in: Capsule())
+                    .accessibilityLabel("Incomplete recording")
+            }
+            LabeledContent(
+                "Tracks",
+                value: session.activeTrackKinds
+                    .map(trackLabel)
+                    .joined(separator: ", ")
+            )
+            LabeledContent(
+                "Durable through",
+                value: session.durableThroughNanoseconds
+                    .map(durationLabel)
+                    ?? "No sealed interval yet"
+            )
+            LabeledContent(
+                "Known gaps",
+                value: String(session.knownGapCount)
+            )
+            if let reason = session.safeReason {
+                Text(reason)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                }
-                if session.state == .incomplete {
-                    Text(
-                        "Verified bytes are retained, but this result is not automatically activated for downstream processing. A later explicit reviewed-use action is required."
-                    )
-                    .font(.callout)
-                    .foregroundStyle(.orange)
+            }
+            if session.canStop {
+                HStack {
+                    if session.state == .interrupted
+                        || session.state == .recovering
+                    {
+                        Button("Resume with New Selection") {
+                            Task {
+                                await store.resumeRecording(
+                                    using: sceneState
+                                )
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(
+                            store.isWorking
+                                || !sceneState.recordingAcknowledged
+                        )
+                        .accessibilityHint(
+                            "Request the source again and persist a new provenance epoch before audio resumes."
+                        )
+                    }
+                    Button(
+                        session.state == .interrupted
+                            || session.state == .recovering
+                            ? "Finish Retained Recording"
+                            : "Stop Recording"
+                    ) {
+                        Task { await store.stopRecording() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(store.isWorking)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 4)
+            if session.state == .interrupted
+                || session.state == .recovering
+            {
+                Text(
+                    "Resume always opens a fresh system source selection and records a new epoch. Leaving this session here retains its verified local bytes without resuming or publishing it as complete."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            }
+            if session.state == .incomplete {
+                Text(
+                    "Verified bytes are retained, but this result is not automatically activated for downstream processing. A later explicit reviewed-use action is required."
+                )
+                .font(.callout)
+                .foregroundStyle(.orange)
+            }
         }
     }
 
-    private func stateTitle(_ state: RecordingState) -> String {
-        switch state {
-        case .preparing: "Preparing"
-        case .recording: "Recording"
-        case .interrupted: "Interrupted"
-        case .recovering: "Recovering retained audio"
-        case .stopping: "Stopping"
-        case .finalizing: "Finalizing and verifying"
-        case .completed: "Completed"
-        case .incomplete: "Incomplete recording retained"
-        case .failed: "Recording failed"
-        }
+    private var recordingStartBlockedReason: String? {
+        IntakeSurfacePresentation.recordingStartBlockedReason(
+            isInteractionLocked: sceneState.isInteractionLocked,
+            isWorking: store.isWorking,
+            blocksWorkspaceSwitch: store.blocksWorkspaceSwitch,
+            setup: store.recordingSetup,
+            meetingTitle: sceneState.meetingTitle,
+            languageTag: sceneState.languageTag,
+            mode: sceneState.captureMode,
+            selectedMicrophoneDeviceID:
+                sceneState.selectedMicrophoneDeviceID,
+            recordingAcknowledged: sceneState.recordingAcknowledged
+        )
     }
 
-    private func stateExplanation(_ state: RecordingState) -> String {
+    private func sessionStateIcon(_ state: RecordingState) -> String {
         switch state {
         case .preparing:
-            "The intent and exact source policy are durable; audio is not yet claimed as recording."
+            "hourglass"
         case .recording:
-            "Bounded audio packets are active and five-second CAF segments are sealed incrementally."
+            "record.circle"
         case .interrupted:
-            "Source continuity is no longer trusted. No device or application was substituted."
+            "bolt.slash.circle"
         case .recovering:
-            "Sealed rows and CAF files are being re-proved after an interruption."
+            "arrow.clockwise.circle"
         case .stopping:
-            "New packet admission is closed while bounded writers drain."
+            "stop.circle"
         case .finalizing:
-            "Hashes, gaps, manifest, and local managed assets are being verified."
+            "checkmark.seal"
         case .completed:
-            "All required selected tracks were verified and published with exact manifest provenance."
+            "checkmark.circle"
         case .incomplete:
-            "Usable verified audio survives, but a gap or publication precondition prevents a complete claim."
+            "exclamationmark.circle"
         case .failed:
-            "No verified usable audio was published; no zero-byte source was created."
+            "xmark.octagon"
+        }
+    }
+
+    private func sessionStateTone(
+        _ state: RecordingState
+    ) -> WorkflowStateTone {
+        switch state {
+        case .preparing, .stopping, .finalizing, .recovering:
+            .working
+        case .recording:
+            .ready
+        case .interrupted, .incomplete:
+            .warning
+        case .completed:
+            .success
+        case .failed:
+            .failure
         }
     }
 
     private func trackLabel(_ kind: CaptureTrackKind) -> String {
         switch kind {
-        case .microphone: "Microphone"
-        case .applicationAudio: "Selected application audio"
+        case .microphone:
+            "Microphone"
+        case .applicationAudio:
+            "Selected application audio"
         }
     }
 
     private func durationLabel(_ nanoseconds: UInt64) -> String {
-        String(format: "%.1f seconds", Double(nanoseconds) / 1_000_000_000)
+        String(
+            format: "%.1f seconds",
+            Double(nanoseconds) / 1_000_000_000
+        )
     }
 }
