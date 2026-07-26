@@ -55,6 +55,14 @@ struct MediaReviewModelTests {
             confirmedByVisibleDialog: false
         )
         #expect(store.safeErrorMessage == "Permanent deletion requires visible confirmation.")
+        #expect(store.storageFailureMessage == nil)
+        #expect(
+            StorageDashboardPresentation.state(
+                report: store.storageReport,
+                operation: store.storageOperation,
+                failureMessage: store.storageFailureMessage
+            ) == .ready(try #require(store.storageReport))
+        )
         #expect(workflow.permanentDeletionCallCount == 0)
 
         await store.permanentlyDeleteTrashItem(
@@ -65,6 +73,229 @@ struct MediaReviewModelTests {
         #expect(workflow.lastDeletionConfirmed == true)
         #expect(workflow.lastUnlinkAcknowledged == true)
         #expect(store.storageReport?.trashItems.isEmpty == true)
+        #expect(store.storageFailureMessage == nil)
+        #expect(store.safeErrorMessage == nil)
+    }
+
+    @Test @MainActor
+    func storageRefreshPublishesLoadingThenRetainsOnlyAnExplicitlyStaleReport()
+        async throws
+    {
+        let gate = AsyncGate()
+        let workflow = try MediaReviewWorkflowProbe(
+            storageReportGate: gate,
+            storageReportFailureCall: 2
+        )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/selected-workspace"
+            ),
+            using: sceneState
+        )
+
+        let initialLoad = Task {
+            await store.loadStorageReport()
+        }
+        await gate.waitUntilEntered()
+        #expect(
+            store.storageOperation
+                == .refreshing
+        )
+        #expect(store.storageReport == nil)
+        #expect(
+            StorageDashboardPresentation
+                .state(
+                    report: store.storageReport,
+                    operation:
+                        store.storageOperation,
+                    failureMessage:
+                        store.storageFailureMessage
+                ) == .loading(previous: nil)
+        )
+        await gate.release()
+        await initialLoad.value
+
+        let accepted = try #require(
+            store.storageReport
+        )
+        #expect(store.storageOperation == nil)
+        #expect(store.storageFailureMessage == nil)
+        #expect(
+            workflow.storageReportCallCount == 1
+        )
+
+        await store.loadStorageReport()
+        #expect(
+            store.storageReport == accepted
+        )
+        #expect(
+            store.storageFailureMessage
+                == "The exact local storage ledger could not be refreshed. The last successful report, if any, remains read-only."
+        )
+        #expect(store.safeErrorMessage == nil)
+        #expect(
+            StorageDashboardPresentation
+                .state(
+                    report: store.storageReport,
+                    operation:
+                        store.storageOperation,
+                    failureMessage:
+                        store.storageFailureMessage
+                ) == .staleLastSuccess(
+                    accepted,
+                    message:
+                        "The exact local storage ledger could not be refreshed. The last successful report, if any, remains read-only."
+                )
+        )
+        #expect(
+            workflow.storageReportCallCount == 2
+        )
+    }
+
+    @Test @MainActor
+    func storageMutationFailurePreservesTheReportAndWorkspaceSwitchClearsIt()
+        async throws
+    {
+        let workflow =
+            try MediaReviewWorkflowProbe()
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/selected-workspace"
+            ),
+            using: sceneState
+        )
+        await store.loadStorageReport()
+        let accepted = try #require(
+            store.storageReport
+        )
+        let item = try #require(
+            accepted.trashItems.first
+        )
+
+        await store.restoreTrashItem(
+            item.storageObjectID
+        )
+        #expect(
+            store.storageReport == accepted
+        )
+        #expect(
+            store.storageFailureMessage
+                == "The restore result could not be verified. Refresh the exact ledger before retrying; do not assume the item remains in Workspace Trash."
+        )
+        #expect(store.safeErrorMessage == nil)
+
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/replacement-workspace"
+            ),
+            using: sceneState
+        )
+        #expect(store.storageReport == nil)
+        #expect(store.storageOperation == nil)
+        #expect(store.storageFailureMessage == nil)
+    }
+
+    @Test @MainActor
+    func storageMutationAndRefreshAmbiguityNeverClaimsTheOppositeResult()
+        async throws
+    {
+        let restoreWorkflow =
+            try MediaReviewWorkflowProbe(
+                restoreReportFailsAfterMutation:
+                    true
+            )
+        let restoreStore = MediaReviewStore(
+            workflow: restoreWorkflow
+        )
+        let restoreSceneState =
+            MediaReviewSceneState()
+        await restoreStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/restore-ambiguity-workspace"
+            ),
+            using: restoreSceneState
+        )
+        await restoreStore.loadStorageReport()
+        let restoreItem = try #require(
+            restoreStore.storageReport?
+                .trashItems.first
+        )
+
+        await restoreStore.restoreTrashItem(
+            restoreItem.storageObjectID
+        )
+
+        #expect(
+            restoreWorkflow
+                .restoreMutationCallCount == 1
+        )
+        #expect(
+            restoreStore.storageFailureMessage
+                == "The restore result could not be verified. Refresh the exact ledger before retrying; do not assume the item remains in Workspace Trash."
+        )
+        #expect(
+            restoreStore.storageReport?
+                .trashItems.first?
+                .storageObjectID
+                == restoreItem.storageObjectID
+        )
+
+        let deletionWorkflow =
+            try MediaReviewWorkflowProbe(
+                permanentDeletionReportFailsAfterMutation:
+                    true
+            )
+        let deletionStore = MediaReviewStore(
+            workflow: deletionWorkflow
+        )
+        let deletionSceneState =
+            MediaReviewSceneState()
+        await deletionStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/deletion-ambiguity-workspace"
+            ),
+            using: deletionSceneState
+        )
+        await deletionStore.loadStorageReport()
+        let deletionItem = try #require(
+            deletionStore.storageReport?
+                .trashItems.first
+        )
+
+        await deletionStore
+            .permanentlyDeleteTrashItem(
+                deletionItem.storageObjectID,
+                confirmedByVisibleDialog: true
+            )
+
+        #expect(
+            deletionWorkflow
+                .permanentDeletionMutationCallCount
+                == 1
+        )
+        #expect(
+            deletionStore.storageFailureMessage
+                == "The permanent-deletion result could not be verified. Refresh the exact ledger before retrying; do not assume the item remains in Workspace Trash."
+        )
+        #expect(
+            deletionStore.storageReport?
+                .trashItems.first?
+                .storageObjectID
+                == deletionItem.storageObjectID
+        )
     }
 
     @Test @MainActor
@@ -4912,6 +5143,24 @@ func makeFeatureStoreForHostedSettingsTests(
 }
 
 @MainActor
+func makeFeatureStoreForHostedStorageTests(
+    report: WorkspaceStorageReport? = nil,
+    storageReportGate: AsyncGate? = nil,
+    storageReportFailureCall: Int? = nil
+) throws -> MediaReviewStore {
+    MediaReviewStore(
+        workflow: try MediaReviewWorkflowProbe(
+            storageReportGate:
+                storageReportGate,
+            storageReportOverride:
+                report,
+            storageReportFailureCall:
+                storageReportFailureCall
+        )
+    )
+}
+
+@MainActor
 private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let inspection: MediaInspection
     private let restoreGate: AsyncGate?
@@ -4928,6 +5177,12 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let historicalRebuildGate: AsyncGate?
     private let historicalComparisonGate: AsyncGate?
     private let historicalConfirmationGate: AsyncGate?
+    private let storageReportOverride:
+        WorkspaceStorageReport?
+    private let restoreReportFailsAfterMutation:
+        Bool
+    private let permanentDeletionReportFailsAfterMutation:
+        Bool
     private let recordingSetupFailureCall: Int?
     private let pollingJob: MediaJobReview?
     private let recordingSetupReview: RecordingSetupReview
@@ -4947,6 +5202,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let historicalConfirmedComparisonResult:
         HistoricalComparisonV1?
     private let learnedPreferenceFailureCall: Int?
+    private let storageReportFailureCall: Int?
     private let jobReviewFailureCall: Int?
     private let historicalIndexAvailability:
         HistoricalIndexAvailability
@@ -4965,6 +5221,9 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private(set) var historicalCompareCallCount = 0
     private(set) var historicalConfirmCallCount = 0
     private(set) var learnedPreferenceStateCallCount = 0
+    private(set) var storageReportCallCount = 0
+    private(set) var restoreMutationCallCount = 0
+    private(set) var permanentDeletionMutationCallCount = 0
     private(set) var jobReviewCallCount = 0
     private(set) var lastHistoricalSearchQuery: HistoricalSearchQuery?
     private(set) var preferenceSaveCallCount = 0
@@ -5006,6 +5265,12 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             AsyncGate? = nil,
         historicalConfirmationGate:
             AsyncGate? = nil,
+        storageReportOverride:
+            WorkspaceStorageReport? = nil,
+        restoreReportFailsAfterMutation:
+            Bool = false,
+        permanentDeletionReportFailsAfterMutation:
+            Bool = false,
         recordingSetupFailureCall: Int? = nil,
         recordingSetupReview: RecordingSetupReview? = nil,
         startedRecordingReview: RecordingSessionReview? = nil,
@@ -5027,6 +5292,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         historicalConfirmedComparisonResult:
             HistoricalComparisonV1? = nil,
         learnedPreferenceFailureCall: Int? = nil,
+        storageReportFailureCall: Int? = nil,
         jobReviewFailureCall: Int? = nil,
         historicalIndexAvailability:
             HistoricalIndexAvailability =
@@ -5055,6 +5321,12 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             historicalComparisonGate
         self.historicalConfirmationGate =
             historicalConfirmationGate
+        self.storageReportOverride =
+            storageReportOverride
+        self.restoreReportFailsAfterMutation =
+            restoreReportFailsAfterMutation
+        self.permanentDeletionReportFailsAfterMutation =
+            permanentDeletionReportFailsAfterMutation
         self.recordingSetupFailureCall =
             recordingSetupFailureCall
         self.recordingSetupReview = recordingSetupReview
@@ -5086,6 +5358,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             historicalConfirmedComparisonResult
         self.learnedPreferenceFailureCall =
             learnedPreferenceFailureCall
+        self.storageReportFailureCall =
+            storageReportFailureCall
         self.jobReviewFailureCall =
             jobReviewFailureCall
         self.historicalIndexAvailability =
@@ -5569,7 +5843,18 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     }
 
     func storageReport() async throws -> WorkspaceStorageReport {
-        if let storageReportGate { await storageReportGate.block() }
+        storageReportCallCount += 1
+        if let storageReportGate {
+            await storageReportGate.block()
+        }
+        if storageReportCallCount
+            == storageReportFailureCall
+        {
+            throw ProbeError.unexpectedCall
+        }
+        if let storageReportOverride {
+            return storageReportOverride
+        }
         return try WorkspaceStorageReport(
             calculatedAt: featureInstant(1_950_000_000_000),
             totalByteCount: 128,
@@ -5595,6 +5880,18 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         )
     }
 
+    func restoreTrashItem(
+        storageObjectID _:
+            StorageObjectID
+    ) async throws -> WorkspaceStorageReport {
+        guard restoreReportFailsAfterMutation
+        else {
+            throw ProbeError.unexpectedCall
+        }
+        restoreMutationCallCount += 1
+        throw ProbeError.unexpectedCall
+    }
+
     func permanentlyDeleteTrashItem(
         storageObjectID _: StorageObjectID,
         confirmsPermanentDeletion: Bool,
@@ -5603,6 +5900,10 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         permanentDeletionCallCount += 1
         lastDeletionConfirmed = confirmsPermanentDeletion
         lastUnlinkAcknowledged = acknowledgesUnlinkIsNotSecureErasure
+        if permanentDeletionReportFailsAfterMutation {
+            permanentDeletionMutationCallCount += 1
+            throw ProbeError.unexpectedCall
+        }
         return try WorkspaceStorageReport(
             calculatedAt: featureInstant(1_950_000_000_001),
             totalByteCount: 0,
@@ -6946,7 +7247,7 @@ private func featureReference<Tag: LogicalObjectIDScope>(
     )
 }
 
-private actor AsyncGate {
+actor AsyncGate {
     private var entered = false
     private var released = false
     private var continuation: CheckedContinuation<Void, Never>?

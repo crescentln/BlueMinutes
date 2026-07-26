@@ -32,7 +32,9 @@ struct Task007ViewAccessibilityTests {
 
         let storage = try source("StorageDashboardView.swift")
         #expect(storage.contains(".keyboardShortcut(\"r\", modifiers: [.command, .shift])"))
-        #expect(storage.contains(".accessibilityLabel(\"Workspace storage usage by category\")"))
+        #expect(storage.contains("\"blueminutes.storage.refresh\""))
+        #expect(storage.contains("\"blueminutes.storage.usage-ledger\""))
+        #expect(storage.contains("\"Exact workspace storage usage ledger\""))
         #expect(storage.contains("Requires visible confirmation"))
         #expect(storage.contains("does not guarantee forensic erasure"))
 

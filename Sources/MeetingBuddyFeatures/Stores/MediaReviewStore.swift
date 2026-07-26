@@ -37,6 +37,10 @@ public final class MediaReviewStore {
     private(set) var learnedPreferencesFailureMessage:
         String?
     public private(set) var storageReport: WorkspaceStorageReport?
+    private(set) var storageOperation:
+        StorageDashboardOperation?
+    private(set) var storageFailureMessage:
+        String?
     public private(set) var recordingSetup: RecordingSetupReview?
     public private(set) var recordingSession: RecordingSessionReview?
     public private(set) var webMetadataCandidate: UNWebTVMetadataCandidate?
@@ -843,7 +847,11 @@ public final class MediaReviewStore {
 
     public func loadStorageReport() async {
         guard workspace != nil else { return }
-        await perform {
+        await performStorageOperation(
+            .refreshing,
+            failureMessage:
+                "The exact local storage ledger could not be refreshed. The last successful report, if any, remains read-only."
+        ) {
             storageReport = try await workflow.storageReport()
         }
     }
@@ -1757,7 +1765,11 @@ public final class MediaReviewStore {
     }
 
     public func restoreTrashItem(_ storageObjectID: StorageObjectID) async {
-        await perform {
+        await performStorageOperation(
+            .restoring,
+            failureMessage:
+                "The restore result could not be verified. Refresh the exact ledger before retrying; do not assume the item remains in Workspace Trash."
+        ) {
             storageReport = try await workflow.restoreTrashItem(
                 storageObjectID: storageObjectID
             )
@@ -1769,10 +1781,16 @@ public final class MediaReviewStore {
         confirmedByVisibleDialog: Bool
     ) async {
         guard confirmedByVisibleDialog else {
-            safeErrorMessage = "Permanent deletion requires visible confirmation."
+            let message =
+                "Permanent deletion requires visible confirmation."
+            safeErrorMessage = message
             return
         }
-        await perform {
+        await performStorageOperation(
+            .deleting,
+            failureMessage:
+                "The permanent-deletion result could not be verified. Refresh the exact ledger before retrying; do not assume the item remains in Workspace Trash."
+        ) {
             storageReport = try await workflow.permanentlyDeleteTrashItem(
                 storageObjectID: storageObjectID,
                 confirmsPermanentDeletion: true,
@@ -1837,6 +1855,8 @@ public final class MediaReviewStore {
         historicalSearchFailureMessage = nil
         learnedPreferencesFailureMessage = nil
         storageReport = nil
+        storageOperation = nil
+        storageFailureMessage = nil
         recordingSetup = nil
         recordingSession = nil
         isStoppingRecording = false
@@ -2410,6 +2430,34 @@ public final class MediaReviewStore {
                 == cursor
             && bundle.page.indexGeneration
                 == cursor.indexGeneration
+    }
+
+    private func performStorageOperation(
+        _ storageOperation:
+            StorageDashboardOperation,
+        failureMessage: String,
+        _ operation: () async throws -> Void
+    ) async {
+        guard !isWorking else {
+            storageFailureMessage =
+                "Wait for the current local operation to finish, then refresh the exact storage ledger."
+            return
+        }
+        safeErrorMessage = nil
+        storageFailureMessage = nil
+        self.storageOperation =
+            storageOperation
+        isWorking = true
+        defer {
+            isWorking = false
+            self.storageOperation = nil
+        }
+        do {
+            try await operation()
+        } catch {
+            storageFailureMessage =
+                failureMessage
+        }
     }
 
     private func historicalQuery(
