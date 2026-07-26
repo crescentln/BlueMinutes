@@ -7,12 +7,19 @@ struct TranscriptNavigationIndex: Sendable {
 
     init(orderedSegmentIDs: [TranscriptSegmentID]) {
         self.orderedSegmentIDs = orderedSegmentIDs
-        positionBySegmentID = Dictionary(
-            uniqueKeysWithValues:
-                orderedSegmentIDs.enumerated().map {
-                    ($0.element, $0.offset)
-                }
-        )
+        var positions: [TranscriptSegmentID: Int] = [:]
+        var ambiguousIDs: Set<TranscriptSegmentID> = []
+        for (position, segmentID) in
+            orderedSegmentIDs.enumerated()
+        {
+            if positions[segmentID] != nil {
+                positions.removeValue(forKey: segmentID)
+                ambiguousIDs.insert(segmentID)
+            } else if !ambiguousIDs.contains(segmentID) {
+                positions[segmentID] = position
+            }
+        }
+        positionBySegmentID = positions
     }
 
     func previous(
@@ -44,16 +51,19 @@ struct TranscriptReviewPresentation: Sendable {
     let segments: [TranscriptSegmentV1]
     let navigation: TranscriptNavigationIndex
     let uncertainSpeakerCount: Int
-    let noSpeechChunkCount: Int
+    let noSpeechChunks: [TranscriptChunkCoverage]
+    let verifiedNoSpeechChunkCount: Int
+    let unresolvedNoSpeechChunkCount: Int
 
     private let segmentByID: [TranscriptSegmentID: TranscriptSegmentV1]
     private let translationBySourceRevision:
-        [RevisionID: TranslationSegmentV1]
+        [SemanticRevisionReference: TranslationSegmentV1]
     private let assignmentsByTranscriptRevision:
-        [RevisionID: [SpeakerAssignmentV1]]
-    private let evidenceByRevision: [RevisionID: EvidenceRefV1]
+        [SemanticRevisionReference: [SpeakerAssignmentV1]]
+    private let evidenceByRevision:
+        [SemanticRevisionReference: EvidenceRefV1]
     private let coverageByReviewedRevision:
-        [RevisionID: [TranscriptChunkCoverage]]
+        [SemanticRevisionReference: [TranscriptChunkCoverage]]
 
     init(review: TranscriptReviewBundle) {
         let orderedSegments = review.transcriptSegments.sorted {
@@ -69,24 +79,43 @@ struct TranscriptReviewPresentation: Sendable {
         navigation = TranscriptNavigationIndex(
             orderedSegmentIDs: orderedSegments.map(\.segmentID)
         )
-        segmentByID = Dictionary(
-            uniqueKeysWithValues:
-                orderedSegments.map { ($0.segmentID, $0) }
-        )
+        var segmentsByID:
+            [TranscriptSegmentID: TranscriptSegmentV1] = [:]
+        var ambiguousSegmentIDs: Set<TranscriptSegmentID> = []
+        for segment in orderedSegments {
+            if segmentsByID[segment.segmentID] != nil {
+                segmentsByID.removeValue(
+                    forKey: segment.segmentID
+                )
+                ambiguousSegmentIDs.insert(segment.segmentID)
+            } else if !ambiguousSegmentIDs.contains(
+                segment.segmentID
+            ) {
+                segmentsByID[segment.segmentID] = segment
+            }
+        }
+        segmentByID = segmentsByID
 
-        var translations: [RevisionID: TranslationSegmentV1] = [:]
+        var translations:
+            [SemanticRevisionReference: TranslationSegmentV1] = [:]
+        var ambiguousTranslationSources:
+            Set<SemanticRevisionReference> = []
         for translation in review.translations.sorted(by: {
             $0.revision.revisionID.canonicalString
                 < $1.revision.revisionID.canonicalString
         }) {
-            translations[
-                translation.sourceSegmentRevision.revisionID,
-                default: translation
-            ] = translation
+            let reference = translation.sourceSegmentRevision
+            if translations[reference] != nil {
+                translations.removeValue(forKey: reference)
+                ambiguousTranslationSources.insert(reference)
+            } else if !ambiguousTranslationSources.contains(reference) {
+                translations[reference] = translation
+            }
         }
         translationBySourceRevision = translations
 
-        var assignments: [RevisionID: [SpeakerAssignmentV1]] = [:]
+        var assignments:
+            [SemanticRevisionReference: [SpeakerAssignmentV1]] = [:]
         let orderedAssignments = review.speakerAssignments.sorted {
             (
                 $0.revision.createdAt,
@@ -98,31 +127,57 @@ struct TranscriptReviewPresentation: Sendable {
         }
         for assignment in orderedAssignments {
             for reference in assignment.transcriptSegmentRevisions {
-                assignments[reference.revisionID, default: []]
+                assignments[reference, default: []]
                     .append(assignment)
             }
         }
         assignmentsByTranscriptRevision = assignments
 
-        evidenceByRevision = Dictionary(
-            uniqueKeysWithValues:
-                review.evidenceRefs.map {
-                    ($0.revision.revisionID, $0)
-                }
-        )
+        var evidence:
+            [SemanticRevisionReference: EvidenceRefV1] = [:]
+        var ambiguousEvidenceReferences:
+            Set<SemanticRevisionReference> = []
+        for item in review.evidenceRefs {
+            guard let reference = Self.reference(
+                logicalID: item.evidenceID,
+                revisionID: item.revision.revisionID
+            ) else { continue }
+            if evidence[reference] != nil {
+                evidence.removeValue(forKey: reference)
+                ambiguousEvidenceReferences.insert(reference)
+            } else if !ambiguousEvidenceReferences.contains(reference) {
+                evidence[reference] = item
+            }
+        }
+        evidenceByRevision = evidence
 
-        var coverage: [RevisionID: [TranscriptChunkCoverage]] = [:]
+        var coverage:
+            [SemanticRevisionReference: [TranscriptChunkCoverage]] = [:]
         for chunk in review.manifest.chunks {
             if let reference = chunk.reviewedSegmentRevision {
-                coverage[reference.revisionID, default: []].append(chunk)
+                coverage[reference, default: []].append(chunk)
             }
         }
         coverageByReviewedRevision = coverage
-        noSpeechChunkCount = review.manifest.chunks.filter {
+        noSpeechChunks = review.manifest.chunks.filter {
             $0.disposition == .noSpeech
+        }.sorted()
+        verifiedNoSpeechChunkCount = noSpeechChunks.filter {
+            guard let confirmation = $0.noSpeechConfirmation else {
+                return false
+            }
+            return confirmation.method == .exactDigitalSilence
+                && confirmation.verifiedCoreRange == $0.coreRange
+                && confirmation.verifierVersion
+                    == TranscriptNoSpeechConfirmation.verifierVersion
         }.count
+        unresolvedNoSpeechChunkCount =
+            noSpeechChunks.count - verifiedNoSpeechChunkCount
         uncertainSpeakerCount = orderedSegments.filter { segment in
-            !(assignments[segment.revision.revisionID] ?? [])
+            guard let reference = Self.reference(for: segment) else {
+                return true
+            }
+            return !(assignments[reference] ?? [])
                 .contains(where: Self.isConfirmedAssignment)
         }.count
     }
@@ -137,15 +192,19 @@ struct TranscriptReviewPresentation: Sendable {
     func translation(
         for segment: TranscriptSegmentV1
     ) -> TranslationSegmentV1? {
-        translationBySourceRevision[segment.revision.revisionID]
+        guard let reference = Self.reference(for: segment) else {
+            return nil
+        }
+        return translationBySourceRevision[reference]
     }
 
     func assignments(
         for segment: TranscriptSegmentV1
     ) -> [SpeakerAssignmentV1] {
-        assignmentsByTranscriptRevision[
-            segment.revision.revisionID
-        ] ?? []
+        guard let reference = Self.reference(for: segment) else {
+            return []
+        }
+        return assignmentsByTranscriptRevision[reference] ?? []
     }
 
     func hasConfirmedSpeaker(
@@ -166,7 +225,7 @@ struct TranscriptReviewPresentation: Sendable {
             )
         ).sorted()
         return references.compactMap {
-            evidenceByRevision[$0.revisionID]
+            evidenceByRevision[$0]
         }
     }
 
@@ -178,16 +237,36 @@ struct TranscriptReviewPresentation: Sendable {
                 .flatMap(\.evidenceRevisions)
         )
         return references.filter {
-            evidenceByRevision[$0.revisionID] == nil
+            evidenceByRevision[$0] == nil
         }.count
     }
 
     func coverage(
         for segment: TranscriptSegmentV1
     ) -> [TranscriptChunkCoverage] {
-        coverageByReviewedRevision[
-            segment.revision.revisionID
-        ] ?? []
+        guard let reference = Self.reference(for: segment) else {
+            return []
+        }
+        return coverageByReviewedRevision[reference] ?? []
+    }
+
+    private static func reference(
+        for segment: TranscriptSegmentV1
+    ) -> SemanticRevisionReference? {
+        reference(
+            logicalID: segment.segmentID,
+            revisionID: segment.revision.revisionID
+        )
+    }
+
+    private static func reference<Tag: LogicalObjectIDScope>(
+        logicalID: StableID<Tag>,
+        revisionID: RevisionID
+    ) -> SemanticRevisionReference? {
+        try? SemanticRevisionReference(
+            logicalID: logicalID,
+            revisionID: revisionID
+        )
     }
 
     private static func isConfirmedAssignment(
@@ -196,6 +275,70 @@ struct TranscriptReviewPresentation: Sendable {
         assignment.certainty == .confirmed
             && assignment.reviewStatus == .confirmed
             && assignment.userConfirmed
+    }
+}
+
+struct TranscriptReviewPresentationCacheKey:
+    Hashable, Sendable
+{
+    let manifestID: TranscriptCoverageManifestID
+    let speakerAssignmentRevisions: [SemanticRevisionReference]
+    let evidenceRevisions: [SemanticRevisionReference]
+
+    init(review: TranscriptReviewBundle) {
+        manifestID = review.manifest.manifestID
+        speakerAssignmentRevisions = review.speakerAssignments
+            .compactMap {
+                try? SemanticRevisionReference(
+                    logicalID: $0.assignmentID,
+                    revisionID: $0.revision.revisionID
+                )
+            }
+            .sorted()
+        evidenceRevisions = review.evidenceRefs
+            .compactMap {
+                try? SemanticRevisionReference(
+                    logicalID: $0.evidenceID,
+                    revisionID: $0.revision.revisionID
+                )
+            }
+            .sorted()
+    }
+}
+
+struct TranscriptReviewPresentationCache: Sendable {
+    let key: TranscriptReviewPresentationCacheKey
+    let presentation: TranscriptReviewPresentation
+
+    init(review: TranscriptReviewBundle) {
+        key = TranscriptReviewPresentationCacheKey(review: review)
+        presentation = TranscriptReviewPresentation(review: review)
+    }
+}
+
+enum TranscriptCommandAvailability {
+    static func canNavigate(
+        hasDestination: Bool,
+        isWorking: Bool,
+        isInteractionLocked: Bool,
+        isConfirmationPresented: Bool
+    ) -> Bool {
+        hasDestination
+            && !isWorking
+            && !isInteractionLocked
+            && !isConfirmationPresented
+    }
+
+    static func canSave(
+        hasSavableDraft: Bool,
+        isWorking: Bool,
+        isInteractionLocked: Bool,
+        isConfirmationPresented: Bool
+    ) -> Bool {
+        hasSavableDraft
+            && !isWorking
+            && !isInteractionLocked
+            && !isConfirmationPresented
     }
 }
 

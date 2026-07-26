@@ -7,6 +7,8 @@ struct TranscriptReviewView: View {
     @Bindable var store: MediaReviewStore
     @Bindable var sceneState: MediaReviewSceneState
     @State private var inspectorIsPresented = false
+    @State private var presentationCache:
+        TranscriptReviewPresentationCache?
     @FocusState private var focusedEditor: TranscriptEditorFocus?
 
     var body: some View {
@@ -326,9 +328,19 @@ struct TranscriptReviewView: View {
     private func reviewWorkspace(
         _ review: TranscriptReviewBundle
     ) -> some View {
-        let presentation = TranscriptReviewPresentation(
+        let cacheKey = TranscriptReviewPresentationCacheKey(
             review: review
         )
+        let presentation: TranscriptReviewPresentation
+        if let presentationCache,
+           presentationCache.key == cacheKey
+        {
+            presentation = presentationCache.presentation
+        } else {
+            presentation = TranscriptReviewPresentation(
+                review: review
+            )
+        }
         let selectedSegment = presentation.segment(
             id: sceneState.transcript.selectedSegmentID
         )
@@ -361,7 +373,8 @@ struct TranscriptReviewView: View {
                 coverage: selectedCoverage,
                 evidence: selectedEvidence,
                 unresolvedEvidenceCount:
-                    unresolvedEvidenceCount
+                    unresolvedEvidenceCount,
+                noSpeechChunks: presentation.noSpeechChunks
             )
             .inspectorColumnWidth(
                 min: 280,
@@ -373,6 +386,14 @@ struct TranscriptReviewView: View {
             \.blueMinutesTranscriptCommandActions,
             commandActions(presentation)
         )
+        .task(id: cacheKey) {
+            guard presentationCache?.key != cacheKey else {
+                return
+            }
+            presentationCache = TranscriptReviewPresentationCache(
+                review: review
+            )
+        }
     }
 
     private func reviewHeader(
@@ -391,11 +412,19 @@ struct TranscriptReviewView: View {
                     systemImage:
                         "person.crop.circle.badge.questionmark"
                 )
-                if presentation.noSpeechChunkCount > 0 {
+                if presentation.verifiedNoSpeechChunkCount > 0 {
                     EvidenceBadge(
                         title:
-                            "\(presentation.noSpeechChunkCount) verified no-speech chunk(s)",
+                            "\(presentation.verifiedNoSpeechChunkCount) verified no-speech chunk(s)",
                         systemImage: "waveform.slash"
+                    )
+                }
+                if presentation.unresolvedNoSpeechChunkCount > 0 {
+                    EvidenceBadge(
+                        title:
+                            "\(presentation.unresolvedNoSpeechChunkCount) unresolved no-speech proof(s)",
+                        systemImage:
+                            "exclamationmark.triangle"
                     )
                 }
                 Spacer()
@@ -420,26 +449,30 @@ struct TranscriptReviewView: View {
                     requestPrevious(presentation)
                 }
                 .disabled(
-                    presentation.navigation.previous(
-                        to:
-                            sceneState.transcript
-                            .selectedSegmentID
-                    ) == nil
+                    !canNavigate(
+                        to: presentation.navigation.previous(
+                            to:
+                                sceneState.transcript
+                                .selectedSegmentID
+                        )
+                    )
                 )
                 Button("Next Segment") {
                     requestNext(presentation)
                 }
                 .disabled(
-                    presentation.navigation.next(
-                        to:
-                            sceneState.transcript
-                            .selectedSegmentID
-                    ) == nil
+                    !canNavigate(
+                        to: presentation.navigation.next(
+                            to:
+                                sceneState.transcript
+                                .selectedSegmentID
+                        )
+                    )
                 )
                 Button("Save Focused Draft") {
                     saveFocusedDraft()
                 }
-                .disabled(savableDraftKind == nil)
+                .disabled(!canSaveFocusedDraft)
                 Spacer()
                 LabeledContent(
                     "Segments",
@@ -482,7 +515,7 @@ struct TranscriptReviewView: View {
                     GridRow {
                         Text("No-speech proof")
                         Text(
-                            "\(presentation.noSpeechChunkCount) application-verified"
+                            "\(presentation.verifiedNoSpeechChunkCount) exact digital silence; \(presentation.unresolvedNoSpeechChunkCount) unresolved"
                         )
                     }
                     GridRow {
@@ -1005,21 +1038,23 @@ struct TranscriptReviewView: View {
         )
         return BlueMinutesTranscriptCommandActions(
             canSelectPrevious:
-                previousID != nil && !store.isWorking,
+                canNavigate(to: previousID),
             canSelectNext:
-                nextID != nil && !store.isWorking,
+                canNavigate(to: nextID),
             canSaveFocusedDraft:
-                savableDraftKind != nil
-                && !store.isWorking
-                && !sceneState.isInteractionLocked,
+                canSaveFocusedDraft,
             selectPrevious: {
-                guard let previousID else { return }
+                guard canNavigate(to: previousID),
+                      let previousID
+                else { return }
                 sceneState.requestTranscriptSelection(
                     previousID
                 )
             },
             selectNext: {
-                guard let nextID else { return }
+                guard canNavigate(to: nextID),
+                      let nextID
+                else { return }
                 sceneState.requestTranscriptSelection(
                     nextID
                 )
@@ -1045,6 +1080,30 @@ struct TranscriptReviewView: View {
         )
     }
 
+    private func canNavigate(
+        to destination: TranscriptSegmentID?
+    ) -> Bool {
+        TranscriptCommandAvailability.canNavigate(
+            hasDestination: destination != nil,
+            isWorking: store.isWorking,
+            isInteractionLocked:
+                sceneState.isInteractionLocked,
+            isConfirmationPresented:
+                sceneState.isNavigationConfirmationPresented
+        )
+    }
+
+    private var canSaveFocusedDraft: Bool {
+        TranscriptCommandAvailability.canSave(
+            hasSavableDraft: savableDraftKind != nil,
+            isWorking: store.isWorking,
+            isInteractionLocked:
+                sceneState.isInteractionLocked,
+            isConfirmationPresented:
+                sceneState.isNavigationConfirmationPresented
+        )
+    }
+
     private func requestPrevious(
         _ presentation: TranscriptReviewPresentation
     ) {
@@ -1053,7 +1112,8 @@ struct TranscriptReviewView: View {
                 to:
                     sceneState.transcript
                     .selectedSegmentID
-            )
+            ),
+            canNavigate(to: previousID)
         else { return }
         sceneState.requestTranscriptSelection(previousID)
     }
@@ -1066,13 +1126,16 @@ struct TranscriptReviewView: View {
                 to:
                     sceneState.transcript
                     .selectedSegmentID
-            )
+            ),
+            canNavigate(to: nextID)
         else { return }
         sceneState.requestTranscriptSelection(nextID)
     }
 
     private func saveFocusedDraft() {
-        guard let savableDraftKind else { return }
+        guard canSaveFocusedDraft,
+              let savableDraftKind
+        else { return }
         saveDraft(savableDraftKind)
     }
 
