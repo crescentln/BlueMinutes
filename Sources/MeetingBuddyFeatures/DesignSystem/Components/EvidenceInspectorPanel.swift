@@ -7,30 +7,31 @@ struct EvidenceInspectorPanel: View {
     let coverage: [TranscriptChunkCoverage]
     let evidence: [EvidenceRefV1]
     let unresolvedEvidenceCount: Int
+    let noSpeechChunks: [TranscriptChunkCoverage]
 
     var body: some View {
-        Group {
-            if let segment {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
-                        Text("Evidence Inspector")
-                            .font(.title2.weight(.semibold))
-                            .accessibilityAddTraits(.isHeader)
-                        sourceSection(segment)
-                        coverageSection
-                        evidenceSection
-                    }
-                    .padding(18)
-                }
-            } else {
-                ContentUnavailableView(
-                    "Select a Transcript Segment",
-                    systemImage: "link.circle",
-                    description: Text(
-                        "The inspector shows exact source and EvidenceRef revisions for the selected segment."
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                Text("Evidence Inspector")
+                    .font(.title2.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                noSpeechSection
+                if let segment {
+                    sourceSection(segment)
+                    coverageSection
+                    evidenceSection
+                } else {
+                    WorkflowStateView(
+                        title: "Select a Transcript Segment",
+                        detail:
+                            "Select a segment to inspect its exact source, coverage ownership, and EvidenceRef revisions. Global no-speech proofs remain inspectable above.",
+                        systemImage: "link.circle",
+                        tone: .neutral
                     )
-                )
+                }
             }
+            .padding(18)
+            .textSelection(.enabled)
         }
         .accessibilityIdentifier(
             "BlueMinutes.Transcript.EvidenceInspector"
@@ -55,14 +56,28 @@ struct EvidenceInspectorPanel: View {
                 value: label(segment.speechSourceKind.encodedValue)
             )
             LabeledContent(
-                "Source asset",
-                value: shortRevision(
-                    segment.sourceAssetRevision.revisionID
+                "Source object",
+                value: label(
+                    segment.sourceAssetRevision.objectType.encodedValue
                 )
             )
             LabeledContent(
+                "Source logical ID",
+                value:
+                    segment.sourceAssetRevision.logicalID.canonicalString
+            )
+            LabeledContent(
+                "Source revision",
+                value:
+                    segment.sourceAssetRevision.revisionID.canonicalString
+            )
+            LabeledContent(
+                "Transcript logical ID",
+                value: segment.segmentID.canonicalString
+            )
+            LabeledContent(
                 "Transcript revision",
-                value: shortRevision(segment.revision.revisionID)
+                value: segment.revision.revisionID.canonicalString
             )
             LabeledContent(
                 "Created by",
@@ -89,8 +104,91 @@ struct EvidenceInspectorPanel: View {
             if let superseded = segment.revision.supersedesRevisionID {
                 LabeledContent(
                     "Supersedes",
-                    value: shortRevision(superseded)
+                    value: superseded.canonicalString
                 )
+            }
+        }
+    }
+
+    private var noSpeechSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            EditorialSectionHeader(
+                "Application-owned no-speech proofs",
+                detail:
+                    "Every no-speech core must expose an exact application verifier method, range, and version. Provider output alone cannot authorize omission."
+            )
+            if noSpeechChunks.isEmpty {
+                WorkflowStateView(
+                    title: "No no-speech cores",
+                    detail:
+                        "Every deterministic core in this manifest resolves through a transcript segment.",
+                    systemImage: "waveform",
+                    tone: .neutral
+                )
+            } else {
+                ForEach(noSpeechChunks, id: \.index) { chunk in
+                    VStack(alignment: .leading, spacing: 7) {
+                        LabeledContent(
+                            "Chunk index",
+                            value: String(chunk.index)
+                        )
+                        LabeledContent(
+                            "Core frame range",
+                            value: frameRangeLabel(chunk.coreRange)
+                        )
+                        if let confirmation =
+                            chunk.noSpeechConfirmation
+                        {
+                            LabeledContent(
+                                "Verifier method",
+                                value: label(
+                                    confirmation.method.rawValue
+                                )
+                            )
+                            LabeledContent(
+                                "Verified frame range",
+                                value: frameRangeLabel(
+                                    confirmation.verifiedCoreRange
+                                )
+                            )
+                            LabeledContent(
+                                "Verifier version",
+                                value: String(
+                                    confirmation.verifierVersion
+                                )
+                            )
+                            if confirmation.verifiedCoreRange
+                                != chunk.coreRange
+                                || confirmation.verifierVersion
+                                    != TranscriptNoSpeechConfirmation
+                                    .verifierVersion
+                            {
+                                WorkflowStateView(
+                                    title:
+                                        "No-speech proof failed closed",
+                                    detail:
+                                        "The confirmation does not match this exact core range and supported verifier version.",
+                                    systemImage:
+                                        "exclamationmark.triangle",
+                                    tone: .failure
+                                )
+                            }
+                        } else {
+                            WorkflowStateView(
+                                title:
+                                    "No-speech confirmation missing",
+                                detail:
+                                    "This core cannot be treated as verified no-speech.",
+                                systemImage:
+                                    "exclamationmark.triangle",
+                                tone: .failure
+                            )
+                        }
+                    }
+                    if chunk.index != noSpeechChunks.last?.index {
+                        Divider()
+                    }
+                }
             }
         }
     }
@@ -182,13 +280,34 @@ struct EvidenceInspectorPanel: View {
                 systemImage: "link.circle"
             )
             LabeledContent(
-                "Evidence revision",
-                value: shortRevision(item.revision.revisionID)
+                "Evidence logical ID",
+                value: item.evidenceID.canonicalString
             )
             LabeledContent(
-                "Exact source",
-                value:
-                    "\(label(item.source.objectType.encodedValue)) · \(shortRevision(item.source.revisionID))"
+                "Evidence revision",
+                value: item.revision.revisionID.canonicalString
+            )
+            LabeledContent(
+                "Created by",
+                value: label(item.revision.createdBy.encodedValue)
+            )
+            LabeledContent(
+                "Classification",
+                value: label(
+                    item.revision.dataClassification.encodedValue
+                )
+            )
+            LabeledContent(
+                "Exact source object",
+                value: label(item.source.objectType.encodedValue)
+            )
+            LabeledContent(
+                "Exact source logical ID",
+                value: item.source.logicalID.canonicalString
+            )
+            LabeledContent(
+                "Exact source revision",
+                value: item.source.revisionID.canonicalString
             )
             LabeledContent(
                 "Locator",
@@ -266,6 +385,10 @@ struct EvidenceInspectorPanel: View {
         "UTF-8 bytes \(range.startOffset)..<\(range.startOffset + range.length)"
     }
 
+    private func frameRangeLabel(_ range: MediaFrameRange) -> String {
+        "canonical frames \(range.startFrame)..<\(range.endFrame)"
+    }
+
     private func timeLabel(_ range: MediaTimeRange) -> String {
         let start = Double(range.startMilliseconds) / 1_000
         let end = Double(range.endMilliseconds) / 1_000
@@ -280,10 +403,6 @@ struct EvidenceInspectorPanel: View {
         return percent.formatted(
             .number.precision(.fractionLength(1))
         ) + "%"
-    }
-
-    private func shortRevision(_ revisionID: RevisionID) -> String {
-        String(revisionID.canonicalString.prefix(12)) + "…"
     }
 
     private func label(_ rawValue: String) -> String {

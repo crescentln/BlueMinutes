@@ -16,7 +16,7 @@ struct EvidenceAnchor: View {
         }
         .buttonStyle(.link)
         .accessibilityHint(
-            "Open the inspector for exact EvidenceRef revision \(shortRevision)."
+            "Open the inspector for exact EvidenceRef revision \(evidence.revision.revisionID.canonicalString)."
         )
     }
 
@@ -24,11 +24,5 @@ struct EvidenceAnchor: View {
         evidence.evidenceKind.rawValue
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
-    }
-
-    private var shortRevision: String {
-        String(
-            evidence.revision.revisionID.canonicalString.prefix(12)
-        )
     }
 }
