@@ -10,6 +10,7 @@ public struct MeetingBuddyRootView: View {
     @State private var sceneState: MediaReviewSceneState
     @State private var fileImporterPurpose = LocalFileImporterPurpose.workspace
     @State private var showFileImporter = false
+    @FocusState private var sidebarIsFocused: Bool
     private let onSceneStateAvailable:
         @MainActor (MediaReviewSceneState) -> Void
 
@@ -40,7 +41,6 @@ public struct MeetingBuddyRootView: View {
                     Button("Choose Workspace…") {
                         presentFileImporter(.workspace)
                     }
-                    .keyboardShortcut("o", modifiers: .command)
                     .disabled(store.isWorking || store.blocksWorkspaceSwitch)
                     .accessibilityHint("Open an existing local workspace or create one in an empty folder.")
                 }
@@ -108,6 +108,8 @@ public struct MeetingBuddyRootView: View {
                         .disabled(
                             !sceneState.isDestinationAvailable(.briefing)
                         )
+                }
+                Section("Library") {
                     WorkspaceSidebarRow(
                         title: "Meeting History",
                         icon: .history,
@@ -126,10 +128,16 @@ public struct MeetingBuddyRootView: View {
             }
             .navigationTitle("BlueMinutes")
             .listStyle(.sidebar)
+            .focused($sidebarIsFocused)
+            .navigationSplitViewColumnWidth(
+                min: BlueMinutesLayout.sidebarMinimumWidth,
+                ideal: BlueMinutesLayout.sidebarIdealWidth,
+                max: BlueMinutesLayout.sidebarMaximumWidth
+            )
         } detail: {
-            detailContent
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(BlueMinutesColors.canvas)
+            BlueMinutesEditorialCanvas {
+                detailContent
+            }
             .navigationTitle(navigationTitle)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let recording = store.recordingSession,
@@ -139,14 +147,25 @@ public struct MeetingBuddyRootView: View {
                 }
             }
             .toolbar {
-                if store.isWorking {
-                    ProgressView()
-                        .controlSize(.small)
-                }
+                BlueMinutesEditorialToolbarContent(
+                    workspaceTitle: store.workspace?.displayName,
+                    canChooseWorkspace: canChooseWorkspace,
+                    workspaceSwitchUnavailableReason:
+                        workspaceSwitchUnavailableReason,
+                    isWorking: store.isWorking,
+                    chooseWorkspace: chooseWorkspace
+                )
             }
         }
         .disabled(sceneState.isInteractionLocked || store.isWorking)
         .frame(minWidth: 860, minHeight: 600)
+        .focusedSceneValue(
+            \.blueMinutesShellCommandActions,
+            BlueMinutesShellCommandActions(
+                canChooseWorkspace: canChooseWorkspace,
+                chooseWorkspace: chooseWorkspace
+            )
+        )
         .onAppear {
             onSceneStateAvailable(sceneState)
         }
@@ -175,6 +194,14 @@ public struct MeetingBuddyRootView: View {
                 case .intake, .webMetadata, nil:
                     break
                 }
+            }
+        }
+        .onChange(of: showFileImporter) { wasPresented, isPresented in
+            if wasPresented,
+               !isPresented,
+               fileImporterPurpose == .workspace
+            {
+                sidebarIsFocused = true
             }
         }
         .onChange(of: store.job?.state) { _, _ in reconcileDestination() }
@@ -402,6 +429,27 @@ public struct MeetingBuddyRootView: View {
     private func presentFileImporter(_ purpose: LocalFileImporterPurpose) {
         fileImporterPurpose = purpose
         showFileImporter = true
+    }
+
+    private var canChooseWorkspace: Bool {
+        workspaceSwitchUnavailableReason == nil
+    }
+
+    private var workspaceSwitchUnavailableReason: String? {
+        if sceneState.isInteractionLocked {
+            return "Temporarily unavailable while BlueMinutes completes a save or workspace change."
+        }
+        if store.isWorking {
+            return "Temporarily unavailable while BlueMinutes completes the current operation."
+        }
+        if store.blocksWorkspaceSwitch {
+            return "Finish or retain the current recording before switching workspaces."
+        }
+        return nil
+    }
+
+    private func chooseWorkspace() {
+        presentFileImporter(.workspace)
     }
 
     private var sectionSelection: Binding<MediaReviewSection?> {

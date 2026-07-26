@@ -66,6 +66,39 @@ struct MeetingBuddyRootViewStructureTests {
                 separatedBy: "WorkspaceSidebarRow("
             ).count - 1 == 9
         )
+        #expect(rootView.contains("Section(\"Workspace\")"))
+        #expect(rootView.contains("Section(\"Workflow\")"))
+        #expect(rootView.contains("Section(\"Library\")"))
+        let workflowSection = try #require(
+            rootView.range(of: "Section(\"Workflow\")")
+        )
+        let librarySection = try #require(
+            rootView.range(of: "Section(\"Library\")")
+        )
+        #expect(workflowSection.lowerBound < librarySection.lowerBound)
+        for section in [
+            "intake",
+            "recording",
+            "webMetadata",
+            "transcript",
+            "analysis",
+            "briefing"
+        ] {
+            let tag = try #require(
+                rootView.range(
+                    of: ".tag(MediaReviewSection.\(section))"
+                )
+            )
+            #expect(tag.lowerBound < librarySection.lowerBound)
+        }
+        for section in ["history", "storage"] {
+            let tag = try #require(
+                rootView.range(
+                    of: ".tag(MediaReviewSection.\(section))"
+                )
+            )
+            #expect(tag.lowerBound > librarySection.lowerBound)
+        }
         for titleCase in [
             "case .recording: \"Record Audio\"",
             "case .webMetadata: \"UN Web TV Metadata\"",
@@ -172,9 +205,30 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(app.contains("Window(\"BlueMinutes\", id: \"main\")"))
         #expect(app.contains(".defaultSize(width: 1_080, height: 720)"))
         #expect(app.contains("SidebarCommands()"))
+        #expect(app.contains("BlueMinutesShellCommands()"))
         #expect(!app.contains("WindowGroup"))
         #expect(!app.contains(".keyboardShortcut(\",\""))
         #expect(root.contains(".frame(minWidth: 860, minHeight: 600)"))
+        #expect(
+            root.contains(
+                "min: BlueMinutesLayout.sidebarMinimumWidth"
+            )
+        )
+        #expect(
+            root.contains(
+                "ideal: BlueMinutesLayout.sidebarIdealWidth"
+            )
+        )
+        #expect(
+            root.contains(
+                "max: BlueMinutesLayout.sidebarMaximumWidth"
+            )
+        )
+        #expect(root.contains("BlueMinutesEditorialCanvas {"))
+        #expect(root.contains("BlueMinutesEditorialToolbarContent("))
+        #expect(root.contains(".focusedSceneValue("))
+        #expect(root.contains("@FocusState private var sidebarIsFocused"))
+        #expect(root.contains(".focused($sidebarIsFocused)"))
         #expect(root.contains("@State private var sceneState"))
         #expect(
             root.contains(
@@ -248,6 +302,81 @@ struct MeetingBuddyRootViewStructureTests {
             )
         )
         #expect(!component.contains("@Environment(\\.isEnabled)"))
+    }
+
+    @Test
+    func editorialShellUsesOnlyRealWorkspaceCommandsAndNoInspector() throws {
+        let app = try source(
+            "Sources/MeetingBuddyApp/MeetingBuddyApp.swift"
+        )
+        let root = try source(
+            "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
+        )
+        let shell = try source(
+            "Sources/MeetingBuddyFeatures/Views/BlueMinutesMainWindowShell.swift"
+        )
+
+        #expect(app.contains("BlueMinutesShellCommands()"))
+        #expect(
+            shell.components(
+                separatedBy:
+                    ".keyboardShortcut(\"o\", modifiers: .command)"
+            ).count - 1 == 1
+        )
+        #expect(
+            !root.contains(
+                ".keyboardShortcut(\"o\", modifiers: .command)"
+            )
+        )
+        #expect(shell.contains("@FocusedValue(\\.blueMinutesShellCommandActions)"))
+        #expect(shell.contains("ToolbarItem(placement: .navigation)"))
+        #expect(shell.contains("Menu {"))
+        #expect(shell.contains("Button(\"Choose Workspace…\")"))
+        #expect(shell.contains(".disabled(!canChooseWorkspace)"))
+        #expect(shell.contains(".disabled(actions?.canChooseWorkspace != true)"))
+        #expect(shell.contains("workspaceTitle ?? \"Choose Workspace\""))
+        #expect(shell.contains("Current operation in progress"))
+        #expect(shell.contains("workspaceSwitchUnavailableReason"))
+        #expect(root.contains("workspaceTitle: store.workspace?.displayName"))
+        #expect(root.contains("workspaceSwitchUnavailableReason == nil"))
+        #expect(root.contains("if store.blocksWorkspaceSwitch"))
+        #expect(
+            root.contains(
+                "Finish or retain the current recording before switching workspaces."
+            )
+        )
+        #expect(root.contains("presentFileImporter(.workspace)"))
+        #expect(
+            root.contains(
+                "fileImporterPurpose == .workspace"
+            )
+        )
+        #expect(root.contains("sidebarIsFocused = true"))
+        #expect(!shell.contains("selectedSection ="))
+        #expect(!shell.contains("MediaReviewStore"))
+        #expect(!shell.contains("MediaReviewSceneState"))
+
+        let production = try productionSource()
+        for omittedSurface in [
+            ".inspector(",
+            "Toggle Inspector",
+            "Label(\"Overview\"",
+            "Text(\"Overview\"",
+            "Button(\"Overview\"",
+            "Label(\"Meeting Setup\"",
+            "Text(\"Meeting Setup\"",
+            "Button(\"Meeting Setup\"",
+            "Label(\"Add Note\"",
+            "Text(\"Add Note\"",
+            "Button(\"Add Note\"",
+            "Label(\"Open Source\"",
+            "Text(\"Open Source\"",
+            "Button(\"Open Source\"",
+            "Label(\"Research",
+            "Label(\"Conversation"
+        ] {
+            #expect(!production.contains(omittedSurface))
+        }
     }
 
     @Test
@@ -331,5 +460,19 @@ struct MeetingBuddyRootViewStructureTests {
             contentsOf: repositoryRoot.appendingPathComponent(relativePath),
             encoding: .utf8
         )
+    }
+
+    private func productionSource() throws -> String {
+        let sources = repositoryRoot.appendingPathComponent("Sources")
+        let files = FileManager.default.enumerator(
+            at: sources,
+            includingPropertiesForKeys: nil
+        )
+        var combined = ""
+        while let file = files?.nextObject() as? URL {
+            guard file.pathExtension == "swift" else { continue }
+            combined += try String(contentsOf: file, encoding: .utf8)
+        }
+        return combined
     }
 }
