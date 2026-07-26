@@ -597,6 +597,14 @@ struct TranscriptPipelineIntegrationTests {
         )
         #expect(currentAssignments.first?.certainty == .confirmed)
         #expect(currentAssignments.first?.userConfirmed == true)
+        #expect(
+            review.evidenceRefs.map(\.revision.revisionID)
+                == [confirmation.2.revision.revisionID]
+        )
+        #expect(
+            review.evidenceRefs.first?.source
+                == confirmation.2.source
+        )
     }
 }
 

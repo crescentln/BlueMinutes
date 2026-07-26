@@ -219,6 +219,7 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(app.contains(".defaultSize(width: 1_080, height: 720)"))
         #expect(app.contains("SidebarCommands()"))
         #expect(app.contains("BlueMinutesShellCommands()"))
+        #expect(app.contains("BlueMinutesTranscriptCommands()"))
         #expect(!app.contains("WindowGroup"))
         #expect(!app.contains(".keyboardShortcut(\",\""))
         #expect(root.contains(".frame(minWidth: 860, minHeight: 600)"))
@@ -319,7 +320,7 @@ struct MeetingBuddyRootViewStructureTests {
     }
 
     @Test
-    func editorialShellUsesOnlyRealWorkspaceCommandsAndNoInspector() throws {
+    func editorialShellUsesOnlyRealWorkspaceAndTranscriptCommands() throws {
         let app = try source(
             "Sources/MeetingBuddyApp/MeetingBuddyApp.swift"
         )
@@ -328,6 +329,12 @@ struct MeetingBuddyRootViewStructureTests {
         )
         let shell = try source(
             "Sources/MeetingBuddyFeatures/Views/BlueMinutesMainWindowShell.swift"
+        )
+        let transcript = try source(
+            "Sources/MeetingBuddyFeatures/Views/TranscriptReviewView.swift"
+        )
+        let transcriptCommands = try source(
+            "Sources/MeetingBuddyFeatures/Views/BlueMinutesTranscriptCommands.swift"
         )
 
         #expect(app.contains("BlueMinutesShellCommands()"))
@@ -363,11 +370,17 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(!shell.contains("selectedSection ="))
         #expect(!shell.contains("MediaReviewStore"))
         #expect(!shell.contains("MediaReviewSceneState"))
+        #expect(app.contains("BlueMinutesTranscriptCommands()"))
+        #expect(transcript.contains(".inspector(isPresented:"))
+        #expect(transcript.contains("EvidenceInspectorPanel("))
+        #expect(
+            transcriptCommands.contains(
+                "@FocusedValue(\\.blueMinutesTranscriptCommandActions)"
+            )
+        )
 
         let production = try productionSource()
         for omittedSurface in [
-            ".inspector(",
-            "Toggle Inspector",
             "Label(\"Overview\"",
             "Text(\"Overview\"",
             "Button(\"Overview\"",

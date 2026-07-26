@@ -37,6 +37,7 @@ struct MeetingBuddyDesktopApp: App {
         .commands {
             SidebarCommands()
             BlueMinutesShellCommands()
+            BlueMinutesTranscriptCommands()
         }
 
         Settings {

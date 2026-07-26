@@ -487,7 +487,15 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
                 else { throw TranscriptCoverageError.publicationConflict }
                 return value
             }
-            let segmentIDs = Set(segments.map { $0.segmentID.canonicalString })
+            let segmentReferences = try Set(
+                segments.map {
+                    try SemanticRevisionReference(
+                        logicalID: $0.segmentID,
+                        revisionID:
+                            $0.revision.revisionID
+                    )
+                }
+            )
             let assignmentRows = try Row.fetchAll(
                 db,
                 sql: """
@@ -506,14 +514,33 @@ public final class SQLitePersistenceStore: SemanticRevisionRepository, MediaAsse
                 .filter { assignment in
                     assignment.meetingID == meetingID
                         && assignment.transcriptSegmentRevisions.contains {
-                            segmentIDs.contains($0.logicalID.canonicalString)
+                            segmentReferences.contains($0)
                         }
                 }
+            let evidenceReferences = Array(
+                Set(assignments.flatMap(\.evidenceRevisions))
+            ).sorted()
+            let evidenceRefs = try evidenceReferences.map {
+                reference -> EvidenceRefV1 in
+                guard reference.objectType == .evidenceRef,
+                      let value = try fetch(
+                          EvidenceRefV1.self,
+                          revisionID: reference.revisionID,
+                          in: db
+                      ),
+                      value.evidenceID.canonicalString
+                          == reference.logicalID.canonicalString
+                else {
+                    throw TranscriptCoverageError.publicationConflict
+                }
+                return value
+            }
             return TranscriptReviewBundle(
                 manifest: manifest,
                 transcriptSegments: segments,
                 translations: translations,
-                speakerAssignments: assignments
+                speakerAssignments: assignments,
+                evidenceRefs: evidenceRefs
             )
         }
     }
