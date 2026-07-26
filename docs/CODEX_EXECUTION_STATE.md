@@ -9,8 +9,9 @@ current_task: "011"
 current_status: accepted
 authorized_post_mvp_work:
   task: "public GitHub source publication and long-term maintenance foundation"
-  status: "v0.2.0_published_post_release_pull_request_20_in_progress"
+  status: "v0.2.0_published_post_release_pull_request_20_completed_ui_foundation_through_slice_c_completed"
   rollback_anchor: "5450a916172c07ec2b7054c76fa40c80db17692e"
+  live_repository_baseline: "protected main b651b0bd55892d266b968d038f370608eebc10db"
   public_name_status: "BlueMinutes selected by the maintainer; preliminary exact-name and affiliation-risk screen passed with normal trademark limitations"
   remote_publication_status: "https://github.com/crescentln/BlueMinutes is PUBLIC; the BlueMinutes-first README and v0.1.0 source-release material from Issue #8 and PR #9 were rebased into main at b45b38a, and the exact release baseline is verified by protected-main CI, signed-out HTTP, GitHub API, and anonymous Git access"
   public_conversion_status: "visibility conversion completed under explicit maintainer authorization at e6215373fbefa61f911ca4ee65c33852fd2dea76; main requires Pull Requests, strict Swift build and test status, linear history, conversation resolution, and administrator enforcement, while force-push and branch deletion are disabled"
@@ -28,12 +29,13 @@ authorized_post_mvp_work:
     release_blocker_implementation_commit: "f5e7ea99f56e40ac13b191b131e09efdd6ad0e21"
     release_url: "https://github.com/crescentln/BlueMinutes/releases/tag/v0.2.0"
     release_baseline: "f7a25572bc6c2940b99d9064f53ecdc7aaad352d"
-    post_release_issue: "Issue #19 at https://github.com/crescentln/BlueMinutes/issues/19"
-    post_release_pull_request: "PR #20 at https://github.com/crescentln/BlueMinutes/pull/20"
+    post_release_issue: "Issue #19 at https://github.com/crescentln/BlueMinutes/issues/19 closed automatically when post-release PR #20 was rebase-merged"
+    post_release_pull_request: "PR #20 at https://github.com/crescentln/BlueMinutes/pull/20 was rebase-merged at d786b3302a250a588e1c98e22a1b23ea3c37fd19"
+    post_release_merge_commit: "d786b3302a250a588e1c98e22a1b23ea3c37fd19"
     authorization_scope: "prepare the v0.2.0 source-release Pull Request, update CHANGELOG and release-facing README/version documentation, publish a source-only v0.2.0 GitHub Release after protected-main gates, then replace the README audience tagline and add public-safe synthetic screenshots in a separate post-release Pull Request; no binary build, signing, notarization, application upload, installation, deployment, or other distribution is authorized"
-    merge_authority_status: "explicit and conditional: the maintainer authorized rebase merges for PR #12, the v0.2.0 release-preparation Pull Request, and the post-release README/screenshot Pull Request only after all applicable gates pass"
+    merge_authority_status: "historical and completed: the maintainer authorized rebase merges for PR #12, the v0.2.0 release-preparation Pull Request, and post-release PR #20 only after all applicable gates passed"
     bundle_version_status: "Configuration/MeetingBuddy-Info.plist remains the separately gated 0.1.0 internal-alpha application-bundle version because this is a source-tree release and the historical 0.1.0-internal-alpha packaging/verifier chain is not being promoted or altered"
-    next_gate: "require exact-head CI, CodeQL, review, CLEAN/MERGEABLE state, and zero unresolved threads on post-release PR #20; rebase-merge with the exact expected head only while every gate remains green; require exact new-main CI and CodeQL; then stop for a new user-authorized initiative"
+    next_gate: "post-release PR #20 and its protected-main reconciliation are complete; all associated review, CI, CodeQL, conversation, merge, and post-merge gates are historical completed work, and any later initiative requires fresh explicit maintainer authorization"
 post_mvp_initiatives:
   blue_minutes_meeting_research:
     title: "Blue Minutes Meeting / Research integration"
@@ -58,7 +60,48 @@ post_mvp_initiatives:
     audit_baseline: "d473b7037d7014ef0ae4e18d2c72463847347d8e"
     rollback_anchor: "c30d08ed85bcac736b55d1f39fdf250b1e2b6f44"
     review_remediation_rollback_anchor: "8fc9b1029b9a8f664b6fe9339f4a87c1a3a440c4"
-    next_gate: "v0.2.0 is published source-only after PR #18 and exact release-main gates passed; complete the separately authorized post-release PR #20 review/CI/CodeQL/conversation/rebase/post-merge gates, then stop because notarization, binary upload, installation, deployment, distribution, and every later initiative remain separately gated"
+    next_gate: "v0.2.0 and the post-release presentation update are complete through rebase-merged PR #20; Change Groups 1 and 2 remain completed historical work, and no later Research phase, UI slice, notarization, binary upload, installation, deployment, distribution, or other initiative is authorized"
+  blue_minutes_ui_foundation:
+    title: "BlueMinutes UI Foundation"
+    relationship_to_meeting_research: "independent post-MVP UI initiative; it does not reopen or extend ADR-0018's completed Meeting/Research Phase 1"
+    protected_main_progression:
+      - pull_request: 20
+        title: "docs: add post-release BlueMinutes product preview"
+        scope_kind: "completed post-release presentation and execution-ledger documentation"
+        merge_commit: "d786b3302a250a588e1c98e22a1b23ea3c37fd19"
+        state: merged
+      - pull_request: 22
+        title: "docs: establish BlueMinutes UI Design Language v1"
+        scope_kind: "completed documentation-only UI design contract"
+        merge_commit: "9821708e72dc942ee416182d76b4c2bf903e83f3"
+        state: merged
+      - pull_request: 24
+        title: "feat: establish BlueMinutes UI foundation state ownership"
+        scope_kind: "completed implementation Slice A for state and ownership safety"
+        merge_commit: "444a20c7ca545acab550ab99ef2ae0fd681df476"
+        state: merged
+      - pull_request: 26
+        title: "UI Foundation Future Slice B: consume design-system primitives"
+        scope_kind: "completed implementation Slice B for consumed design-system primitives"
+        merge_commit: "25a20ecfc73c8d405967530af351a9edaf703e82"
+        state: merged
+      - pull_request: 28
+        title: "UI Foundation Future Slice C: add native Settings foundation"
+        scope_kind: "completed implementation Slice C for native scene and Settings foundations"
+        merge_commit: "d164c075ba12b74596ddb6d7e109d07649a8b0a8"
+        state: merged
+      - pull_request: 29
+        title: "docs: document low-load local maintenance workflow"
+        scope_kind: "completed documentation-only maintenance-policy clarification"
+        merge_commit: "b651b0bd55892d266b968d038f370608eebc10db"
+        state: merged
+    live_repository_baseline: "protected main b651b0bd55892d266b968d038f370608eebc10db"
+    future_slice_d:
+      title: "Editorial main-window shell"
+      status: not_started
+      authorization_status: not_authorized
+      next_eligible: false
+    next_gate: "none; Future Slice D is not started, not authorized, and not the next eligible task; any later initiative requires fresh explicit maintainer authorization"
 accepted_tasks:
   - "001"
   - "002"
@@ -79,8 +122,8 @@ accepted_tasks:
   - "011"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "3f9bea04a989228deb9dce5fd281b9b6ebc090be (post-release product-preview implementation; this execution-ledger reconciliation is its immediate child)"
-working_tree_status_summary: "protected release baseline f7a25572bc6c2940b99d9064f53ecdc7aaad352d contains the authorized PR #18 rebase merge; exact-main CI run 30060770585 and CodeQL run 30060770471 pass; unsigned annotated tag v0.2.0 peels to that exact commit; the latest regular Release is publicly reachable with zero uploaded assets. Issue #19 and ready PR #20 track the separately authorized post-release presentation change on codex/post-release-readme-screenshots: implementation commit 3f9bea04a989228deb9dce5fd281b9b6ebc090be changes exactly README, ROADMAP, PublicBrandPresentationTests, and two previously captured 2384x1664 PNG screenshots from a disposable synthetic empty workspace; the focused 3-test suite, warning-as-error build, complete 286-test/48-suite run, 27 local-link checks, image/privacy/artifact checks, and whitespace gate pass. PR #20 exact-head CI, CodeQL, review, conversation, mergeability, rebase merge, and post-merge main gates remain pending; no Developer ID signing, notarization, binary upload, installation, deployment, or application distribution has been performed"
+last_known_git_head: "b651b0bd55892d266b968d038f370608eebc10db"
+working_tree_status_summary: "branch codex/30-execution-ledger-reconciliation was created from exact protected main b651b0bd55892d266b968d038f370608eebc10db with a clean tracked worktree; its only authorized and current uncommitted change is docs/CODEX_EXECUTION_STATE.md. Protected main records completed PR #20 at d786b3302a250a588e1c98e22a1b23ea3c37fd19, documentation-only UI contract PR #22 at 9821708e72dc942ee416182d76b4c2bf903e83f3, implementation Slices A/B/C through PR #24 at 444a20c7ca545acab550ab99ef2ae0fd681df476, PR #26 at 25a20ecfc73c8d405967530af351a9edaf703e82, and PR #28 at d164c075ba12b74596ddb6d7e109d07649a8b0a8, followed by documentation-only maintenance-policy PR #29 at the live baseline. Future Slice D is not started or authorized. No Developer ID signing, notarization, binary upload, installation, deployment, or application distribution has been performed"
 last_verification_commands:
   - "Codex Security standard repository scan ec5ba727-af63-4f1a-bd8c-feb3001ed3a2 with 134/134 receipts, validation, reconciliation, attack-path analysis, sealed manifest/findings/coverage/report/SARIF, and completion indexing"
   - "swift test --scratch-path <new temporary directory> -Xswiftc -warnings-as-errors"
@@ -122,7 +165,11 @@ last_verification_commands:
   - "PR #18 release-note reconciliation: CHANGELOG and v0.2.0 release notes now describe the bounded cancellation optimistic-lock retry, public-brand tests bind the release copy, ROADMAP no longer claims publication before the Release exists, execution-ledger YAML validates, and the complete Pull Request remains limited to seven source/test/documentation paths"
   - "authorized PR #18 merge and v0.2.0 publication: final exact-head CI run 30059114394 and CodeQL run 30059112687; expected-head rebase merge into three single-parent commits ending at f7a25572bc6c2940b99d9064f53ecdc7aaad352d; exact new-main CI run 30060770585 and CodeQL run 30060770471; unsigned annotated tag creation and tag-peel inspection; regular/latest Release creation with zero uploaded assets; signed-out HTTP 200 and clean-tree verification"
   - "post-release product-preview local gate: visually re-review the previously captured Local Media and UN Web TV Metadata PNGs; verify 2384x1664 dimensions, sub-1-MiB size, no embedded user-path/private-key/password string, and no real meeting or user data; resolve 27 local Markdown/HTML targets; run 3 PublicBrandPresentationTests, warning-as-error build, complete 286-test/48-suite run, Package.swift/Package.resolved stability, exact five-path scope, and whitespace checks"
+  - "Issue #30 docs-only ledger gate: parse the single fenced YAML document with Psych; recursively reject duplicate keys; assert required top-level fields, frozen accepted Tasks 001-011, exact PR #20/#22/#24/#26/#28/#29 progression, protected-main head, and Future Slice D boundaries; check the Markdown heading/fences/local links, exact changed path and unstaged status, branch point, git diff --check, stale PR #20 wording, and bounded added-line sensitive-content patterns"
+  - "Issue #30 final read-only live refresh: git ls-remote origin refs/heads/main; for each PR #20/#22/#24/#26/#28/#29, run gh pr view <number> --json number,state,mergeCommit and compare the returned state and merge commit with the issue"
 last_verification_results:
+  - "Issue #30 local docs-only acceptance gate passes on codex/30-execution-ledger-reconciliation: the YAML parses with no duplicate keys and all required operational fields; accepted Tasks 001-011 remain exact; the six-PR protected-main progression and Future Slice D authorization boundary match the issue; the single H1, two fences, zero Markdown link targets, exact one-file unstaged allowlist, exact b651b0bd55892d266b968d038f370608eebc10db branch point, whitespace, stale-state, and bounded sensitive-content checks pass. Swift build/test and native/manual validation are not applicable because only docs/CODEX_EXECUTION_STATE.md changes; Xcode was not opened and no executable, configuration, schema, migration, entitlement, asset, release artifact, or user-data path changed"
+  - "Issue #30 final read-only refresh confirms origin/main at b651b0bd55892d266b968d038f370608eebc10db and PR #20/#22/#24/#26/#28/#29 all MERGED at d786b3302a250a588e1c98e22a1b23ea3c37fd19, 9821708e72dc942ee416182d76b4c2bf903e83f3, 444a20c7ca545acab550ab99ef2ae0fd681df476, 25a20ecfc73c8d405967530af351a9edaf703e82, d164c075ba12b74596ddb6d7e109d07649a8b0a8, and b651b0bd55892d266b968d038f370608eebc10db respectively"
   - "post-MVP documentation reconciliation is committed at 5cd59015277814206ca7328f6cfb89e42c252f4c after the authorized metadata-preserving private-path and GitHub-noreply history sanitizations: exactly 20 governance/architecture/ADR documents changed, all 35 checked local link targets resolve, the stale-reference and secret-pattern gates are clear, and the tracked working tree was clean before this ledger-only refresh; no production code, test, dependency, release artifact, push, tag, release, or distribution changed"
   - "the final new-scratch full run passes 242 tests in 42 suites with warnings as errors; the ordinary run truthfully skips three opt-in installed-model routes, and the separate new-scratch synthetic-only opt-in run passes all three in 6.016 seconds"
   - "the 10,000-published-Position gate reports a 9.081141167-second rebuild and 0.319461-second first filtered page; the three-hour transcript retry/restart and recording interruption/recovery suites pass"
@@ -170,7 +217,7 @@ last_verification_results:
   - "local v0.2.0 release-preparation commit 3832df2f71a83f86038bdf626ef8221f7a5abda0 changes exactly nine documentation/presentation-test paths, adds no binary or generated application asset, and passes two focused public-brand tests plus the complete 284-test/48-suite warning-as-error run with zero failures and three explicit installed-model opt-in skips"
   - "the v0.2.0 release copy describes only a source-tree compatibility and safety foundation: all four Research integration capabilities remain disabled, schema v10 and GRDB 7.11.1 are unchanged, and no Research UI, provider, connector, credential, persistence, migration, executor, CLI/MCP surface, network destination, file-layout change, or user-data behavior is claimed"
   - "v0.2.0 is a regular, latest, non-draft, non-prerelease source Release whose unsigned annotated tag peels to exact protected-main commit f7a25572bc6c2940b99d9064f53ecdc7aaad352d; exact-main CI and CodeQL pass, signed-out HTTP returns 200, and the Release has zero uploaded assets"
-  - "the development bundle remains version 0.1.0 internal alpha and was not promoted, packaged, Developer ID-signed, notarized, uploaded, installed, or distributed; post-release PR #20 adds only the maintainer-approved audience line, two verified public-safe synthetic screenshots, presentation tests, ROADMAP truth, and this execution-ledger reconciliation"
+  - "the development bundle remains version 0.1.0 internal alpha and was not promoted, packaged, Developer ID-signed, notarized, uploaded, installed, or distributed; merged PR #20 added only the maintainer-approved audience line, two verified public-safe synthetic screenshots, presentation tests, ROADMAP truth, and the post-release execution-ledger reconciliation recorded at d786b3302a250a588e1c98e22a1b23ea3c37fd19"
 open_P0_decisions: []
 open_P1_decisions: []
 known_out_of_scope_findings:
@@ -198,6 +245,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
-next_eligible_task: "there is no next numbered MVP task; complete post-release PR #20 exact-head review/CI/CodeQL/conversation gates, use the authorized rebase merge only after every gate passes, require exact new-main CI and CodeQL, then stop for new user authority; binary signing, notarization, upload, installation, deployment, distribution, and every later product initiative remain unauthorized"
-last_updated_at: "2026-07-24T02:46:30Z"
+next_eligible_task: "there is no next numbered MVP task; Future Slice D is not started, not authorized, and not the next eligible task; any later initiative requires fresh explicit maintainer authorization, while binary signing, notarization, upload, installation, deployment, distribution, and every other product initiative remain unauthorized"
+last_updated_at: "2026-07-26T00:05:58Z"
 ```
