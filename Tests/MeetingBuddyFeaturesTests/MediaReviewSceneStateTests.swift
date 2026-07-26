@@ -22,6 +22,20 @@ struct MediaReviewSceneStateTests {
     }
 
     @Test @MainActor
+    func unWebTVAuthorizationNormalizesSurroundingWhitespace() {
+        let state = MediaReviewSceneState()
+        let canonicalURL =
+            "https://webtv.un.org/en/asset/synthetic/whitespace"
+        state.unWebTVURL = " \n\(canonicalURL)\t "
+
+        #expect(state.validatedUNWebTVURL?.absoluteString == canonicalURL)
+
+        state.unWebTVNetworkAuthorized = true
+
+        #expect(state.unWebTVNetworkAuthorized)
+    }
+
+    @Test @MainActor
     func workspaceChangeResetsEverySceneOwnedDraftAndTransientAuthorization() throws {
         let state = MediaReviewSceneState()
         state.selectedSection = .briefing
