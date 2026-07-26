@@ -301,65 +301,9 @@ struct EvidenceInspectorPanel: View {
         let isSelected =
             revisionID
             == selectedEvidenceRevisionID
-        return VStack(alignment: .leading, spacing: 8) {
-            EvidenceBadge(
-                title: label(item.evidenceKind.rawValue),
-                systemImage: "link.circle"
-            )
-            LabeledContent(
-                "Evidence logical ID",
-                value: item.evidenceID.canonicalString
-            )
-            LabeledContent(
-                "Evidence revision",
-                value: item.revision.revisionID.canonicalString
-            )
-            LabeledContent(
-                "Created by",
-                value: label(item.revision.createdBy.encodedValue)
-            )
-            LabeledContent(
-                "Classification",
-                value: label(
-                    item.revision.dataClassification.encodedValue
-                )
-            )
-            LabeledContent(
-                "Exact source object",
-                value: label(item.source.objectType.encodedValue)
-            )
-            LabeledContent(
-                "Exact source logical ID",
-                value: item.source.logicalID.canonicalString
-            )
-            LabeledContent(
-                "Exact source revision",
-                value: item.source.revisionID.canonicalString
-            )
-            LabeledContent(
-                "Locator",
-                value: locationLabel(item.location)
-            )
-            LabeledContent(
-                "Confidence",
-                value: confidenceLabel(item.confidence)
-            )
-            LabeledContent(
-                "Excerpt language",
-                value: item.excerpt.language.value
-            )
-            LabeledContent(
-                "Translation status",
-                value: label(
-                    item.excerpt.translationStatus.encodedValue
-                )
-            )
-            Text(item.excerpt.text)
-                .font(.callout)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel("Evidence excerpt")
-        }
+        return EvidenceRefDetailsView(
+            evidence: item
+        )
         .padding(10)
         .background(
             isSelected
@@ -395,6 +339,98 @@ struct EvidenceInspectorPanel: View {
             $accessibilityFocusedEvidenceRevisionID,
             equals: revisionID
         )
+    }
+
+    private func frameRangeLabel(_ range: MediaFrameRange) -> String {
+        "canonical frames \(range.startFrame)..<\(range.endFrame)"
+    }
+
+    private func timeLabel(_ range: MediaTimeRange) -> String {
+        let start = Double(range.startMilliseconds) / 1_000
+        let end = Double(range.endMilliseconds) / 1_000
+        return
+            "\(start.formatted(.number.precision(.fractionLength(1))))–\(end.formatted(.number.precision(.fractionLength(1)))) s"
+    }
+
+    private func confidenceLabel(
+        _ confidence: ConfidenceScore
+    ) -> String {
+        let percent = Double(confidence.millionths) / 10_000
+        return percent.formatted(
+            .number.precision(.fractionLength(1))
+        ) + "%"
+    }
+
+    private func label(_ rawValue: String) -> String {
+        rawValue
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+    }
+}
+
+struct EvidenceRefDetailsView: View {
+    let evidence: EvidenceRefV1
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            EvidenceBadge(
+                title: label(evidence.evidenceKind.rawValue),
+                systemImage: "link.circle"
+            )
+            LabeledContent(
+                "Evidence logical ID",
+                value: evidence.evidenceID.canonicalString
+            )
+            LabeledContent(
+                "Evidence revision",
+                value: evidence.revision.revisionID.canonicalString
+            )
+            LabeledContent(
+                "Created by",
+                value: label(evidence.revision.createdBy.encodedValue)
+            )
+            LabeledContent(
+                "Classification",
+                value: label(
+                    evidence.revision.dataClassification.encodedValue
+                )
+            )
+            LabeledContent(
+                "Exact source object",
+                value: label(evidence.source.objectType.encodedValue)
+            )
+            LabeledContent(
+                "Exact source logical ID",
+                value: evidence.source.logicalID.canonicalString
+            )
+            LabeledContent(
+                "Exact source revision",
+                value: evidence.source.revisionID.canonicalString
+            )
+            LabeledContent(
+                "Locator",
+                value: locationLabel(evidence.location)
+            )
+            LabeledContent(
+                "Confidence",
+                value: confidenceLabel(evidence.confidence)
+            )
+            LabeledContent(
+                "Excerpt language",
+                value: evidence.excerpt.language.value
+            )
+            LabeledContent(
+                "Translation status",
+                value: label(
+                    evidence.excerpt.translationStatus.encodedValue
+                )
+            )
+            Text(evidence.excerpt.text)
+                .font(.callout)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Evidence excerpt")
+        }
     }
 
     private func locationLabel(
@@ -445,10 +481,6 @@ struct EvidenceInspectorPanel: View {
 
     private func textRangeLabel(_ range: UTF8TextRange) -> String {
         "UTF-8 bytes \(range.startOffset)..<\(range.startOffset + range.length)"
-    }
-
-    private func frameRangeLabel(_ range: MediaFrameRange) -> String {
-        "canonical frames \(range.startFrame)..<\(range.endFrame)"
     }
 
     private func timeLabel(_ range: MediaTimeRange) -> String {

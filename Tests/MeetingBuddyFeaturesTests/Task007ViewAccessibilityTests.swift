@@ -42,6 +42,30 @@ struct Task007ViewAccessibilityTests {
         let analysis = try source("AnalysisReviewView.swift")
         #expect(analysis.contains("Stale after correction"))
         #expect(analysis.contains("No-outbound mode"))
+        #expect(
+            analysis.contains(
+                "AnalysisEvidenceInspectorPanel"
+            )
+        )
+        #expect(analysis.contains("Unresolved exact evidence"))
+        let analysisInspector = try source(
+            "AnalysisEvidenceInspectorPanel.swift"
+        )
+        #expect(
+            analysisInspector.contains(
+                "BlueMinutes.Analysis.EvidenceInspector"
+            )
+        )
+        #expect(
+            analysisInspector.contains(
+                "Whole-ledger human confirmation"
+            )
+        )
+        #expect(
+            analysisInspector.contains(
+                ".textSelection(.enabled)"
+            )
+        )
         let transcript = try source("TranscriptReviewView.swift")
         #expect(transcript.contains("No-outbound mode"))
     }

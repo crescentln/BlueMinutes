@@ -472,6 +472,7 @@ struct BlueMinutesSettingsTests {
         #expect(try productionSourcePaths(containing: "NSUserActivity").isEmpty)
         #expect(
             try productionSourcePaths(containing: ".inspector(") == [
+                "Sources/MeetingBuddyFeatures/Views/AnalysisReviewView.swift",
                 "Sources/MeetingBuddyFeatures/Views/TranscriptReviewView.swift"
             ]
         )
@@ -486,6 +487,17 @@ struct BlueMinutesSettingsTests {
         )
         #expect(!transcriptReviewSource.contains("@SceneStorage"))
         #expect(!transcriptReviewSource.contains("@AppStorage"))
+
+        let analysisReviewSource = try source(
+            "Sources/MeetingBuddyFeatures/Views/AnalysisReviewView.swift"
+        )
+        #expect(
+            analysisReviewSource.contains(
+                "@State private var inspectorIsPresented = false"
+            )
+        )
+        #expect(!analysisReviewSource.contains("@SceneStorage"))
+        #expect(!analysisReviewSource.contains("@AppStorage"))
 
         let preferenceSources = try [
             source(

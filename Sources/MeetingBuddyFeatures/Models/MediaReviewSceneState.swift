@@ -302,6 +302,8 @@ public final class MediaReviewSceneState {
         guard pendingNavigation == nil,
               editorSaveInFlight == nil,
               workspaceChangeInFlight == nil,
+              analysis.isDirty,
+              analysis.isSourceRevisionCurrent,
               let revisionID = analysis.positionRevisionID
         else { return nil }
         return beginEditorSave(
@@ -539,7 +541,10 @@ public final class MediaReviewSceneState {
                 )
             }
         }
-        if analysis.isDirty, let revisionID = analysis.positionRevisionID {
+        if analysis.isDirty,
+           analysis.isSourceRevisionCurrent,
+           let revisionID = analysis.positionRevisionID
+        {
             return .position(
                 revisionID: revisionID,
                 positionType: analysis.positionType,
@@ -821,6 +826,7 @@ public final class TranscriptEditorDraft {
 public final class AnalysisEditorDraft {
     public private(set) var selectedPositionID: PositionID?
     public private(set) var positionRevisionID: RevisionID?
+    public private(set) var isSourceRevisionCurrent = true
     public var positionType: PositionType = .uncertain
     public var statement = ""
     public var reservations = ""
@@ -840,26 +846,37 @@ public final class AnalysisEditorDraft {
 
     func reconcile(with review: AnalysisReviewBundle?) {
         guard let review, !review.positions.isEmpty else {
-            if !isDirty { reset() }
+            if isDirty {
+                isSourceRevisionCurrent = false
+            } else {
+                reset()
+            }
             return
         }
         let selectedPosition = review.positions.first {
             $0.positionID == selectedPositionID
         }
         if selectedPosition == nil, selectedPositionID != nil, isDirty {
+            isSourceRevisionCurrent = false
             return
         }
         let position = selectedPosition ?? review.positions[0]
         if selectedPositionID != position.positionID {
             select(position.positionID)
         }
-        guard !isDirty else { return }
+        guard !isDirty else {
+            isSourceRevisionCurrent =
+                positionRevisionID
+                    == position.revision.revisionID
+            return
+        }
         load(position)
     }
 
     func select(_ positionID: PositionID?) {
         selectedPositionID = positionID
         positionRevisionID = nil
+        isSourceRevisionCurrent = true
         positionType = .uncertain
         statement = ""
         reservations = ""
@@ -887,6 +904,7 @@ public final class AnalysisEditorDraft {
            })
         {
             positionRevisionID = updatedPosition.revision.revisionID
+            isSourceRevisionCurrent = true
         }
         savedPositionType = positionType
         savedStatement = statement
@@ -926,6 +944,7 @@ public final class AnalysisEditorDraft {
     ) {
         selectedPositionID = positionID
         positionRevisionID = revisionID
+        isSourceRevisionCurrent = true
         self.positionType = positionType
         self.statement = statement
         self.reservations = reservations

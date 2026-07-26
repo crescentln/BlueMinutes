@@ -6,6 +6,11 @@ import SwiftUI
 struct AnalysisReviewView: View {
     @Bindable var store: MediaReviewStore
     @Bindable var sceneState: MediaReviewSceneState
+    @State private var inspectorIsPresented = false
+    @State private var evidenceSelection:
+        AnalysisEvidenceSelection?
+    @State private var presentationCache:
+        AnalysisReviewPresentationCache?
 
     var body: some View {
         Group {
@@ -23,9 +28,13 @@ struct AnalysisReviewView: View {
         }
         .onChange(of: store.analysisReview?.ledger.ledgerID) { _, _ in
             sceneState.analysis.reconcile(with: store.analysisReview)
+            evidenceSelection = nil
+            inspectorIsPresented = false
         }
         .onChange(of: store.analysisReview?.positions.map(\.revision.revisionID)) { _, _ in
             sceneState.analysis.reconcile(with: store.analysisReview)
+            evidenceSelection = nil
+            inspectorIsPresented = false
         }
     }
 
@@ -131,16 +140,73 @@ struct AnalysisReviewView: View {
     }
 
     private func reviewWorkspace(_ review: AnalysisReviewBundle) -> some View {
-        ScrollView {
+        let cacheKey = AnalysisReviewPresentationCacheKey(
+            review: review
+        )
+        let presentation: AnalysisReviewPresentation
+        if let presentationCache,
+           presentationCache.key == cacheKey
+        {
+            presentation = presentationCache.presentation
+        } else {
+            presentation = AnalysisReviewPresentation(
+                review: review
+            )
+        }
+        let selectedEvidence = evidenceSelection.flatMap {
+            presentation.evidence(
+                for: $0.evidenceReference
+            )
+        }
+
+        return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                EditorialSectionHeader(
+                    "Analysis Review",
+                    detail:
+                        "Inspect exact evidence, confidence, provenance, and whole-ledger confirmation before publishing a correction."
+                )
                 analysisConfirmationCard(review)
                 coverageHeader(review)
-                delegationCards(review)
-                interventionCards(review)
-                positionEditor(review)
+                delegationCards(
+                    review,
+                    presentation: presentation
+                )
+                interventionCards(
+                    review,
+                    presentation: presentation
+                )
+                positionEditor(
+                    review,
+                    presentation: presentation
+                )
             }
             .padding(24)
             .frame(maxWidth: 1_020, alignment: .leading)
+        }
+        .inspector(isPresented: $inspectorIsPresented) {
+            AnalysisEvidenceInspectorPanel(
+                selection: evidenceSelection,
+                evidence: selectedEvidence,
+                ledgerIsHumanConfirmed: review.isHumanConfirmed
+            )
+            .inspectorColumnWidth(
+                min: 300,
+                ideal: 360,
+                max: 480
+            )
+        }
+        .task(id: cacheKey) {
+            guard presentationCache?.key != cacheKey else {
+                return
+            }
+            if presentationCache != nil {
+                evidenceSelection = nil
+                inspectorIsPresented = false
+            }
+            presentationCache = AnalysisReviewPresentationCache(
+                review: review
+            )
         }
     }
 
@@ -206,31 +272,65 @@ struct AnalysisReviewView: View {
         }
     }
 
-    private func delegationCards(_ review: AnalysisReviewBundle) -> some View {
+    private func delegationCards(
+        _ review: AnalysisReviewBundle,
+        presentation: AnalysisReviewPresentation
+    ) -> some View {
         GroupBox("Delegation-position cards") {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(review.delegationPositionCards, id: \.revision.revisionID) { card in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(representedName(card.representedEntityRevision, in: review))
+                            Text(
+                                representedName(
+                                    card.representedEntityRevision,
+                                    presentation: presentation
+                                )
+                            )
                                 .font(.headline)
-                            Text("· " + issueName(card.issueRevision, in: review))
+                            Text(
+                                "· "
+                                    + issueName(
+                                        card.issueRevision,
+                                        presentation: presentation
+                                    )
+                            )
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            if cardIsStale(card, in: review) {
+                            if presentation.isStale(card) {
                                 Label("Stale after correction", systemImage: "exclamationmark.triangle")
                                     .foregroundStyle(.orange)
                             } else {
                                 Text(card.reviewStatus.encodedValue)
-                                    .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondary)
                             }
                         }
-                        claimView("Overall position", claim: card.overallPosition)
-                        claimsView("Reservations", claims: card.reservations)
-                        claimsView("Conditions", claims: card.conditions)
+                        claimView(
+                            "Overall position",
+                            claim: card.overallPosition,
+                            presentation: presentation
+                        )
+                        claimsView(
+                            "Reservations",
+                            claims: card.reservations,
+                            presentation: presentation
+                        )
+                        claimsView(
+                            "Conditions",
+                            claims: card.conditions,
+                            presentation: presentation
+                        )
                         LabeledContent(
                             "Exact inputs",
                             value: "\(card.positionRevisions.count) position · \(card.speakingCapacityRevisions.count) capacity revisions"
+                        )
+                        .font(.caption)
+                        LabeledContent(
+                            "Candidate provenance",
+                            value: label(
+                                card.revision.createdBy
+                                    .encodedValue
+                            )
                         )
                         .font(.caption)
                     }
@@ -243,7 +343,10 @@ struct AnalysisReviewView: View {
         }
     }
 
-    private func interventionCards(_ review: AnalysisReviewBundle) -> some View {
+    private func interventionCards(
+        _ review: AnalysisReviewBundle,
+        presentation: AnalysisReviewPresentation
+    ) -> some View {
         GroupBox("Intervention cards") {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(review.interventionCards, id: \.revision.revisionID) { card in
@@ -254,10 +357,27 @@ struct AnalysisReviewView: View {
                             Text("\(time(card.timeRange.startMilliseconds))–\(time(card.timeRange.endMilliseconds))")
                                 .foregroundStyle(.secondary)
                         }
-                        claimView("Summary", claim: card.shortSummary)
+                        claimView(
+                            "Summary",
+                            claim: card.shortSummary,
+                            presentation: presentation
+                        )
+                        claimsView(
+                            "Notable wording",
+                            claims: card.notableWording,
+                            presentation: presentation
+                        )
                         LabeledContent(
                             "Typed objects",
                             value: "\(card.positionRevisions.count) position · \(card.commitmentRevisions.count) commitment · \(card.decisionRevisions.count) decision"
+                        )
+                        .font(.caption)
+                        LabeledContent(
+                            "Candidate provenance",
+                            value: label(
+                                card.revision.createdBy
+                                    .encodedValue
+                            )
                         )
                         .font(.caption)
                     }
@@ -267,11 +387,14 @@ struct AnalysisReviewView: View {
         }
     }
 
-    private func positionEditor(_ review: AnalysisReviewBundle) -> some View {
+    private func positionEditor(
+        _ review: AnalysisReviewBundle,
+        presentation: AnalysisReviewPresentation
+    ) -> some View {
         GroupBox("Inspect and correct positions") {
             HSplitView {
                 List(
-                    review.positions,
+                    presentation.positions,
                     id: \.revision.revisionID,
                     selection: positionSelection
                 ) { position in
@@ -285,19 +408,104 @@ struct AnalysisReviewView: View {
                 }
                 .frame(minWidth: 260, idealWidth: 320, minHeight: 360)
 
-                if let position = selectedPosition(in: review) {
+                if let position = presentation.position(
+                    id: sceneState.analysis.selectedPositionID
+                ) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
+                            EditorialSectionHeader(
+                                "Position Dossier",
+                                detail:
+                                    "The published revision remains immutable. Saving creates one exact user-confirmed successor."
+                            )
                             LabeledContent("Actor revision", value: short(position.actorRevision.logicalID.canonicalString))
-                            LabeledContent("Represented entity", value: representedName(position.representedEntityRevision, in: review))
+                            LabeledContent(
+                                "Represented entity",
+                                value: representedName(
+                                    position
+                                        .representedEntityRevision,
+                                    presentation: presentation
+                                )
+                            )
                             LabeledContent("Speaking capacity revision", value: short(position.speakingCapacityRevision.revisionID.canonicalString))
-                            LabeledContent("Issue", value: issueName(position.issueRevision, in: review))
+                            LabeledContent(
+                                "Issue",
+                                value: issueName(
+                                    position.issueRevision,
+                                    presentation: presentation
+                                )
+                            )
                             LabeledContent("Claim taxonomy", value: position.statement.taxonomy.encodedValue)
                             LabeledContent("Evidence support", value: position.statement.supportStatus.encodedValue)
+                            LabeledContent(
+                                "Claim confidence",
+                                value: confidenceLabel(
+                                    position.statement.confidence
+                                )
+                            )
+                            LabeledContent(
+                                "Candidate provenance",
+                                value: label(
+                                    position.revision.createdBy
+                                        .encodedValue
+                                )
+                            )
+                            LabeledContent(
+                                "Whole-ledger human confirmation",
+                                value: review.isHumanConfirmed
+                                    ? "confirmed"
+                                    : "not confirmed"
+                            )
                             LabeledContent("Evidence revisions", value: String(position.statement.evidenceRevisions.count))
                             LabeledContent("Comparison state", value: position.comparisonState.encodedValue)
                             LabeledContent("Revision", value: short(position.revision.revisionID.canonicalString))
                                 .monospaced()
+                            evidenceAnchors(
+                                context: "Position statement",
+                                claim: position.statement,
+                                presentation: presentation
+                            )
+                            claimsView(
+                                "Published reservations",
+                                claims: position.reservations,
+                                presentation: presentation
+                            )
+                            claimsView(
+                                "Published conditions",
+                                claims: position.conditions,
+                                presentation: presentation
+                            )
+                            if !sceneState.analysis
+                                .isSourceRevisionCurrent
+                            {
+                                WorkflowStateView(
+                                    title:
+                                        "Draft source revision changed",
+                                    detail:
+                                        "This draft is based on an earlier Position revision. Keep or copy the text, then review the current revision before saving.",
+                                    systemImage:
+                                        "exclamationmark.triangle",
+                                    tone: .failure
+                                )
+                            } else if sceneState.analysis.isDirty {
+                                WorkflowStateView(
+                                    title: "Unpublished correction draft",
+                                    detail:
+                                        "Saving will create one immutable user-confirmed Position revision.",
+                                    systemImage:
+                                        "square.and.pencil",
+                                    tone: .warning
+                                )
+                            } else {
+                                WorkflowStateView(
+                                    title: "Published revision loaded",
+                                    detail:
+                                        "Edit a field before creating a successor revision.",
+                                    systemImage:
+                                        "checkmark.circle",
+                                    tone: .success
+                                )
+                            }
                             Picker(
                                 "Position type",
                                 selection: $sceneState.analysis.positionType
@@ -344,6 +552,14 @@ struct AnalysisReviewView: View {
                             .disabled(
                                 store.isWorking
                                     || !review.isHumanConfirmed
+                                    || !sceneState.analysis
+                                        .isDirty
+                                    || !sceneState.analysis
+                                        .isSourceRevisionCurrent
+                                    || sceneState
+                                        .isInteractionLocked
+                                    || sceneState
+                                        .isNavigationConfirmationPresented
                                     || sceneState.analysis.statement
                                         .trimmingCharacters(in: .whitespacesAndNewlines)
                                         .isEmpty
@@ -365,66 +581,149 @@ struct AnalysisReviewView: View {
         }
     }
 
-    private func claimView(_ label: String, claim: EvidenceLinkedClaim) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(claim.text)
-            Text("\(claim.taxonomy.encodedValue) · \(claim.supportStatus.encodedValue) · \(claim.evidenceRevisions.count) evidence")
-                .font(.caption2)
+    private func claimView(
+        _ title: String,
+        claim: EvidenceLinkedClaim,
+        presentation: AnalysisReviewPresentation
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.caption)
                 .foregroundStyle(.secondary)
+            Text(claim.text)
+            HStack(spacing: 8) {
+                EvidenceBadge(
+                    title: label(claim.taxonomy.encodedValue),
+                    systemImage: "quote.bubble"
+                )
+                EvidenceBadge(
+                    title:
+                        "\(label(claim.supportStatus.encodedValue)) support",
+                    systemImage: "checkmark.shield"
+                )
+                EvidenceBadge(
+                    title:
+                        "\(confidenceLabel(claim.confidence)) confidence",
+                    systemImage: "gauge.with.dots.needle.50percent"
+                )
+            }
+            evidenceAnchors(
+                context: title,
+                claim: claim,
+                presentation: presentation
+            )
         }
     }
 
     @ViewBuilder
-    private func claimsView(_ label: String, claims: [EvidenceLinkedClaim]) -> some View {
+    private func claimsView(
+        _ title: String,
+        claims: [EvidenceLinkedClaim],
+        presentation: AnalysisReviewPresentation
+    ) -> some View {
         if !claims.isEmpty {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(label).font(.caption).foregroundStyle(.secondary)
-                ForEach(Array(claims.enumerated()), id: \.offset) { _, claim in
-                    Text("• " + claim.text)
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(
+                    Array(claims.enumerated()),
+                    id: \.offset
+                ) { index, claim in
+                    claimView(
+                        claims.count == 1
+                            ? title
+                            : "\(title) \(index + 1)",
+                        claim: claim,
+                        presentation: presentation
+                    )
                 }
             }
         }
     }
 
-    private func selectedPosition(in review: AnalysisReviewBundle) -> PositionV1? {
-        review.positions.first {
-            $0.positionID == sceneState.analysis.selectedPositionID
+    @ViewBuilder
+    private func evidenceAnchors(
+        context: String,
+        claim: EvidenceLinkedClaim,
+        presentation: AnalysisReviewPresentation
+    ) -> some View {
+        if claim.evidenceRevisions.isEmpty {
+            WorkflowStateView(
+                title: "No supporting evidence reference",
+                detail:
+                    "This claim is explicitly unsupported and no evidence is implied.",
+                systemImage: "link.badge.plus",
+                tone: .neutral
+            )
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(
+                    Array(
+                        claim.evidenceRevisions.enumerated()
+                    ),
+                    id: \.offset
+                ) { _, reference in
+                    if let evidence = presentation.evidence(
+                        for: reference
+                    ) {
+                        EvidenceAnchor(evidence: evidence) {
+                            evidenceSelection =
+                                AnalysisEvidenceSelection(
+                                    context: context,
+                                    claim: claim,
+                                    evidenceReference: reference
+                                )
+                            inspectorIsPresented = true
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 3) {
+                            EvidenceBadge(
+                                title:
+                                    "Unresolved exact evidence",
+                                systemImage:
+                                    "exclamationmark.triangle"
+                            )
+                            Text(
+                                "\(reference.logicalID.canonicalString) @ \(reference.revisionID.canonicalString)"
+                            )
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                        }
+                    }
+                }
+                let unresolved =
+                    presentation.unresolvedEvidenceCount(
+                        for: claim
+                    )
+                if unresolved > 0 {
+                    Text(
+                        "\(unresolved) exact evidence reference(s) failed closed."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(BlueMinutesColors.error)
+                }
+            }
         }
     }
 
     private func representedName(
         _ reference: SemanticRevisionReference,
-        in review: AnalysisReviewBundle
+        presentation: AnalysisReviewPresentation
     ) -> String {
-        if let value = review.organizations.first(where: {
-            $0.organizationID.canonicalString == reference.logicalID.canonicalString
-        }) { return value.displayName }
-        if let value = review.participants.first(where: {
-            $0.participantID.canonicalString == reference.logicalID.canonicalString
-        }) { return value.displayName }
-        return "Unresolved entity " + short(reference.logicalID.canonicalString)
+        presentation.representedName(for: reference)
+            ?? "Unresolved exact entity "
+                + reference.logicalID.canonicalString
+                + " @ "
+                + reference.revisionID.canonicalString
     }
 
     private func issueName(
         _ reference: SemanticRevisionReference,
-        in review: AnalysisReviewBundle
+        presentation: AnalysisReviewPresentation
     ) -> String {
-        review.issues.first {
-            $0.issueID.canonicalString == reference.logicalID.canonicalString
-        }?.title.text ?? "Unresolved issue " + short(reference.logicalID.canonicalString)
-    }
-
-    private func cardIsStale(
-        _ card: DelegationPositionCardV1,
-        in review: AnalysisReviewBundle
-    ) -> Bool {
-        card.positionRevisions.contains { reference in
-            review.positions.contains {
-                $0.positionID.canonicalString == reference.logicalID.canonicalString
-                    && $0.revision.revisionID != reference.revisionID
-            }
-        }
+        presentation.issueName(for: reference)
+            ?? "Unresolved exact issue "
+                + reference.logicalID.canonicalString
+                + " @ "
+                + reference.revisionID.canonicalString
     }
 
     private var positionSelection: Binding<PositionID?> {
@@ -436,6 +735,21 @@ struct AnalysisReviewView: View {
 
     private func short(_ value: String) -> String {
         value.count > 16 ? String(value.prefix(16)) + "…" : value
+    }
+
+    private func confidenceLabel(
+        _ confidence: ConfidenceScore
+    ) -> String {
+        let percent = Double(confidence.millionths) / 10_000
+        return percent.formatted(
+            .number.precision(.fractionLength(1))
+        ) + "%"
+    }
+
+    private func label(_ rawValue: String) -> String {
+        rawValue
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
     }
 
     private func time(_ milliseconds: Int64) -> String {
