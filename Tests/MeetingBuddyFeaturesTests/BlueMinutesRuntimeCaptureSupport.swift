@@ -188,6 +188,14 @@ enum BlueMinutesRuntimeCaptureError:
     )
 }
 
+struct BlueMinutesCompositedCaptureValidationFailure:
+    Error
+{
+    let capturedData: Data
+    let underlyingError:
+        any Error
+}
+
 @MainActor
 enum BlueMinutesRuntimeCapture {
     private static let pngSignature:
@@ -446,6 +454,8 @@ enum BlueMinutesRuntimeCapture {
             validating == nil ? 1 : 3
         var lastValidationError:
             (any Error)?
+        var lastCapturedData:
+            Data?
         for attempt in 1...maximumAttempts {
             try await Task.sleep(
                 for:
@@ -482,6 +492,7 @@ enum BlueMinutesRuntimeCapture {
             let data = try encodePNG(
                 normalized
             )
+            lastCapturedData = data
             guard let validating
             else { return data }
             do {
@@ -492,9 +503,19 @@ enum BlueMinutesRuntimeCapture {
                     error
             }
         }
-        throw lastValidationError
-            ?? BlueMinutesRuntimeCaptureError
-            .imageCreationFailed
+        guard let lastCapturedData,
+              let lastValidationError
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .imageCreationFailed
+        }
+        throw
+            BlueMinutesCompositedCaptureValidationFailure(
+                capturedData:
+                    lastCapturedData,
+                underlyingError:
+                    lastValidationError
+            )
     }
 
     static func validatePNG(
