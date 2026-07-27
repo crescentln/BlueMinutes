@@ -165,6 +165,81 @@ struct BlueMinutesVisualRegressionTests {
         )
     }
 
+    @Test @MainActor
+    func compositedCaptureRetainsTheLastFrameAfterBoundedValidation()
+        async throws
+    {
+        guard #available(macOS 26.0, *)
+        else { return }
+        let descriptor =
+            BlueMinutesVisualCaptureDescriptor(
+                id:
+                    "composited-validation-probe",
+                surface:
+                    "capture-contract",
+                state: "ready",
+                viewport:
+                    BlueMinutesVisualViewport(
+                        width: 320,
+                        height: 240
+                    ),
+                appearance: .light,
+                accessibility:
+                    .standard,
+                locale: "en_US_POSIX",
+                timeZone: "UTC",
+                accent: "systemBlue",
+                textSize: "large",
+                inspectorPresented: false
+            )
+        var validationCount = 0
+
+        do {
+            _ = try await
+                BlueMinutesRuntimeCapture
+                .captureComposited(
+                    descriptor:
+                        descriptor,
+                    content:
+                        AnyView(
+                            Text(
+                                "Synthetic composited validation probe"
+                            )
+                            .frame(
+                                maxWidth:
+                                    .infinity,
+                                maxHeight:
+                                    .infinity
+                            )
+                        ),
+                    validating: {
+                        _ in
+                        validationCount += 1
+                        throw
+                            BlueMinutesVisualHarnessError
+                            .testPNGMalformed
+                    }
+                )
+            Issue.record(
+                "Bounded validation unexpectedly succeeded."
+            )
+        } catch let failure
+            as BlueMinutesCompositedCaptureValidationFailure
+        {
+            #expect(validationCount == 3)
+            _ = try BlueMinutesRuntimeCapture
+                .validatePNG(
+                    failure.capturedData,
+                    expectedViewport:
+                        descriptor.viewport
+                )
+            #expect(
+                failure.underlyingError
+                    is BlueMinutesVisualHarnessError
+            )
+        }
+    }
+
     @Test
     func representativeMatrixHasExactCoverage()
     {
@@ -1385,10 +1460,50 @@ struct BlueMinutesVisualRegressionTests {
                 )
             await content.teardown()
             return data
+        } catch let failure
+            as BlueMinutesCompositedCaptureValidationFailure
+        {
+            try? writeCompositedCaptureDiagnostic(
+                failure.capturedData,
+                fixture: fixture
+            )
+            await content.teardown()
+            throw failure.underlyingError
         } catch {
             await content.teardown()
             throw error
         }
+    }
+
+    private func writeCompositedCaptureDiagnostic(
+        _ data: Data,
+        fixture:
+            BlueMinutesVisualFixtureCase
+    ) throws {
+        let diagnosticRoot =
+            try artifactRoot()
+            .appendingPathComponent(
+                "VisualRegression",
+                isDirectory: true
+            )
+            .appendingPathComponent(
+                "Diagnostics",
+                isDirectory: true
+            )
+        try FileManager.default
+            .createDirectory(
+                at: diagnosticRoot,
+                withIntermediateDirectories:
+                    true
+            )
+        try data.write(
+            to:
+                diagnosticRoot
+                .appendingPathComponent(
+                    "\(fixture.id)-last-capture.png"
+                ),
+            options: .atomic
+        )
     }
 
     @MainActor
