@@ -360,7 +360,6 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
                 workspaceID: runtime.descriptor.manifest.workspaceID,
                 createdAt: createdAt
             )
-            try runtime.store.insert(meeting)
             let meetingUUID = try requiredUUID(meeting.meetingID.canonicalString)
             let securityPolicy = try LocalSecurityPolicyFactory().makeDefault(
                 meeting: meeting,
@@ -370,6 +369,28 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
                 accessPolicyRevisionID: RevisionID(UUID()),
                 createdAt: createdAt
             )
+            let selectedTrack = try inspection.requireTrack(submission.selectedTrack)
+            let expectedSourceByteSize = try sourceByteSize(sourceURL)
+            let intakePlan = try LocalMediaIntakeJobPlan(
+                meetingID: meeting.meetingID,
+                initialInspection: inspection,
+                selectedTrack: selectedTrack.trackIdentifier,
+                speechSourceKind: submission.speechSourceKind,
+                language: submission.language,
+                createdAt: createdAt,
+                dataClassification: submission.dataClassification,
+                expectedSourceByteSize: expectedSourceByteSize
+            )
+            let intakeJobID = JobID(UUID())
+            let intakeRequest = try LocalMediaIntakeJobFactory().request(
+                plan: intakePlan,
+                jobID: intakeJobID,
+                requestedBy: JobRequester("meetingbuddy-app")
+            )
+            try runtime.transientSources.register(sourceURL, for: intakeJobID)
+            defer { runtime.transientSources.discard(jobID: intakeJobID) }
+
+            try runtime.store.insert(meeting)
             try runtime.store.insert(securityPolicy.sensitivityLabel)
             _ = try runtime.store.activate(
                 ActivePublishedRevisionSelection(
@@ -389,26 +410,6 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
                 as: AccessPolicyV1.self,
                 expectedCurrentRevisionID: nil,
                 markedAt: createdAt
-            )
-            let selectedTrack = try inspection.requireTrack(submission.selectedTrack)
-            let expectedSourceByteSize = try sourceByteSize(sourceURL)
-            let intakePlan = try LocalMediaIntakeJobPlan(
-                meetingID: meeting.meetingID,
-                initialInspection: inspection,
-                selectedTrack: selectedTrack.trackIdentifier,
-                speechSourceKind: submission.speechSourceKind,
-                language: submission.language,
-                createdAt: createdAt,
-                dataClassification: submission.dataClassification,
-                expectedSourceByteSize: expectedSourceByteSize
-            )
-            let intakeJobID = JobID(UUID())
-            try runtime.transientSources.register(sourceURL, for: intakeJobID)
-            defer { runtime.transientSources.discard(jobID: intakeJobID) }
-            let intakeRequest = try LocalMediaIntakeJobFactory().request(
-                plan: intakePlan,
-                jobID: intakeJobID,
-                requestedBy: JobRequester("meetingbuddy-app")
             )
             _ = try await runtime.manager.enqueue(intakeRequest)
             let completedIntake = try await terminalJob(
