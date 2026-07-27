@@ -25,7 +25,8 @@ enum BlueMinutesProductionVisualFixtureFactory {
                     sceneState in
                     sceneState.selectedSection =
                         .intake
-                }
+                },
+                editorialBackground: false
             )
         case (.onboarding, _):
             let store =
@@ -33,7 +34,8 @@ enum BlueMinutesProductionVisualFixtureFactory {
             return hosted(
                 MeetingBuddyRootView(
                     store: store
-                )
+                ),
+                editorialBackground: false
             )
         case (.localMedia, let stateName):
             let state =
@@ -234,19 +236,39 @@ enum BlueMinutesProductionVisualFixtureFactory {
                         == "appearance"
                         ? .appearance
                         : .general
-                )
+                ),
+                editorialBackground: false
             )
         }
     }
 
     private static func hosted<Content: View>(
         _ content: Content,
+        editorialBackground:
+            Bool = true,
         teardown:
             @escaping @MainActor
             () async -> Void = {}
     ) -> BlueMinutesProductionVisualContent {
-        BlueMinutesProductionVisualContent(
-            view: AnyView(content),
+        let view: AnyView
+        if editorialBackground {
+            view =
+                AnyView(
+                    content
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity,
+                            alignment: .topLeading
+                        )
+                        .background(
+                            BlueMinutesColors.canvas
+                        )
+                )
+        } else {
+            view = AnyView(content)
+        }
+        return BlueMinutesProductionVisualContent(
+            view: view,
             teardown: teardown
         )
     }

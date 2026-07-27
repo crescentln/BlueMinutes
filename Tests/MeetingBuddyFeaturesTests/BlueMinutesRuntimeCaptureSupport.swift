@@ -2,6 +2,7 @@ import AppKit
 import CryptoKit
 import Foundation
 import ImageIO
+@preconcurrency import ScreenCaptureKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -146,6 +147,16 @@ struct BlueMinutesPNGContract:
     let profileSHA256: String
 }
 
+struct BlueMinutesVisualPixelRegion:
+    Equatable,
+    Sendable
+{
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
+}
+
 struct BlueMinutesVisualComparison:
     Codable,
     Equatable,
@@ -163,12 +174,15 @@ enum BlueMinutesRuntimeCaptureError:
     case invalidViewport
     case invalidTimeZone(String)
     case bitmapAllocationFailed
+    case compositedCaptureRequiresMacOS26
     case imageCreationFailed
+    case shareableWindowNotFound(Int)
     case pngEncodingFailed
     case malformedPNG(String)
     case pngContractViolation(String)
     case imageDecodeFailed
     case imageDimensionsDiffer
+    case invalidPixelRegion
     case accessibilityEnvironmentMismatch(
         String
     )
@@ -182,11 +196,22 @@ enum BlueMinutesRuntimeCapture {
             0x0d, 0x0a, 0x1a, 0x0a
         ]
 
-    static func capture(
+    private struct PreparedVisualWindow {
+        let viewport:
+            BlueMinutesVisualViewport
+        let size: CGSize
+        let hostingView:
+            NSHostingView<
+                BlueMinutesVisualCaptureRoot
+            >
+        let window: NSWindow
+    }
+
+    private static func prepareVisualWindow(
         descriptor:
             BlueMinutesVisualCaptureDescriptor,
         content: AnyView
-    ) throws -> Data {
+    ) throws -> PreparedVisualWindow {
         let viewport = descriptor.viewport
         guard viewport.width > 0,
               viewport.height > 0
@@ -267,6 +292,30 @@ enum BlueMinutesRuntimeCapture {
         window.makeKeyAndOrderFront(nil)
         window.displayIfNeeded()
         hostingView.layoutSubtreeIfNeeded()
+
+        return PreparedVisualWindow(
+            viewport: viewport,
+            size: size,
+            hostingView: hostingView,
+            window: window
+        )
+    }
+
+    static func capture(
+        descriptor:
+            BlueMinutesVisualCaptureDescriptor,
+        content: AnyView
+    ) throws -> Data {
+        let prepared =
+            try prepareVisualWindow(
+                descriptor: descriptor,
+                content: content
+            )
+        let viewport = prepared.viewport
+        let size = prepared.size
+        let hostingView =
+            prepared.hostingView
+        let window = prepared.window
         RunLoop.main.run(
             until:
                 Date(
@@ -322,6 +371,103 @@ enum BlueMinutesRuntimeCapture {
             height: viewport.height,
             appearance:
                 descriptor.appearance
+        )
+        return try encodePNG(normalized)
+    }
+
+    static func captureComposited(
+        descriptor:
+            BlueMinutesVisualCaptureDescriptor,
+        content: AnyView
+    ) async throws -> Data {
+        let prepared =
+            try prepareVisualWindow(
+                descriptor: descriptor,
+                content: content
+            )
+        let viewport = prepared.viewport
+        let hostingView =
+            prepared.hostingView
+        let window = prepared.window
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        guard #available(macOS 26.0, *)
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .compositedCaptureRequiresMacOS26
+        }
+
+        try await Task.sleep(
+            for: .seconds(1)
+        )
+        window.displayIfNeeded()
+        hostingView.layoutSubtreeIfNeeded()
+
+        let windowNumber = window.windowNumber
+        let shareableContent =
+            try await
+            SCShareableContent
+            .currentProcess
+        guard let shareableWindow =
+            shareableContent.windows
+            .first(where: {
+                Int($0.windowID)
+                    == windowNumber
+                    && $0
+                    .owningApplication?
+                    .processID
+                    == ProcessInfo
+                    .processInfo
+                    .processIdentifier
+            })
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .shareableWindowNotFound(
+                    windowNumber
+                )
+        }
+        let filter =
+            SCContentFilter(
+                desktopIndependentWindow:
+                    shareableWindow
+            )
+        let configuration =
+            SCScreenshotConfiguration()
+        configuration.width = viewport.width
+        configuration.height = viewport.height
+        configuration.showsCursor = false
+        configuration.ignoreShadows = true
+        configuration.ignoreClipping = true
+        configuration.includeChildWindows = true
+        configuration.displayIntent =
+            .canonical
+        configuration.dynamicRange =
+            .sdr
+
+        let output =
+            try await
+            SCScreenshotManager
+            .captureScreenshot(
+                contentFilter: filter,
+                configuration:
+                    configuration
+            )
+        guard let sourceImage =
+            output.sdrImage
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .imageCreationFailed
+        }
+        let normalized = try normalizedImage(
+            sourceImage,
+            width: viewport.width,
+            height: viewport.height,
+            appearance:
+                descriptor.appearance,
+            normalizeCompositorEdges:
+                true
         )
         return try encodePNG(normalized)
     }
@@ -651,6 +797,129 @@ enum BlueMinutesRuntimeCapture {
         )
     }
 
+    static func compositorEdgesAreNormalized(
+        _ data: Data
+    ) throws -> Bool {
+        let pixels =
+            try decodedPixels(data)
+        guard pixels.width > 2,
+              pixels.height > 2
+        else { return false }
+
+        func matches(
+            _ first: Int,
+            _ second: Int
+        ) -> Bool {
+            for channel in 0..<4
+            where pixels.bytes[
+                first + channel
+            ] != pixels.bytes[
+                second + channel
+            ] {
+                return false
+            }
+            return true
+        }
+
+        for x in 0..<pixels.width {
+            let top = x * 4
+            let topSource =
+                (pixels.width + x) * 4
+            let bottom =
+                (
+                    (pixels.height - 1)
+                        * pixels.width
+                        + x
+                ) * 4
+            let bottomSource =
+                (
+                    (pixels.height - 2)
+                        * pixels.width
+                        + x
+                ) * 4
+            guard matches(
+                top,
+                topSource
+            ),
+              matches(
+                  bottom,
+                  bottomSource
+              )
+            else { return false }
+        }
+        for y in 0..<pixels.height {
+            let left =
+                y * pixels.width * 4
+            let right =
+                (
+                    y * pixels.width
+                        + pixels.width - 1
+                ) * 4
+            guard matches(
+                left,
+                left + 4
+            ),
+              matches(
+                  right,
+                  right - 4
+              )
+            else { return false }
+        }
+        return true
+    }
+
+    static func distinctRGBColorCount(
+        _ data: Data,
+        inTopLeft region:
+            BlueMinutesVisualPixelRegion
+    ) throws -> Int {
+        let pixels =
+            try decodedPixels(data)
+        guard region.x >= 0,
+              region.y >= 0,
+              region.width > 0,
+              region.height > 0,
+              region.x + region.width
+                <= pixels.width,
+              region.y + region.height
+                <= pixels.height
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .invalidPixelRegion
+        }
+
+        var colors = Set<UInt32>()
+        for topY in
+            region.y..<(region.y + region.height)
+        {
+            for x in
+                region.x..<(region.x + region.width)
+            {
+                let base =
+                    (
+                        topY * pixels.width
+                            + x
+                    ) * 4
+                colors.insert(
+                    UInt32(
+                        pixels.bytes[base]
+                    ) << 16
+                        | UInt32(
+                            pixels.bytes[
+                                base + 1
+                            ]
+                        ) << 8
+                        | UInt32(
+                            pixels.bytes[
+                                base + 2
+                            ]
+                        )
+                )
+            }
+        }
+        return colors.count
+    }
+
     static func differenceImage(
         expected: Data,
         actual: Data
@@ -802,7 +1071,9 @@ enum BlueMinutesRuntimeCapture {
         width: Int,
         height: Int,
         appearance:
-            BlueMinutesVisualAppearance
+            BlueMinutesVisualAppearance,
+        normalizeCompositorEdges:
+            Bool = false
     ) throws -> CGImage {
         let bytesPerRow = width * 4
         var bytes = [UInt8](
@@ -861,6 +1132,106 @@ enum BlueMinutesRuntimeCapture {
                 height: height
             )
         )
+        context.flush()
+        if normalizeCompositorEdges,
+           width > 2,
+           height > 2
+        {
+            guard let contextData =
+                context.data
+            else {
+                throw BlueMinutesRuntimeCaptureError
+                    .imageCreationFailed
+            }
+            let pixels =
+                contextData.assumingMemoryBound(
+                    to: UInt8.self
+                )
+            for x in 0..<width {
+                let top = x * 4
+                let topSource =
+                    bytesPerRow + top
+                let bottom =
+                    (height - 1)
+                        * bytesPerRow
+                        + top
+                let bottomSource =
+                    (height - 2)
+                        * bytesPerRow
+                        + top
+                for channel in 0..<4 {
+                    pixels[top + channel] =
+                        pixels[
+                            topSource
+                                + channel
+                        ]
+                    pixels[bottom + channel] =
+                        pixels[
+                            bottomSource
+                                + channel
+                        ]
+                }
+            }
+            for y in 0..<height {
+                let row = y * bytesPerRow
+                for channel in 0..<4 {
+                    pixels[row + channel] =
+                        pixels[
+                            row + 4
+                                + channel
+                        ]
+                    pixels[
+                        row
+                            + (width - 1) * 4
+                            + channel
+                    ] =
+                        pixels[
+                            row
+                                + (width - 2)
+                                    * 4
+                                + channel
+                        ]
+                }
+            }
+            let normalizedData =
+                Data(
+                    bytes: contextData,
+                    count:
+                        bytesPerRow * height
+                )
+            guard let provider =
+                CGDataProvider(
+                    data:
+                        normalizedData
+                        as CFData
+                ),
+                  let image =
+                  CGImage(
+                      width: width,
+                      height: height,
+                      bitsPerComponent: 8,
+                      bitsPerPixel: 32,
+                      bytesPerRow:
+                          bytesPerRow,
+                      space: colorSpace,
+                      bitmapInfo:
+                          CGBitmapInfo(
+                              rawValue:
+                                  bitmapInfo
+                          ),
+                      provider: provider,
+                      decode: nil,
+                      shouldInterpolate:
+                          false,
+                      intent:
+                          .defaultIntent
+                  )
+            else {
+                throw BlueMinutesRuntimeCaptureError
+                    .imageCreationFailed
+            }
+            return image
+        }
         guard let image =
             context.makeImage()
         else {

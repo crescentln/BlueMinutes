@@ -207,6 +207,9 @@ struct RecordingCaptureView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(recordingStartBlockedReason != nil)
+                .accessibilityIdentifier(
+                    "BlueMinutes.Recording.StartVisible"
+                )
                 .accessibilityHint(
                     recordingStartBlockedReason
                         ?? "Create a durable intent, request exact source permission, and then begin local audio capture."

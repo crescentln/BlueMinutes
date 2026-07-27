@@ -17,6 +17,139 @@ enum BlueMinutesVisualFixtureSurface:
     case settings
 }
 
+struct BlueMinutesVisualNativeActionContract:
+    Equatable,
+    Sendable
+{
+    let fixtureID: String
+    let accessibilityIdentifier:
+        String
+    let accessibilityLabel: String
+    let region:
+        BlueMinutesVisualPixelRegion
+
+    static let all: [
+        BlueMinutesVisualNativeActionContract
+    ] = [
+        contract(
+            fixtureID:
+                "local-media-ready-light",
+            identifier:
+                "BlueMinutes.LocalMedia.ChooseSource",
+            label:
+                "Choose Audio or Video…",
+            region:
+                BlueMinutesVisualPixelRegion(
+                    x: 24,
+                    y: 205,
+                    width: 175,
+                    height: 32
+                )
+        ),
+        contract(
+            fixtureID:
+                "local-media-ready-light",
+            identifier:
+                "BlueMinutes.LocalMedia.ImportAndProcess",
+            label:
+                "Import and Process",
+            region:
+                BlueMinutesVisualPixelRegion(
+                    x: 24,
+                    y: 525,
+                    width: 150,
+                    height: 36
+                )
+        ),
+        contract(
+            fixtureID:
+                "local-media-ready-dark",
+            identifier:
+                "BlueMinutes.LocalMedia.ChooseSource",
+            label:
+                "Choose Audio or Video…",
+            region:
+                BlueMinutesVisualPixelRegion(
+                    x: 24,
+                    y: 205,
+                    width: 175,
+                    height: 32
+                )
+        ),
+        contract(
+            fixtureID:
+                "local-media-ready-dark",
+            identifier:
+                "BlueMinutes.LocalMedia.ImportAndProcess",
+            label:
+                "Import and Process",
+            region:
+                BlueMinutesVisualPixelRegion(
+                    x: 24,
+                    y: 525,
+                    width: 150,
+                    height: 36
+                )
+        ),
+        contract(
+            fixtureID:
+                "recording-ready-light",
+            identifier:
+                "BlueMinutes.Recording.StartVisible",
+            label:
+                "Start Visible Recording",
+            region:
+                BlueMinutesVisualPixelRegion(
+                    x: 560,
+                    y: 553,
+                    width: 180,
+                    height: 34
+                )
+        ),
+        contract(
+            fixtureID:
+                "recording-ready-dark",
+            identifier:
+                "BlueMinutes.Recording.StartVisible",
+            label:
+                "Start Visible Recording",
+            region:
+                BlueMinutesVisualPixelRegion(
+                    x: 560,
+                    y: 553,
+                    width: 180,
+                    height: 34
+                )
+        )
+    ]
+
+    static func matching(
+        fixtureID: String
+    ) -> [
+        BlueMinutesVisualNativeActionContract
+    ] {
+        all.filter {
+            $0.fixtureID == fixtureID
+        }
+    }
+
+    private static func contract(
+        fixtureID: String,
+        identifier: String,
+        label: String,
+        region:
+            BlueMinutesVisualPixelRegion
+    ) -> BlueMinutesVisualNativeActionContract {
+        BlueMinutesVisualNativeActionContract(
+            fixtureID: fixtureID,
+            accessibilityIdentifier:
+                identifier,
+            accessibilityLabel: label,
+            region: region
+        )
+    }
+}
+
 struct BlueMinutesVisualFixtureCase:
     Identifiable,
     Sendable

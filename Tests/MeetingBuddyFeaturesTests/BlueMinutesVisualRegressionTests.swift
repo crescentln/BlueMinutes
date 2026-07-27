@@ -1369,18 +1369,106 @@ struct BlueMinutesVisualRegressionTests {
             .content(for: fixture)
         do {
             let data =
-                try BlueMinutesRuntimeCapture
-                .capture(
+                try await BlueMinutesRuntimeCapture
+                .captureComposited(
                     descriptor:
                         fixture.descriptor,
                     content:
                         content.view
                 )
+            try validateCompositedStructure(
+                data,
+                fixture: fixture
+            )
             await content.teardown()
             return data
         } catch {
             await content.teardown()
             throw error
+        }
+    }
+
+    @MainActor
+    private func validateCompositedStructure(
+        _ data: Data,
+        fixture:
+            BlueMinutesVisualFixtureCase
+    ) throws {
+        guard try BlueMinutesRuntimeCapture
+            .compositorEdgesAreNormalized(
+                data
+            )
+        else {
+            throw BlueMinutesVisualHarnessError
+                .compositorEdgesNotNormalized(
+                    fixture.id
+                )
+        }
+
+        let viewport =
+            fixture.descriptor.viewport
+        var regions:
+            [BlueMinutesVisualPixelRegion]
+        switch fixture.surface {
+        case .shell, .onboarding:
+            regions = [
+                BlueMinutesVisualPixelRegion(
+                    x: 10,
+                    y: 20,
+                    width: 270,
+                    height:
+                        viewport.height - 40
+                )
+            ]
+        case .analysis, .transcript:
+            if fixture.descriptor
+                .inspectorPresented
+            {
+                regions = [
+                    BlueMinutesVisualPixelRegion(
+                        x:
+                            viewport.width - 360,
+                        y: 20,
+                        width: 330,
+                        height:
+                            viewport.height - 40
+                    )
+                ]
+            } else {
+                regions = []
+            }
+        default:
+            regions = []
+        }
+        regions.append(
+            contentsOf:
+                BlueMinutesVisualNativeActionContract
+                .matching(
+                    fixtureID:
+                        fixture.id
+                )
+                .map(\.region)
+        )
+
+        for region in regions {
+            let distinctColorCount =
+                try BlueMinutesRuntimeCapture
+                .distinctRGBColorCount(
+                    data,
+                    inTopLeft: region
+                )
+            guard distinctColorCount >= 32
+            else {
+                throw BlueMinutesVisualHarnessError
+                    .layeredContentMissing(
+                        id: fixture.id,
+                        region: region,
+                        observedDistinctColors:
+                            distinctColorCount,
+                        requiredDistinctColors:
+                            32
+                    )
+            }
         }
     }
 
@@ -1954,5 +2042,15 @@ private enum BlueMinutesVisualHarnessError:
     case missingGolden(String)
     case pixelMismatch(String)
     case goldenContractMismatch(String)
+    case compositorEdgesNotNormalized(
+        String
+    )
+    case layeredContentMissing(
+        id: String,
+        region:
+            BlueMinutesVisualPixelRegion,
+        observedDistinctColors: Int,
+        requiredDistinctColors: Int
+    )
     case testPNGMalformed
 }
