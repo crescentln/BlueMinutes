@@ -7,6 +7,58 @@ import Testing
 @Suite
 struct AnalysisReviewPresentationTests {
     @Test
+    func coveragePresentationFailsClosedForIncompleteLedger()
+        throws
+    {
+        let coverage =
+            AnalysisCoveragePresentation(
+                ledger:
+                    try makeAnalysisLedger()
+            )
+
+        #expect(!coverage.isComplete)
+        #expect(coverage.statusLabel == "Incomplete")
+        #expect(coverage.eligibleSegmentCount == 1)
+        #expect(coverage.terminalSegmentCount == 0)
+        #expect(coverage.substantiveSegmentCount == 0)
+        #expect(coverage.nonSubstantiveSegmentCount == 0)
+        #expect(coverage.failedSegmentCount == 0)
+        #expect(coverage.missingSegmentCount == 1)
+        #expect(
+            coverage.summary
+                == "0 / 1 terminal results; 1 missing; 0 failed; ledger incomplete"
+        )
+    }
+
+    @Test
+    func coveragePresentationUsesSuccessOnlyForPublishedTerminalLedger()
+        throws
+    {
+        let coverage =
+            AnalysisCoveragePresentation(
+                ledger:
+                    try makeAnalysisLedger(
+                        status: .published,
+                        disposition:
+                            .substantive
+                    )
+            )
+
+        #expect(coverage.isComplete)
+        #expect(coverage.statusLabel == "Published")
+        #expect(coverage.eligibleSegmentCount == 1)
+        #expect(coverage.terminalSegmentCount == 1)
+        #expect(coverage.substantiveSegmentCount == 1)
+        #expect(coverage.nonSubstantiveSegmentCount == 0)
+        #expect(coverage.failedSegmentCount == 0)
+        #expect(coverage.missingSegmentCount == 0)
+        #expect(
+            coverage.summary
+                == "1 / 1 eligible segments complete"
+        )
+    }
+
+    @Test
     func exactEvidenceResolutionUsesTheFullSemanticReference()
         throws
     {
@@ -560,7 +612,13 @@ private func makeAnalysisOrganization(
     )
 }
 
-private func makeAnalysisLedger() throws
+private func makeAnalysisLedger(
+    status: AnalysisLedgerStatus =
+        .incomplete,
+    disposition:
+        AnalysisSegmentDisposition =
+        .missing
+) throws
     -> AnalysisCoverageLedger
 {
     let meetingID = analysisID(100, MeetingID.self)
@@ -582,8 +640,67 @@ private func makeAnalysisLedger() throws
             .evidenceIdentifiers
         ],
         visibleUserAuthorization: true,
-        localModelAvailable: false
+        localModelAvailable:
+            status == .published
     )
+    let provider = try ProviderMetadata(
+        providerIdentifier:
+            "meetingbuddy-deterministic-analysis",
+        modelIdentifier:
+            "analysis-presentation-fixture-v1",
+        modelVersion: "1",
+        clientVersion:
+            "analysis-presentation-v1"
+    )
+    let evidenceReference =
+        try analysisReference(
+            analysisID(
+                106,
+                EvidenceID.self
+            ),
+            analysisID(
+                107,
+                RevisionID.self
+            )
+        )
+    let outputReference =
+        try analysisReference(
+            analysisID(
+                108,
+                InterventionCardID.self
+            ),
+            analysisID(
+                109,
+                RevisionID.self
+            )
+        )
+    let segment =
+        if disposition
+            == .substantive
+        {
+            try AnalysisSegmentCoverage(
+                segmentRevision:
+                    transcriptReference,
+                disposition:
+                    .substantive,
+                attemptCount: 1,
+                provider: provider,
+                evidenceRevisions: [
+                    evidenceReference
+                ],
+                outputRevisions: [
+                    outputReference
+                ]
+            )
+        } else {
+            try AnalysisSegmentCoverage(
+                segmentRevision:
+                    transcriptReference,
+                disposition:
+                    disposition,
+                attemptCount: 0
+            )
+        }
     return try AnalysisCoverageLedger(
         ledgerID: analysisID(
             103,
@@ -605,7 +722,8 @@ private func makeAnalysisLedger() throws
                 "meetingbuddy.synthetic.analysis.presentation",
             adapterVersion: "analysis-presentation-v1",
             localeIdentifier: "en",
-            modelAvailable: false,
+            modelAvailable:
+                status == .published,
             noOutboundMode: true
         ),
         promptModules: [
@@ -622,14 +740,8 @@ private func makeAnalysisLedger() throws
         inputPackageDigest: try ContentDigest.sha256(
             ofUTF8Text: "analysis-presentation-input"
         ),
-        status: .incomplete,
-        segments: [
-            AnalysisSegmentCoverage(
-                segmentRevision: transcriptReference,
-                disposition: .missing,
-                attemptCount: 0
-            )
-        ],
+        status: status,
+        segments: [segment],
         createdAt: analysisInstant(105)
     )
 }

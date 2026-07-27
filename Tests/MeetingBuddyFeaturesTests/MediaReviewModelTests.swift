@@ -7382,6 +7382,32 @@ private func makeFeatureAnalysisReview(
         segment.segmentID,
         segment.revision.revisionID
     )
+    let evidenceID =
+        featureID(
+            811,
+            EvidenceID.self
+        )
+    let evidenceRevisionID =
+        featureID(
+            812,
+            RevisionID.self
+        )
+    let evidenceReference =
+        try featureReference(
+            evidenceID,
+            evidenceRevisionID
+        )
+    let interventionReference =
+        try featureReference(
+            featureID(
+                815,
+                InterventionCardID.self
+            ),
+            featureID(
+                816,
+                RevisionID.self
+            )
+        )
     let analysisRequest = try ModelRouteRequest(
         capability: .analysis,
         dataClassification: .internal,
@@ -7396,7 +7422,16 @@ private func makeFeatureAnalysisReview(
             .evidenceIdentifiers
         ],
         visibleUserAuthorization: true,
-        localModelAvailable: false
+        localModelAvailable: !staleCard
+    )
+    let analysisProvider = try ProviderMetadata(
+        providerIdentifier:
+            "meetingbuddy-deterministic-analysis",
+        modelIdentifier:
+            "feature-analysis-fixture-v1",
+        modelVersion: "1",
+        clientVersion:
+            "feature-fixture-v1"
     )
     let ledger = try AnalysisCoverageLedger(
         ledgerID: featureID(800, AnalysisCoverageLedgerID.self),
@@ -7410,7 +7445,7 @@ private func makeFeatureAnalysisReview(
             frameworkIdentifier: "meetingbuddy.synthetic.analysis",
             adapterVersion: "feature-fixture-v1",
             localeIdentifier: "en",
-            modelAvailable: false,
+            modelAvailable: !staleCard,
             noOutboundMode: true
         ),
         promptModules: [
@@ -7425,13 +7460,32 @@ private func makeFeatureAnalysisReview(
         inputPackageDigest: try ContentDigest.sha256(
             ofUTF8Text: "feature-analysis-input"
         ),
-        status: .incomplete,
+        status:
+            staleCard
+            ? .incomplete
+            : .published,
         segments: [
-            AnalysisSegmentCoverage(
-                segmentRevision: segmentReference,
-                disposition: .missing,
-                attemptCount: 0
-            )
+            staleCard
+                ? try AnalysisSegmentCoverage(
+                    segmentRevision:
+                        segmentReference,
+                    disposition: .missing,
+                    attemptCount: 0
+                )
+                : try AnalysisSegmentCoverage(
+                    segmentRevision:
+                        segmentReference,
+                    disposition:
+                        .substantive,
+                    attemptCount: 1,
+                    provider: analysisProvider,
+                    evidenceRevisions: [
+                        evidenceReference
+                    ],
+                    outputRevisions: [
+                        interventionReference
+                    ]
+                )
         ],
         createdAt: featureInstant(1_950_000_000_200)
     )
@@ -7455,9 +7509,52 @@ private func makeFeatureAnalysisReview(
         featureID(809, IssueID.self),
         featureID(810, RevisionID.self)
     )
-    let evidenceReference = try featureReference(
-        featureID(811, EvidenceID.self),
-        featureID(812, RevisionID.self)
+    let evidence =
+        try EvidenceRefV1(
+            revision:
+                RevisionEnvelope(
+                    logicalID:
+                        evidenceID,
+                    revisionID:
+                        evidenceRevisionID,
+                    schemaVersion:
+                        .v1,
+                    lifecycleStatus:
+                        .draft,
+                    validationState:
+                        .notValidated,
+                    createdAt:
+                        featureInstant(
+                            1_950_000_000_200
+                        ),
+                    createdBy:
+                        .application,
+                    inputRevisions: [
+                        segmentReference
+                    ],
+                    dataClassification:
+                        .internal
+                ),
+            location:
+                .transcriptSegment(
+                    source:
+                        segmentReference,
+                    textRange: nil
+                ),
+            excerpt:
+                EvidenceExcerpt(
+                    text:
+                        "Synthetic exact analysis evidence.",
+                    language:
+                        LanguageTag("en"),
+                    translationStatus:
+                        .sourceOnly
+                ),
+            confidence:
+                ConfidenceScore(
+                    millionths:
+                        900_000
+                )
     )
     let position = try PositionV1(
         revision: RevisionEnvelope(
@@ -7571,7 +7668,10 @@ private func makeFeatureAnalysisReview(
     }
     return AnalysisReviewBundle(
         ledger: ledger,
-        evidence: [],
+        evidence:
+            staleCard
+            ? []
+            : [evidence],
         participants: [],
         organizations: [],
         issues: [],

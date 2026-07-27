@@ -1,6 +1,95 @@
 import MeetingBuddyApplication
 import MeetingBuddyDomain
 
+struct AnalysisCoveragePresentation:
+    Equatable, Sendable
+{
+    let status: AnalysisLedgerStatus
+    let eligibleSegmentCount: Int
+    let terminalSegmentCount: Int
+    let substantiveSegmentCount: Int
+    let nonSubstantiveSegmentCount: Int
+    let failedSegmentCount: Int
+    let missingSegmentCount: Int
+
+    init(ledger: AnalysisCoverageLedger) {
+        status = ledger.status
+        let eligible =
+            Set(
+                ledger
+                    .eligibleSegmentRevisions
+            )
+        let eligibleSegments =
+            ledger.segments.filter {
+                eligible.contains(
+                    $0.segmentRevision
+                )
+            }
+        let recordedRevisions =
+            Set(
+                eligibleSegments.map(
+                    \.segmentRevision
+                )
+            )
+        substantiveSegmentCount =
+            eligibleSegments.count {
+                $0.disposition
+                    == .substantive
+            }
+        nonSubstantiveSegmentCount =
+            eligibleSegments.count {
+                $0.disposition
+                    == .nonSubstantive
+            }
+        failedSegmentCount =
+            eligibleSegments.count {
+                $0.disposition
+                    == .failed
+            }
+        missingSegmentCount =
+            eligibleSegments.count {
+                $0.disposition
+                    == .missing
+            }
+                + eligible
+                .subtracting(
+                    recordedRevisions
+                )
+                .count
+        eligibleSegmentCount =
+            eligible.count
+        terminalSegmentCount =
+            substantiveSegmentCount
+                + nonSubstantiveSegmentCount
+    }
+
+    var isComplete: Bool {
+        status == .published
+            && terminalSegmentCount
+                == eligibleSegmentCount
+            && failedSegmentCount == 0
+            && missingSegmentCount == 0
+    }
+
+    var summary: String {
+        if isComplete {
+            return
+                "\(terminalSegmentCount) / \(eligibleSegmentCount) eligible segments complete"
+        }
+        return
+            "\(terminalSegmentCount) / \(eligibleSegmentCount) terminal results; \(missingSegmentCount) missing; \(failedSegmentCount) failed; ledger incomplete"
+    }
+
+    var statusLabel: String {
+        switch status {
+        case .incomplete:
+            "Incomplete"
+        case .published:
+            "Published"
+        }
+    }
+}
+
 struct AnalysisReviewPresentation: Sendable {
     let positions: [PositionV1]
 

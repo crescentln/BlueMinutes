@@ -126,6 +126,11 @@ struct AVFoundationMediaProcessorTests {
             canonicalFile.length
                 == AVAudioFramePosition(min(result.frameCount, inspection.durationFrameCount))
         )
+        #expect(
+            try outputPermissions(
+                canonical
+            ) == 0o600
+        )
 
         let range = try MediaFrameRange(startFrame: 4_000, endFrame: 12_000)
         try await processor.writeCanonicalChunk(
@@ -138,6 +143,11 @@ struct AVFoundationMediaProcessorTests {
         #expect(chunkFile.fileFormat.sampleRate == 16_000)
         #expect(chunkFile.fileFormat.channelCount == 1)
         #expect(chunkFile.length == 8_000)
+        #expect(
+            try outputPermissions(
+                chunk
+            ) == 0o600
+        )
     }
 
     @Test
@@ -179,6 +189,23 @@ struct AVFoundationMediaProcessorTests {
             withIntermediateDirectories: true
         )
         return directory
+    }
+
+    private func outputPermissions(
+        _ url: URL
+    ) throws -> Int {
+        let attributes =
+            try FileManager.default
+            .attributesOfItem(
+                atPath: url.path
+            )
+        return try #require(
+            (
+                attributes[
+                    .posixPermissions
+                ] as? NSNumber
+            )?.intValue
+        ) & 0o777
     }
 
     private func writeSyntheticAudio(
