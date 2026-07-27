@@ -348,6 +348,22 @@ enum TranscriptEditorFocus: Hashable, Sendable {
     case speaker
 }
 
+enum TranscriptEvidenceInspectorSelection {
+    static func resolve(
+        requestedRevisionID: RevisionID?,
+        availableRevisionIDs: [RevisionID]
+    ) -> RevisionID? {
+        guard let requestedRevisionID,
+              availableRevisionIDs.contains(
+                  requestedRevisionID
+              )
+        else {
+            return nil
+        }
+        return requestedRevisionID
+    }
+}
+
 enum TranscriptDraftKind: Hashable, Sendable {
     case transcript
     case translation

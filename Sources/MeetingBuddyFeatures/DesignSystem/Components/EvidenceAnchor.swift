@@ -15,8 +15,12 @@ struct EvidenceAnchor: View {
             )
         }
         .buttonStyle(.link)
+        .accessibilityLabel(
+            "\(evidenceKindLabel), evidence revision "
+                + evidence.revision.revisionID.canonicalString
+        )
         .accessibilityHint(
-            "Open the inspector for exact EvidenceRef revision \(evidence.revision.revisionID.canonicalString)."
+            "Open the inspector and select this exact EvidenceRef revision."
         )
     }
 

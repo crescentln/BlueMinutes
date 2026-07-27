@@ -137,6 +137,72 @@ struct TranscriptReviewPresentationTests {
     }
 
     @Test
+    func inspectorSelectionResolvesOnlyTheExactAvailableEvidenceRevision()
+    {
+        let first =
+            transcriptID(
+                91_001,
+                RevisionID.self
+            )
+        let second =
+            transcriptID(
+                91_002,
+                RevisionID.self
+            )
+        let unavailable =
+            transcriptID(
+                91_003,
+                RevisionID.self
+            )
+
+        #expect(
+            TranscriptEvidenceInspectorSelection
+                .resolve(
+                    requestedRevisionID: first,
+                    availableRevisionIDs: [
+                        first,
+                        second
+                    ]
+                )
+                == first
+        )
+        #expect(
+            TranscriptEvidenceInspectorSelection
+                .resolve(
+                    requestedRevisionID: second,
+                    availableRevisionIDs: [
+                        first,
+                        second
+                    ]
+                )
+                == second
+        )
+        #expect(
+            TranscriptEvidenceInspectorSelection
+                .resolve(
+                    requestedRevisionID:
+                        unavailable,
+                    availableRevisionIDs: [
+                        first,
+                        second
+                    ]
+                )
+                == nil
+        )
+        #expect(
+            TranscriptEvidenceInspectorSelection
+                .resolve(
+                    requestedRevisionID: nil,
+                    availableRevisionIDs: [
+                        first,
+                        second
+                    ]
+                )
+                == nil
+        )
+    }
+
+    @Test
     func visibleAndFocusedCommandsShareEveryInteractionGate() {
         #expect(
             TranscriptCommandAvailability.canNavigate(
@@ -341,6 +407,16 @@ struct TranscriptReviewPresentationTests {
         #expect(!review.contains("transcript.select("))
         #expect(review.contains(".inspector(isPresented:"))
         #expect(review.contains("EvidenceInspectorPanel("))
+        #expect(
+            review.contains(
+                "inspectorEvidenceRevisionID ="
+            )
+        )
+        #expect(
+            review.contains(
+                "selectedEvidenceRevisionID:"
+            )
+        )
         #expect(review.contains("Unsaved local draft"))
         #expect(review.contains("Saved"))
         #expect(review.contains("Coverage and route proof"))
@@ -352,6 +428,16 @@ struct TranscriptReviewPresentationTests {
         #expect(!review.contains("Open Source"))
         #expect(!review.contains("SQLitePersistenceStore"))
         #expect(inspector.contains("EvidenceRef.v1"))
+        #expect(
+            inspector.contains(
+                "proxy.scrollTo("
+            )
+        )
+        #expect(
+            inspector.contains(
+                ".accessibilityFocused("
+            )
+        )
         #expect(inspector.contains("Evidence excerpt"))
         #expect(inspector.contains("Evidence logical ID"))
         #expect(inspector.contains("Exact source logical ID"))

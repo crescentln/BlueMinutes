@@ -7,6 +7,8 @@ struct TranscriptReviewView: View {
     @Bindable var store: MediaReviewStore
     @Bindable var sceneState: MediaReviewSceneState
     @State private var inspectorIsPresented = false
+    @State private var inspectorEvidenceRevisionID:
+        RevisionID?
     @State private var presentationCache:
         TranscriptReviewPresentationCache?
     @FocusState private var focusedEditor: TranscriptEditorFocus?
@@ -27,6 +29,7 @@ struct TranscriptReviewView: View {
         .onChange(
             of: sceneState.transcript.selectedSegmentID
         ) { _, _ in
+            inspectorEvidenceRevisionID = nil
             sceneState.transcript.reconcile(
                 with: store.transcriptReview
             )
@@ -347,6 +350,15 @@ struct TranscriptReviewView: View {
         let selectedEvidence = selectedSegment.map {
             presentation.evidence(for: $0)
         } ?? []
+        let selectedInspectorEvidenceRevisionID =
+            TranscriptEvidenceInspectorSelection.resolve(
+                requestedRevisionID:
+                    inspectorEvidenceRevisionID,
+                availableRevisionIDs:
+                    selectedEvidence.map {
+                        $0.revision.revisionID
+                    }
+            )
         let selectedCoverage = selectedSegment.map {
             presentation.coverage(for: $0)
         } ?? []
@@ -372,6 +384,8 @@ struct TranscriptReviewView: View {
                 segment: selectedSegment,
                 coverage: selectedCoverage,
                 evidence: selectedEvidence,
+                selectedEvidenceRevisionID:
+                    selectedInspectorEvidenceRevisionID,
                 unresolvedEvidenceCount:
                     unresolvedEvidenceCount,
                 noSpeechChunks: presentation.noSpeechChunks
@@ -825,6 +839,8 @@ struct TranscriptReviewView: View {
                         EvidenceAnchor(
                             evidence: item
                         ) {
+                            inspectorEvidenceRevisionID =
+                                item.revision.revisionID
                             inspectorIsPresented = true
                         }
                     }

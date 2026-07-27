@@ -6,32 +6,54 @@ struct EvidenceInspectorPanel: View {
     let segment: TranscriptSegmentV1?
     let coverage: [TranscriptChunkCoverage]
     let evidence: [EvidenceRefV1]
+    let selectedEvidenceRevisionID:
+        RevisionID?
     let unresolvedEvidenceCount: Int
     let noSpeechChunks: [TranscriptChunkCoverage]
+    @AccessibilityFocusState
+    private var accessibilityFocusedEvidenceRevisionID:
+        RevisionID?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                Text("Evidence Inspector")
-                    .font(.title2.weight(.semibold))
-                    .accessibilityAddTraits(.isHeader)
-                noSpeechSection
-                if let segment {
-                    sourceSection(segment)
-                    coverageSection
-                    evidenceSection
-                } else {
-                    WorkflowStateView(
-                        title: "Select a Transcript Segment",
-                        detail:
-                            "Select a segment to inspect its exact source, coverage ownership, and EvidenceRef revisions. Global no-speech proofs remain inspectable above.",
-                        systemImage: "link.circle",
-                        tone: .neutral
-                    )
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    Text("Evidence Inspector")
+                        .font(.title2.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    noSpeechSection
+                    if let segment {
+                        sourceSection(segment)
+                        coverageSection
+                        evidenceSection
+                    } else {
+                        WorkflowStateView(
+                            title: "Select a Transcript Segment",
+                            detail:
+                                "Select a segment to inspect its exact source, coverage ownership, and EvidenceRef revisions. Global no-speech proofs remain inspectable above.",
+                            systemImage: "link.circle",
+                            tone: .neutral
+                        )
+                    }
                 }
+                .padding(18)
+                .textSelection(.enabled)
             }
-            .padding(18)
-            .textSelection(.enabled)
+            .task(id: selectedEvidenceRevisionID) {
+                guard let selectedEvidenceRevisionID
+                else {
+                    accessibilityFocusedEvidenceRevisionID =
+                        nil
+                    return
+                }
+                await Task.yield()
+                proxy.scrollTo(
+                    selectedEvidenceRevisionID,
+                    anchor: .top
+                )
+                accessibilityFocusedEvidenceRevisionID =
+                    selectedEvidenceRevisionID
+            }
         }
         .accessibilityIdentifier(
             "BlueMinutes.Transcript.EvidenceInspector"
@@ -274,7 +296,12 @@ struct EvidenceInspectorPanel: View {
     private func evidenceItem(
         _ item: EvidenceRefV1
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let revisionID =
+            item.revision.revisionID
+        let isSelected =
+            revisionID
+            == selectedEvidenceRevisionID
+        return VStack(alignment: .leading, spacing: 8) {
             EvidenceBadge(
                 title: label(item.evidenceKind.rawValue),
                 systemImage: "link.circle"
@@ -333,6 +360,41 @@ struct EvidenceInspectorPanel: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel("Evidence excerpt")
         }
+        .padding(10)
+        .background(
+            isSelected
+                ? Color.accentColor
+                    .opacity(0.14)
+                : Color.clear,
+            in:
+                RoundedRectangle(
+                    cornerRadius: 8
+                )
+        )
+        .overlay {
+            if isSelected {
+                RoundedRectangle(
+                    cornerRadius: 8
+                )
+                .stroke(
+                    Color.accentColor,
+                    lineWidth: 1
+                )
+            }
+        }
+        .id(revisionID)
+        .accessibilityElement(
+            children: .contain
+        )
+        .accessibilityValue(
+            isSelected
+                ? "Selected exact evidence revision \(revisionID.canonicalString)"
+                : "Evidence revision \(revisionID.canonicalString)"
+        )
+        .accessibilityFocused(
+            $accessibilityFocusedEvidenceRevisionID,
+            equals: revisionID
+        )
     }
 
     private func locationLabel(
