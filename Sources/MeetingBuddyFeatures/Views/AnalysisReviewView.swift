@@ -301,23 +301,66 @@ struct AnalysisReviewView: View {
     }
 
     private func coverageHeader(_ review: AnalysisReviewBundle) -> some View {
-        GroupBox("Analysis coverage proof") {
+        let coverage =
+            AnalysisCoveragePresentation(
+                ledger: review.ledger
+            )
+        return GroupBox("Analysis coverage proof") {
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
                 GridRow {
                     Text("Coverage")
                     Label(
-                        "\(review.ledger.segments.count) / \(review.ledger.eligibleSegmentRevisions.count) eligible segments",
-                        systemImage: "checkmark.seal.fill"
+                        coverage.summary,
+                        systemImage:
+                            coverage.isComplete
+                            ? "checkmark.seal.fill"
+                            : "exclamationmark.triangle.fill"
                     )
-                    .foregroundStyle(.green)
+                    .foregroundStyle(
+                        coverage.isComplete
+                            ? Color.green
+                            : Color.orange
+                    )
+                }
+                GridRow {
+                    Text("Ledger status")
+                    Text(coverage.statusLabel)
                 }
                 GridRow {
                     Text("Substantive")
-                    Text(String(review.ledger.segments.filter { $0.disposition == .substantive }.count))
+                    Text(
+                        String(
+                            coverage
+                                .substantiveSegmentCount
+                        )
+                    )
                 }
                 GridRow {
                     Text("Non-substantive")
-                    Text(String(review.ledger.segments.filter { $0.disposition == .nonSubstantive }.count))
+                    Text(
+                        String(
+                            coverage
+                                .nonSubstantiveSegmentCount
+                        )
+                    )
+                }
+                GridRow {
+                    Text("Failed")
+                    Text(
+                        String(
+                            coverage
+                                .failedSegmentCount
+                        )
+                    )
+                }
+                GridRow {
+                    Text("Missing")
+                    Text(
+                        String(
+                            coverage
+                                .missingSegmentCount
+                        )
+                    )
                 }
                 GridRow { Text("Route"); Text(review.ledger.analysisRoute.route.rawValue) }
                 GridRow {

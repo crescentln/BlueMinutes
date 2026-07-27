@@ -182,17 +182,27 @@ public final class AVFoundationMediaProcessor: NativeMediaProcessing, @unchecked
         }
         writer.add(input)
 
-        guard reader.startReading(), writer.startWriting() else {
+        guard reader.startReading() else {
             throw MediaContractError.processingFailed(
-                safeAVFailure(reader.error ?? writer.error)
+                safeAVFailure(reader.error)
             )
         }
-        writer.startSession(atSourceTime: .zero)
 
         var maximumEndFrame: UInt64 = 0
         var previousEndFrame: UInt64?
         var issues: [MediaRangeIssue] = []
         do {
+            guard writer.startWriting() else {
+                throw MediaContractError.processingFailed(
+                    safeAVFailure(writer.error)
+                )
+            }
+            try secureAVAssetWriterDestination(
+                destinationURL
+            )
+            writer.startSession(
+                atSourceTime: .zero
+            )
             while reader.status == .reading {
                 try Task.checkCancellation()
                 guard input.isReadyForMoreMediaData else {
@@ -297,6 +307,75 @@ public final class AVFoundationMediaProcessor: NativeMediaProcessing, @unchecked
             throw MediaContractError.processingFailed(
                 "The canonical audio destination could not be prepared."
             )
+        }
+    }
+
+    private func secureAVAssetWriterDestination(
+        _ destinationURL: URL
+    ) throws {
+        do {
+            let values =
+                try destinationURL
+                .resourceValues(
+                    forKeys: [
+                        .isRegularFileKey,
+                        .isSymbolicLinkKey
+                    ]
+                )
+            guard
+                values.isRegularFile == true,
+                values.isSymbolicLink
+                    != true
+            else {
+                throw MediaContractError
+                    .processingFailed(
+                        "The canonical audio writer did not create an ordinary task file."
+                    )
+            }
+            try FileManager.default
+                .setAttributes(
+                    [
+                        .posixPermissions:
+                            NSNumber(
+                                value:
+                                    Int16(
+                                        0o600
+                                    )
+                            )
+                    ],
+                    ofItemAtPath:
+                        destinationURL.path
+                )
+            let attributes =
+                try FileManager.default
+                .attributesOfItem(
+                    atPath:
+                        destinationURL.path
+                )
+            let permissions =
+                (
+                    attributes[
+                        .posixPermissions
+                    ] as? NSNumber
+                )?.intValue
+            guard permissions.map({
+                $0 & 0o777
+            }) == 0o600
+            else {
+                throw MediaContractError
+                    .processingFailed(
+                        "The canonical audio writer task file is not private."
+                    )
+            }
+        } catch let error
+            as MediaContractError
+        {
+            throw error
+        } catch {
+            throw MediaContractError
+                .processingFailed(
+                    "The canonical audio writer task file could not be secured."
+                )
         }
     }
 

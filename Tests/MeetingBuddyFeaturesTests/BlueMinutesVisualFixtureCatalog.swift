@@ -287,7 +287,7 @@ struct BlueMinutesVisualFixtureCase:
             (.transcript, "selected", true),
             (.transcript, "incomplete", false),
             (.analysis, "selected", true),
-            (.analysis, "stale", false),
+            (.analysis, "stale", true),
             (.briefing, "selected", false),
             (
                 .briefing,

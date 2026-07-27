@@ -483,6 +483,12 @@ struct BlueMinutesSettingsTests {
                 "analysis-selected-light",
                 "BlueMinutes.Analysis.EvidenceInspector",
                 "Analysis evidence inspector",
+                "Selected evidence revision resolved exactly"
+            ),
+            (
+                "analysis-stale-light",
+                "BlueMinutes.Analysis.EvidenceInspector",
+                "Analysis evidence inspector",
                 "Selected evidence revision is unresolved"
             )
         ]
