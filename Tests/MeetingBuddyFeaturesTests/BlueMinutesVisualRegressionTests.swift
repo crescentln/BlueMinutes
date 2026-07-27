@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import SwiftUI
 import Testing
 @testable import MeetingBuddyFeatures
@@ -55,12 +56,64 @@ struct BlueMinutesVisualRegressionTests {
                     expectedViewport:
                         descriptor.viewport
                 )
+        let pngBytes =
+            [UInt8](first)
+        let profileRange =
+            try firstChunkRange(
+                named: "iCCP",
+                in: pngBytes
+            )
+        let profileDataStart =
+            profileRange.lowerBound + 8
+        let profileDataEnd =
+            profileRange.upperBound - 4
+        guard let profileNameEnd =
+            pngBytes[
+                profileDataStart..<profileDataEnd
+            ]
+            .firstIndex(of: 0),
+              profileNameEnd + 3
+                < profileDataEnd
+        else {
+            Issue.record(
+                "The PNG iCCP payload is truncated."
+            )
+            return
+        }
+        let compressionMethod =
+            pngBytes[
+                profileNameEnd + 1
+            ]
+        let zlibStart =
+            profileNameEnd + 2
+        let zlibHeader =
+            (
+                UInt16(
+                    pngBytes[zlibStart]
+                ) << 8
+            )
+                | UInt16(
+                    pngBytes[zlibStart + 1]
+                )
         let comparison =
             try BlueMinutesRuntimeCapture
                 .compare(
                     expected: first,
                     actual: second
                 )
+        let imageSource =
+            CGImageSourceCreateWithData(
+                first as CFData,
+                nil
+            )
+        let imageProperties =
+            imageSource.flatMap {
+                CGImageSourceCopyPropertiesAtIndex(
+                    $0,
+                    0,
+                    nil
+                )
+            } as? [CFString: Any]
 
         #expect(contract.width == 640)
         #expect(contract.height == 420)
@@ -70,6 +123,27 @@ struct BlueMinutesVisualRegressionTests {
             contract.chunkNames.contains(
                 "iCCP"
             )
+        )
+        #expect(compressionMethod == 0)
+        #expect(
+            pngBytes[zlibStart] & 0x0f
+                == 8
+        )
+        #expect(
+            pngBytes[zlibStart] >> 4
+                <= 7
+        )
+        #expect(zlibHeader % 31 == 0)
+        #expect(
+            pngBytes[zlibStart + 1]
+                & 0x20
+                == 0
+        )
+        #expect(
+            imageProperties?[
+                kCGImagePropertyProfileName
+            ] as? String
+                == "sRGB IEC61966-2.1"
         )
         #expect(
             comparison.maximumChannelDelta
