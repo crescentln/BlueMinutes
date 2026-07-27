@@ -2438,7 +2438,7 @@ public final class MediaReviewStore {
         failureMessage: String,
         _ operation: () async throws -> Void
     ) async {
-        guard !isWorking else {
+        guard !isWorking, !isStoppingRecording else {
             return
         }
         safeErrorMessage = nil
