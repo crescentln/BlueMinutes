@@ -462,6 +462,370 @@ struct BlueMinutesSettingsTests {
     }
 
     @Test @MainActor
+    func visualMatrixProductionInspectorsExposeExactRuntimeAccessibility()
+        async throws
+    {
+        let probes: [
+            (
+                fixtureID: String,
+                identifier: String,
+                label: String,
+                value: String
+            )
+        ] = [
+            (
+                "transcript-selected-light",
+                "BlueMinutes.Transcript.EvidenceInspector",
+                "Transcript evidence inspector",
+                "Exact source, coverage, and evidence for the selected transcript segment"
+            ),
+            (
+                "analysis-selected-light",
+                "BlueMinutes.Analysis.EvidenceInspector",
+                "Analysis evidence inspector",
+                "Selected evidence revision is unresolved"
+            )
+        ]
+
+        for probe in probes {
+            let fixture =
+                try #require(
+                    BlueMinutesVisualFixtureCase
+                    .all.first {
+                        $0.id
+                            == probe
+                            .fixtureID
+                    }
+                )
+            let content =
+                try await
+                BlueMinutesProductionVisualFixtureFactory
+                .content(
+                    for: fixture
+                )
+            let title =
+                "BlueMinutes Visual AX "
+                    + probe.fixtureID
+            let snapshots =
+                try withHostedWindow(
+                    title: title,
+                    size:
+                        CGSize(
+                            width:
+                                fixture
+                                .descriptor
+                                .viewport
+                                .width,
+                            height:
+                                fixture
+                                .descriptor
+                                .viewport
+                                .height
+                    ),
+                    content: {
+                        content.view.frame(
+                            maxWidth:
+                                .infinity,
+                            maxHeight:
+                                .infinity
+                        )
+                    },
+                    operation: { _ in
+                        try accessibilitySnapshots(
+                            windowTitle: title,
+                            identifiers: [
+                                probe
+                                .identifier
+                            ]
+                        )
+                    }
+                )
+            await content.teardown()
+            let snapshot =
+                try #require(
+                    snapshots[
+                        probe.identifier
+                    ]
+                )
+
+            #expect(
+                snapshots.occurrenceCount(
+                    probe.identifier
+                ) == 1
+            )
+            #expect(
+                snapshot.role
+                    == kAXScrollAreaRole
+            )
+            #expect(
+                snapshot.label
+                    == probe.label
+            )
+            #expect(
+                snapshot.value
+                    == probe.value
+            )
+            #expect(
+                snapshot.frame.width > 0
+            )
+            #expect(
+                snapshot.frame.height > 0
+            )
+            #expect(
+                snapshot.frame.minX
+                    >= snapshots
+                    .containingFrame
+                    .minX - 2
+            )
+            #expect(
+                snapshot.frame.maxX
+                    <= snapshots
+                    .containingFrame
+                    .maxX + 2
+            )
+        }
+    }
+
+    @Test @MainActor
+    func productionTranscriptInspectorOpenAndClosedStatesChangeNativeLayout()
+        async throws
+    {
+        let state =
+            try await
+            makeFeatureReviewVisualFixture()
+        let draftIdentifier =
+            "BlueMinutes.Transcript.DraftState"
+        let inspectorIdentifier =
+            "BlueMinutes.Transcript.EvidenceInspector"
+        let identifiers = [
+            draftIdentifier,
+            inspectorIdentifier
+        ] as Set<String>
+        let size =
+            CGSize(
+                width: 1_440,
+                height: 1_024
+            )
+        let closedTitle =
+            "BlueMinutes Transcript Inspector Closed"
+        let closed =
+            try withHostedWindow(
+                title: closedTitle,
+                size: size,
+                content: {
+                    TranscriptReviewView(
+                        store: state.store,
+                        sceneState:
+                            state.sceneState
+                    )
+                },
+                operation: { _ in
+                    try accessibilitySnapshots(
+                        windowTitle:
+                            closedTitle,
+                        identifiers:
+                            identifiers
+                    )
+                }
+            )
+        let openTitle =
+            "BlueMinutes Transcript Inspector Open"
+        let open =
+            try withHostedWindow(
+                title: openTitle,
+                size: size,
+                content: {
+                    TranscriptReviewView(
+                        store: state.store,
+                        sceneState:
+                            state.sceneState,
+                        initialInspectorIsPresented:
+                            true
+                    )
+                },
+                operation: { _ in
+                    try accessibilitySnapshots(
+                        windowTitle:
+                            openTitle,
+                        identifiers:
+                            identifiers
+                    )
+                }
+            )
+        let closedDraft =
+            try #require(
+                closed[
+                    draftIdentifier
+                ]
+            )
+        let openDraft =
+            try #require(
+                open[
+                    draftIdentifier
+                ]
+            )
+        let inspector =
+            try #require(
+                open[
+                    inspectorIdentifier
+                ]
+            )
+
+        #expect(
+            closed.occurrenceCount(
+                inspectorIdentifier
+            ) == 0
+        )
+        #expect(
+            open.occurrenceCount(
+                inspectorIdentifier
+            ) == 1
+        )
+        #expect(
+            inspector.frame.width
+                >= 280
+        )
+        #expect(
+            inspector.frame.width
+                <= 460
+        )
+        #expect(
+            openDraft.frame
+                != closedDraft.frame
+        )
+        #expect(
+            !openDraft.frame
+                .intersects(
+                    inspector.frame
+                )
+        )
+    }
+
+    @Test @MainActor
+    func transcriptInspectorToolbarAXActionPreservesFocusAndTogglesProductionBinding()
+        async throws
+    {
+        let state =
+            try await
+            makeFeatureReviewVisualFixture()
+        let title =
+            "BlueMinutes Transcript Inspector Action"
+        var inspectorRequested =
+            false
+        let inspectorBinding =
+            Binding(
+                get: {
+                    inspectorRequested
+                },
+                set: {
+                    inspectorRequested =
+                        $0
+                }
+            )
+
+        try withHostedWindow(
+            title: title,
+            size:
+                CGSize(
+                    width: 1_440,
+                    height: 1_024
+                ),
+            content: {
+                TranscriptReviewView(
+                    store: state.store,
+                    sceneState:
+                        state.sceneState,
+                    inspectorPresentationOverride:
+                        inspectorBinding
+                )
+            },
+            operation: { _ in
+                let openButton =
+                    try #require(
+                        accessibilityElement(
+                            windowTitle:
+                                title,
+                            label:
+                                "Evidence Inspector",
+                            role:
+                                kAXButtonRole
+                        )
+                    )
+                #expect(
+                    AXUIElementSetAttributeValue(
+                        openButton,
+                        kAXFocusedAttribute
+                            as CFString,
+                        kCFBooleanTrue
+                    )
+                        == .success
+                )
+                #expect(
+                    AXUIElementPerformAction(
+                        openButton,
+                        kAXPressAction
+                            as CFString
+                    )
+                        == .success
+                )
+                #expect(
+                    inspectorRequested
+                )
+
+                let closeButton =
+                    try #require(
+                        accessibilityElement(
+                            windowTitle:
+                                title,
+                            label:
+                                "Evidence Inspector",
+                            role:
+                                kAXButtonRole
+                        )
+                    )
+                #expect(
+                    axValue(
+                        closeButton,
+                        attribute:
+                            kAXFocusedAttribute
+                    ) as? Bool
+                        == true
+                )
+                #expect(
+                    AXUIElementPerformAction(
+                        closeButton,
+                        kAXPressAction
+                            as CFString
+                    )
+                        == .success
+                )
+                #expect(
+                    !inspectorRequested
+                )
+                let restoredButton =
+                    try #require(
+                        accessibilityElement(
+                            windowTitle:
+                                title,
+                            label:
+                                "Evidence Inspector",
+                            role:
+                                kAXButtonRole
+                        )
+                    )
+                #expect(
+                    axValue(
+                        restoredButton,
+                        attribute:
+                            kAXFocusedAttribute
+                    ) as? Bool
+                        == true
+                )
+            }
+        )
+    }
+
+    @Test @MainActor
     func learnedPreferencesTabHostsRepositoryBackedControlsInsideSettings()
         async throws
     {
@@ -1600,6 +1964,111 @@ struct BlueMinutesSettingsTests {
     }
 
     @MainActor
+    private func accessibilityElement(
+        windowTitle: String,
+        label: String,
+        role: String? = nil
+    ) -> AXUIElement? {
+        let application =
+            AXUIElementCreateApplication(
+                getpid()
+            )
+        let deadline =
+            Date(
+                timeIntervalSinceNow: 1
+            )
+        var matchingWindow:
+            AXUIElement?
+        repeat {
+            matchingWindow =
+                axElements(
+                    application,
+                    attribute:
+                        kAXWindowsAttribute
+                )
+                .first {
+                    axString(
+                        $0,
+                        attribute:
+                            kAXTitleAttribute
+                    )
+                        == windowTitle
+                }
+            if matchingWindow == nil {
+                RunLoop.main.run(
+                    until:
+                        Date(
+                            timeIntervalSinceNow:
+                                0.02
+                        )
+                )
+            }
+        } while
+            matchingWindow == nil
+            && Date() < deadline
+        guard let matchingWindow
+        else { return nil }
+        return firstAccessibilityElement(
+            from: matchingWindow,
+            label: label,
+            role: role,
+            depth: 0
+        )
+    }
+
+    @MainActor
+    private func firstAccessibilityElement(
+        from element: AXUIElement,
+        label: String,
+        role: String?,
+        depth: Int
+    ) -> AXUIElement? {
+        guard depth < 20
+        else { return nil }
+        let labelMatches =
+            axString(
+                element,
+                attribute:
+                    kAXDescriptionAttribute
+            ) == label
+            || axString(
+                element,
+                attribute:
+                    kAXTitleAttribute
+            ) == label
+        let roleMatches =
+            role == nil
+            || axString(
+                element,
+                attribute:
+                    kAXRoleAttribute
+            ) == role
+        if labelMatches
+            && roleMatches
+        {
+            return element
+        }
+        for child in axElements(
+            element,
+            attribute:
+                kAXChildrenAttribute
+        ) {
+            if let match =
+                firstAccessibilityElement(
+                    from: child,
+                    label: label,
+                    role: role,
+                    depth:
+                        depth + 1
+                )
+            {
+                return match
+            }
+        }
+        return nil
+    }
+
+    @MainActor
     private func accessibilitySnapshots(
         windowTitle: String,
         identifiers: Set<String>
@@ -2011,7 +2480,7 @@ private struct HostedHistoryComparisonAccessibilityProbe:
     }
 }
 
-private struct HostedHistoryReviewAccessibilityFixture {
+struct HostedHistoryReviewAccessibilityFixture {
     let result: HistoricalPositionResult
     let comparison: HistoricalComparisonV1
     let currentRevisionID: RevisionID
@@ -2536,6 +3005,15 @@ private struct BlueMinutesAXSnapshots {
     ) -> Int {
         matches[identifier, default: []]
             .count { $0.role == role }
+    }
+
+    func occurrenceCount(
+        _ identifier: String
+    ) -> Int {
+        matches[
+            identifier,
+            default: []
+        ].count
     }
 }
 

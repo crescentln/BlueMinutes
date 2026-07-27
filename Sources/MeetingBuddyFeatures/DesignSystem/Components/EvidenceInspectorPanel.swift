@@ -58,6 +58,14 @@ struct EvidenceInspectorPanel: View {
         .accessibilityIdentifier(
             "BlueMinutes.Transcript.EvidenceInspector"
         )
+        .accessibilityLabel(
+            "Transcript evidence inspector"
+        )
+        .accessibilityValue(
+            segment == nil
+                ? "No transcript segment selected"
+                : "Exact source, coverage, and evidence for the selected transcript segment"
+        )
     }
 
     private func sourceSection(

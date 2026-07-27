@@ -8,6 +8,10 @@ struct StorageDashboardView: View {
     @Bindable var store: MediaReviewStore
     let requestPermanentDeletion:
         (WorkspaceTrashItem) -> Void
+    @Environment(\.locale)
+    private var locale
+    @Environment(\.calendar)
+    private var calendar
 
     private var presentationState:
         StorageDashboardPresentationState
@@ -597,14 +601,12 @@ struct StorageDashboardView: View {
     private func date(
         _ instant: UTCInstant
     ) -> String {
-        let date = Date(
-            timeIntervalSince1970:
-                Double(
-                    instant
-                        .millisecondsSinceUnixEpoch
-                ) / 1_000
-        )
-        return
-            "\(date.formatted(date: .abbreviated, time: .standard)) · \(instant.millisecondsSinceUnixEpoch) ms UTC"
+        StorageDashboardPresentation
+            .utcDateLabel(
+                instant,
+                locale: locale,
+                calendar:
+                    calendar
+            )
     }
 }

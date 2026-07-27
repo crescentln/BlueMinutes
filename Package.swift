@@ -194,6 +194,9 @@ let package = Package(
                 "MeetingBuddyApplication",
                 "MeetingBuddyDomain",
                 "MeetingBuddyFeatures"
+            ],
+            resources: [
+                .copy("VisualRegression")
             ]
         ),
         .testTarget(

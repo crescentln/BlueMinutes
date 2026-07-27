@@ -1,0 +1,1607 @@
+{
+  "environment" : {
+    "architecture" : "arm64",
+    "comparisonAlgorithmVersion" : 1,
+    "expandedViewport" : {
+      "height" : 1024,
+      "width" : 1728
+    },
+    "fixtureSeed" : "blueminutes-editorial-dossier-v1",
+    "fixtureVersion" : 1,
+    "locale" : "en_US_POSIX",
+    "platformFamily" : "macos-26",
+    "pointToPixelScale" : 1,
+    "swiftMajorMinor" : "6.3",
+    "timeZone" : "UTC",
+    "xcode" : "26.6"
+  },
+  "goldens" : [
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "analysis-selected-dark",
+        "inspectorPresented" : true,
+        "locale" : "en_US_POSIX",
+        "state" : "selected",
+        "surface" : "analysis",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "analysis-selected-dark.png",
+      "pixelSHA256" : "2fca613030ea506d55fed9547bc008b9fc6d6a7044bcbe83825817879c4f2946",
+      "pngSHA256" : "740869261a223c3c115d0d97658b6d27eb96411a14d4751e40782d88cb897463",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "analysis-selected-light",
+        "inspectorPresented" : true,
+        "locale" : "en_US_POSIX",
+        "state" : "selected",
+        "surface" : "analysis",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "analysis-selected-light.png",
+      "pixelSHA256" : "f29772f2df2b611da106453eeebda77ff17127f2a9b29c12d079f485d835b72f",
+      "pngSHA256" : "d0ead7c14540c87c63360ffd7f9c6755e9b3527586b63ae496d328fe2b573644",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "analysis-stale-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "stale",
+        "surface" : "analysis",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "analysis-stale-dark.png",
+      "pixelSHA256" : "562e90df1d63ded9e0854e039e1d6c35a6c1741ab687396a290c6a7468c5734d",
+      "pngSHA256" : "ed13ee08a8d4dfa90a5784292e10fe0b28f76661b2d3c4c28f00d65104d3af89",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "analysis-stale-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "stale",
+        "surface" : "analysis",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "analysis-stale-light.png",
+      "pixelSHA256" : "352291004c5f3984e006002a078fb54aa3f416e98a0f23384439e037ab1d60a5",
+      "pngSHA256" : "3354f33d4029dcd1c3de149f0a0092c776120a2d997b7137b511ce549ad1dbdf",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "briefing-export-blocked-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "export-blocked",
+        "surface" : "briefing",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "briefing-export-blocked-dark.png",
+      "pixelSHA256" : "05dd24ba58828fcf2ec1e8af70f102abf3d75fc1c1d57d7ebad9aa0b40397662",
+      "pngSHA256" : "29a7a1dd88612981319a96f9d4e40994d13c366e7d401698f419971494f160e9",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "briefing-export-blocked-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "export-blocked",
+        "surface" : "briefing",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "briefing-export-blocked-light.png",
+      "pixelSHA256" : "ec4610471aae02d79ab5fee04bf7a61bb9be602f8fa636f32c5cbe31f6ce6529",
+      "pngSHA256" : "f42e1fa25d114e00800a111e98048b8d9131a9e3954caf9e25f7ba126687dfa5",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "briefing-selected-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "selected",
+        "surface" : "briefing",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "briefing-selected-dark.png",
+      "pixelSHA256" : "049a16292d01b547573a876ce90dae9f2b16a06780b3f82b272f84b35cc295ee",
+      "pngSHA256" : "8fbaf785ede974228e02b7167931f459fd88b64c41da8eaec3b3e6d78cb9abac",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "briefing-selected-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "selected",
+        "surface" : "briefing",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "briefing-selected-light.png",
+      "pixelSHA256" : "7b4084b00ddcc09d9991958a4db50f4ca20885fb1f95c1c3ffb71606831f30ba",
+      "pngSHA256" : "c03d663cad8ddce3366e3559257f5f8371236297f37ee588bec8df616b034019",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "history-empty-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "empty",
+        "surface" : "history",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "history-empty-dark.png",
+      "pixelSHA256" : "09b0a026b25f3e6eb5a7da46d79a00f51d062bf9a55a1d2ccbefe7544c48ef48",
+      "pngSHA256" : "b96f542e0fbece6c986ea16f48fddcfcc763cf4977b5998700d6187efa2ed394",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "history-empty-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "empty",
+        "surface" : "history",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "history-empty-light.png",
+      "pixelSHA256" : "34787731fd3ee6c95da010ecd8430c8aa7323d7f418016dd59749ae3945e06c6",
+      "pngSHA256" : "67f3df95a28af49428a7e7c139cdf6e9f681f5f536b39b5ce1c529ba318d4dcc",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "history-results-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "results",
+        "surface" : "history",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "history-results-dark.png",
+      "pixelSHA256" : "b38f6d49a76c69b79077b0ea4dcd974b97435c64aa31013e9cafafb5cf8a20f1",
+      "pngSHA256" : "6df032501af38f3c9942873ba67a11dc4dde8bc5458cced158680ca0cb0fee81",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : true,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "history-results-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "results",
+        "surface" : "history",
+        "textSize" : "accessibility2",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "history-results-light.png",
+      "pixelSHA256" : "d6cf8b2a7ab591baba1ff637d06501cb2368b8b0945d91f722f85b890ee3b6f3",
+      "pngSHA256" : "cd693b6ae3fcf14eb99174b054d9fe960b09c4242ad5d9ceaf486d3bf3ba237f",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "local-media-ready-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "ready",
+        "surface" : "local-media",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "local-media-ready-dark.png",
+      "pixelSHA256" : "cd9748e99bdb609a931ff586f60912cb4454a67fb07fd82af0dd410a43a1b650",
+      "pngSHA256" : "b7535488d53526a59728a15591f6ba348b2a7560d2dae6007ef7e604a240f359",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "local-media-ready-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "ready",
+        "surface" : "local-media",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "local-media-ready-light.png",
+      "pixelSHA256" : "2623093a72ab625cc2d519378f921e2762815bf212b45233b4c5d6bece5c8765",
+      "pngSHA256" : "324d33eccc4b93c011d036199025ff6ba71bfb36c605ba5a216b94461302c8f2",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "local-media-working-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "working",
+        "surface" : "local-media",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "local-media-working-dark.png",
+      "pixelSHA256" : "8e437caf1abee70f6717edc5aa42256c2cf75b848aa15ba4edcc3035a1a53e8a",
+      "pngSHA256" : "dd2d8b3cd308c61c76a9a52124f666b266a95237bfae161506f32af68ddd4e70",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "local-media-working-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "working",
+        "surface" : "local-media",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "local-media-working-light.png",
+      "pixelSHA256" : "98ad86fa1dc3c58bd402934d28d896cce036839cf4e2dd239e2bdf13fd554f0d",
+      "pngSHA256" : "415d9e650051898b142a020e0f82d5ea2efa5a81d7d43950925d4140e03fe459",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "onboarding-empty-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "empty",
+        "surface" : "onboarding",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "onboarding-empty-dark.png",
+      "pixelSHA256" : "80776fed09a855adbf1f7422cc31298660957595bf044a10ceb03bd3eae81582",
+      "pngSHA256" : "7bc7a533190ecf160ce94dd489fa8d29eecd7167eccf99299f6bc193a25ef059",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "onboarding-empty-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "empty",
+        "surface" : "onboarding",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "onboarding-empty-light.png",
+      "pixelSHA256" : "a0cc9a53558c1133386bb3a444a60a13f73e5fca9e4763b63c416f019ffb4823",
+      "pngSHA256" : "fcbdf80f93e0e52edb4512b09c0de0e4cf5d8a0e6f7abab4651f2367ad45df47",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "recording-active-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "active",
+        "surface" : "recording",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "recording-active-dark.png",
+      "pixelSHA256" : "67dfb06cfbc5c51089a01ff0eaabc71f8f004cdff9a66cc01dd049a55340f82e",
+      "pngSHA256" : "04d0e0056a263fea235d475833dbbed3419f9190e3cb9c58251b53154a53ae7d",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "recording-active-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "active",
+        "surface" : "recording",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "recording-active-light.png",
+      "pixelSHA256" : "af8c77427f6a0a948040258a4ec807e01e5b14d0c046b6aae61b2de179939502",
+      "pngSHA256" : "e44e3f967fd6202a39a9d7584c9267115f685d7f9dee4cba71fa40b2252bfe32",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "recording-ready-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "ready",
+        "surface" : "recording",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "recording-ready-dark.png",
+      "pixelSHA256" : "2c84eec6a98c20972244346f6851d4a2947026c59c942b507cf1c3e93915bfbc",
+      "pngSHA256" : "a07ae55346678fa2e456b2f08a15b1f22aad208b1d380a3915381bff549e7a33",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "recording-ready-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "ready",
+        "surface" : "recording",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "recording-ready-light.png",
+      "pixelSHA256" : "8f459677a78019b1bd2d1b686737e1cf75406731af51028f17d0b2afc8098164",
+      "pngSHA256" : "dc578b1b2fc251f18c749c0955922b75eacd68ed0491ffbf314397b98a110017",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "settings-appearance-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "appearance",
+        "surface" : "settings",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "settings-appearance-dark.png",
+      "pixelSHA256" : "a1dd9c1dfd3d8b286c3ddf4c05534cfc3d0f5199526c66b8f96eb91d3207699a",
+      "pngSHA256" : "803ae0128ed84bf672bd7554cddb44916ca6b60d4a89e1037a353de39faeaeb7",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "settings-appearance-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "appearance",
+        "surface" : "settings",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "settings-appearance-light.png",
+      "pixelSHA256" : "15f8c1b19559dc7e9c7c2c5d0d9e66b5c78776d3d9bfd33a2f324b8be27178d1",
+      "pngSHA256" : "4129f75ba6194b27c5ae251e829361c671aecf2356c1a5e07d5e06d81721a748",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "settings-general-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "general",
+        "surface" : "settings",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "settings-general-dark.png",
+      "pixelSHA256" : "9eb33136a0731df60b7632d23b8e3a9eb300392f169aa79b72ec2a33cbf1175f",
+      "pngSHA256" : "c1ec6e8cbc731b5708bfd903105887d29b968cb4a890fdca624d0f3342a93feb",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "settings-general-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "general",
+        "surface" : "settings",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "settings-general-light.png",
+      "pixelSHA256" : "e09a6756ab90b08135a4013785d21f98ed72d2259ed116833aaeb6c0f7a3dbff",
+      "pngSHA256" : "0ed875937592d8a49dd1bb2c07daafae3d38c7a9fb5c0ab32fd726a16ec328f2",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "shell-1080x720-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "workspace-ready",
+        "surface" : "shell",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 720,
+          "width" : 1080
+        }
+      },
+      "fileName" : "shell-1080x720-dark.png",
+      "pixelSHA256" : "d1d35322eccc67f56fcfd8a3fa8c6290481b41aaaee544324f09341ed3e56e64",
+      "pngSHA256" : "233090a0ed813e8c04b21ddae41a7242cd448c6ca8a322a7a674152316794424",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "shell-1080x720-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "workspace-ready",
+        "surface" : "shell",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 720,
+          "width" : 1080
+        }
+      },
+      "fileName" : "shell-1080x720-light.png",
+      "pixelSHA256" : "c852c3664e9f12a5a8a5e23c383b5b8cb2f925e6ab4afb11a924c71bd1c402dc",
+      "pngSHA256" : "b0382e5e25345c4b06b21f08ccf3736c7d39104fa352de3e5068d0e6002e4aad",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "shell-1440x1024-dark",
+        "inspectorPresented" : true,
+        "locale" : "en_US_POSIX",
+        "state" : "workspace-ready",
+        "surface" : "shell",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "shell-1440x1024-dark.png",
+      "pixelSHA256" : "504c2323e22a0f112deada67cee1552b6f73f5fdd59ed212a7ee97a86b4d8414",
+      "pngSHA256" : "d2f25662a23540c89fd52967fab05f417e69e7fbe1f8f9f080a3e3f7a1cb3701",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "shell-1440x1024-light",
+        "inspectorPresented" : true,
+        "locale" : "en_US_POSIX",
+        "state" : "workspace-ready",
+        "surface" : "shell",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "shell-1440x1024-light.png",
+      "pixelSHA256" : "2d7fa87da7910a2d2585d8386681acd7997872e5b7c08982f53740795a773510",
+      "pngSHA256" : "47c900f91a4188ee4811db9829aba4e808373e847c2f7078f0080347750b58a0",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "shell-1728x1024-dark",
+        "inspectorPresented" : true,
+        "locale" : "en_US_POSIX",
+        "state" : "workspace-ready",
+        "surface" : "shell",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1728
+        }
+      },
+      "fileName" : "shell-1728x1024-dark.png",
+      "pixelSHA256" : "b50ef4b97f8d6a4b2e6bd6c48c7a87a183b64bc60df1b7bb63f2c88a12fe7201",
+      "pngSHA256" : "ad7c57d2d0dfb9412bf7943a90d653fbef713538715888b8ba46c3b8f1ab94ba",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "shell-1728x1024-light",
+        "inspectorPresented" : true,
+        "locale" : "en_US_POSIX",
+        "state" : "workspace-ready",
+        "surface" : "shell",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1728
+        }
+      },
+      "fileName" : "shell-1728x1024-light.png",
+      "pixelSHA256" : "b19a0dbef750f1c70b252a84770697563fc6773944164d144656dbd7fe9c9118",
+      "pngSHA256" : "a19c0840d28ca6b072dceef164a696f42f9705b0a283768ac2ae8021dca16aff",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "shell-860x600-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "workspace-ready",
+        "surface" : "shell",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 600,
+          "width" : 860
+        }
+      },
+      "fileName" : "shell-860x600-dark.png",
+      "pixelSHA256" : "5df8acb9a98d0177b9ba3d3c20f6579c4bd607a1ac91f31e0f59b09df11ab8da",
+      "pngSHA256" : "bcbbee3cc376f049104f59c0031c7db84c3c507f96ae687f1d30388f6ae1ed91",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "shell-860x600-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "workspace-ready",
+        "surface" : "shell",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 600,
+          "width" : 860
+        }
+      },
+      "fileName" : "shell-860x600-light.png",
+      "pixelSHA256" : "e9c24bac84899f0ded2f1492029f37585a034acbafeaed5a165ba08f09505ab0",
+      "pngSHA256" : "4cf0b2c2620eb442fdc7b85dd1519313df264bea1f9405b904421efab43a8315",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : true,
+          "largerText" : true,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "storage-destructive-disabled-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "destructive-disabled",
+        "surface" : "storage",
+        "textSize" : "accessibility2",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "storage-destructive-disabled-dark.png",
+      "pixelSHA256" : "48af3ec91127d3189fb1826c27a5da05732955c8105641ee52d4957bde13c980",
+      "pngSHA256" : "7f90d0b0ac89890eb379a39f6077df92302e0746a7965f9dc646e47c521220c8",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "storage-destructive-disabled-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "destructive-disabled",
+        "surface" : "storage",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "storage-destructive-disabled-light.png",
+      "pixelSHA256" : "b8efe530f8c0e61ac6b45936e1695e75775ff36f07043a00c0e89544bfbb3481",
+      "pngSHA256" : "1f3d00e94f5a4e0dc1424ea956756c976ec3082841215353113b7ede69e67aca",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "storage-healthy-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "healthy",
+        "surface" : "storage",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "storage-healthy-dark.png",
+      "pixelSHA256" : "04df453bb14eae541ceafe303883901d8273788853ed0712b3a4e58390a23f2e",
+      "pngSHA256" : "4a13ccd00ce132f58b4b61323440f3568b2d762cf8117605bea377243d368020",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "storage-healthy-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "healthy",
+        "surface" : "storage",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "storage-healthy-light.png",
+      "pixelSHA256" : "b368ea640503a792f9ab40c6b9be3efdc3c8e1f14dc87794a7f7c3b66b3a4150",
+      "pngSHA256" : "160f047f48e7969d4e526b9977037e9add6b71aefb343774aee25b6dbf8bfa6d",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "transcript-incomplete-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "incomplete",
+        "surface" : "transcript",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "transcript-incomplete-dark.png",
+      "pixelSHA256" : "ecd78e7ddfaa37b9b3097ea64d97ced444d52d11d3fe22944860ad9ec6afcdc9",
+      "pngSHA256" : "7c5eb498416d20a1592deb2ba1c11a8448677ac475c5cbd9183f10e07c608d5c",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "transcript-incomplete-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "incomplete",
+        "surface" : "transcript",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "transcript-incomplete-light.png",
+      "pixelSHA256" : "83bd4c879dd6b3464ed36471174c3bbfb261f2e2f0046550c74356ce278d1230",
+      "pngSHA256" : "4871c073376986a144ca0a11bc0ed1d7d0efd0a1da6ff060556697464a315e76",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : true,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "transcript-selected-dark",
+        "inspectorPresented" : true,
+        "locale" : "en_US_POSIX",
+        "state" : "selected",
+        "surface" : "transcript",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "transcript-selected-dark.png",
+      "pixelSHA256" : "d7ada28f479c354b99ec7a325956c03a309357e27d7f7e766ab3bbc5f94bba00",
+      "pngSHA256" : "f287462f3ae622feee97738e48505c669089f8cf03f671d1407bf6b2705427ea",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "transcript-selected-light",
+        "inspectorPresented" : true,
+        "locale" : "en_US_POSIX",
+        "state" : "selected",
+        "surface" : "transcript",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "transcript-selected-light.png",
+      "pixelSHA256" : "93f01070bd89a8b8fde507234acf5b993c71a1e0821f2fc2ea8c85e8f7692f23",
+      "pngSHA256" : "99567aad6d61881f1b6eed5a9ebaf31654b8903f7343eeef588187ac0aa266e5",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "un-web-tv-blocked-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "blocked",
+        "surface" : "un-web-tv",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "un-web-tv-blocked-dark.png",
+      "pixelSHA256" : "8db28f0b9d7ccf5ddb3038f9f16aeabc20581375daf07dcaf06d2da3d87845dc",
+      "pngSHA256" : "cbc7ba34f9aa819822d7234d4248da63496735176ce99b56840b2f6d11c221d5",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "un-web-tv-blocked-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "blocked",
+        "surface" : "un-web-tv",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "un-web-tv-blocked-light.png",
+      "pixelSHA256" : "c1be826cfe11e24a52d7240c3e00342f82c2e52e7b4df7af445457bb423a4089",
+      "pngSHA256" : "9e4601d4411efd733f5f677cd48e7f90720e1fad9459d116098ded66d42afc5b",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "dark",
+        "id" : "un-web-tv-candidate-dark",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "candidate",
+        "surface" : "un-web-tv",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "un-web-tv-candidate-dark.png",
+      "pixelSHA256" : "4d89e95899f4e60ce7b4359014cdd665dd6a99f3cf0e3372ad567c64ff52eca6",
+      "pngSHA256" : "586f81b7337c664f9ff9c69a37d2892017a29c1bd92bdd3fb5e37ab361ad5b0b",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    },
+    {
+      "capture" : {
+        "accent" : "systemBlue",
+        "accessibility" : {
+          "differentiateWithoutColor" : false,
+          "increaseContrast" : false,
+          "largerText" : false,
+          "reduceMotion" : false,
+          "reduceTransparency" : false
+        },
+        "appearance" : "light",
+        "id" : "un-web-tv-candidate-light",
+        "inspectorPresented" : false,
+        "locale" : "en_US_POSIX",
+        "state" : "candidate",
+        "surface" : "un-web-tv",
+        "textSize" : "large",
+        "timeZone" : "UTC",
+        "viewport" : {
+          "height" : 1024,
+          "width" : 1440
+        }
+      },
+      "fileName" : "un-web-tv-candidate-light.png",
+      "pixelSHA256" : "6239f6e2c80ee3a6a8647c3df52887074dd66007b450ee57e4579ef6f8e78940",
+      "pngSHA256" : "04689ed98c84024651847b1c63f8df233dd80832e0bbf83ef682ca3c69d69a62",
+      "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
+      "threshold" : {
+        "maximumChangedPixelRatio" : 0,
+        "maximumChannelDelta" : 0,
+        "minimumLuminanceSSIM" : 1
+      }
+    }
+  ],
+  "manualSystemCases" : [
+    {
+      "accent" : "systemBlue",
+      "accessibility" : {
+        "differentiateWithoutColor" : false,
+        "increaseContrast" : false,
+        "largerText" : false,
+        "reduceMotion" : false,
+        "reduceTransparency" : true
+      },
+      "appearance" : "dark",
+      "id" : "transcript-incomplete-reduce-transparency",
+      "inspectorPresented" : false,
+      "locale" : "en_US_POSIX",
+      "state" : "incomplete",
+      "surface" : "transcript",
+      "textSize" : "large",
+      "timeZone" : "UTC",
+      "viewport" : {
+        "height" : 1024,
+        "width" : 1440
+      }
+    },
+    {
+      "accent" : "systemBlue",
+      "accessibility" : {
+        "differentiateWithoutColor" : true,
+        "increaseContrast" : false,
+        "largerText" : false,
+        "reduceMotion" : false,
+        "reduceTransparency" : false
+      },
+      "appearance" : "light",
+      "id" : "analysis-stale-differentiate-without-color",
+      "inspectorPresented" : true,
+      "locale" : "en_US_POSIX",
+      "state" : "stale",
+      "surface" : "analysis",
+      "textSize" : "large",
+      "timeZone" : "UTC",
+      "viewport" : {
+        "height" : 1024,
+        "width" : 1440
+      }
+    },
+    {
+      "accent" : "systemBlue",
+      "accessibility" : {
+        "differentiateWithoutColor" : false,
+        "increaseContrast" : false,
+        "largerText" : false,
+        "reduceMotion" : true,
+        "reduceTransparency" : false
+      },
+      "appearance" : "dark",
+      "id" : "recording-active-reduce-motion",
+      "inspectorPresented" : false,
+      "locale" : "en_US_POSIX",
+      "state" : "active",
+      "surface" : "recording",
+      "textSize" : "large",
+      "timeZone" : "UTC",
+      "viewport" : {
+        "height" : 1024,
+        "width" : 1440
+      }
+    }
+  ],
+  "version" : 1
+}

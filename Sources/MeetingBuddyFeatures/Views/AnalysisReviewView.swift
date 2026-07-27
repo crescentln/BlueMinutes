@@ -12,6 +12,29 @@ struct AnalysisReviewView: View {
     @State private var presentationCache:
         AnalysisReviewPresentationCache?
 
+    init(
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState,
+        initialInspectorIsPresented:
+            Bool = false,
+        initialEvidenceSelection:
+            AnalysisEvidenceSelection? = nil
+    ) {
+        self.store = store
+        self.sceneState = sceneState
+        _inspectorIsPresented =
+            State(
+                initialValue:
+                    initialInspectorIsPresented
+            )
+        _evidenceSelection =
+            State(
+                initialValue:
+                    initialEvidenceSelection
+            )
+    }
+
     var body: some View {
         Group {
             if let review = store.analysisReview {

@@ -2,10 +2,27 @@ name: CI
 
 on:
   pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
   push:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      visual_mode:
+        description: Native visual proof mode
+        required: true
+        default: regression
+        type: choice
+        options:
+          - regression
+          - candidate
+          - calibration
 
 permissions:
   contents: read
@@ -83,3 +100,74 @@ jobs:
           swift test -Xswiftc -warnings-as-errors
           --skip
           'historicalIndexAndFilteredQueryStayBoundedAtTenThousandPublishedPositions|threeHourRetryAcrossManagerRestartPreservesExactCoverageAndTraceability'
+
+  visual-regression:
+    name: Native visual regression
+    if: >-
+      ${{
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && inputs.visual_mode == 'regression') ||
+        (github.event_name == 'pull_request' && github.event.action != 'labeled')
+      }}
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      MEETINGBUDDY_VISUAL_ARTIFACT_DIR: ${{ runner.temp }}/blueminutes-visual-failures
+      MEETINGBUDDY_VISUAL_MODE: regression
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Run pinned native visual regression
+        run: ./script/run_visual_regression.sh
+
+      - name: Upload visual evidence
+        if: ${{ always() && failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: blueminutes-visual-regression-failure
+          path: ${{ runner.temp }}/blueminutes-visual-failures
+          if-no-files-found: error
+          retention-days: 7
+
+  visual-evidence:
+    name: Native visual evidence bootstrap
+    if: >-
+      ${{
+        (github.event_name == 'workflow_dispatch' && inputs.visual_mode != 'regression') ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.action == 'labeled' &&
+          (github.event.label.name == 'visual-candidate' || github.event.label.name == 'visual-calibration') &&
+          (
+            (contains(github.event.pull_request.labels.*.name, 'visual-candidate') && !contains(github.event.pull_request.labels.*.name, 'visual-calibration')) ||
+            (!contains(github.event.pull_request.labels.*.name, 'visual-candidate') && contains(github.event.pull_request.labels.*.name, 'visual-calibration'))
+          )
+        )
+      }}
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      MEETINGBUDDY_VISUAL_ARTIFACT_DIR: ${{ runner.temp }}/blueminutes-visual-evidence
+      MEETINGBUDDY_VISUAL_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.visual_mode || github.event.label.name == 'visual-calibration' && 'calibration' || 'candidate' }}
+    steps:
+      - name: Check out exact evidence source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Generate pinned native visual evidence
+        run: ./script/run_visual_regression.sh
+
+      - name: Upload visual evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: blueminutes-visual-${{ env.MEETINGBUDDY_VISUAL_MODE }}-evidence
+          path: ${{ runner.temp }}/blueminutes-visual-evidence
+          if-no-files-found: error
+          retention-days: 7

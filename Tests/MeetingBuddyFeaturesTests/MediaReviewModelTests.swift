@@ -5292,6 +5292,572 @@ func makeFeatureStoreForHostedStorageTests(
 }
 
 @MainActor
+func makeFeatureOpenedVisualFixture()
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    let store =
+        try makeFeatureStoreForHostedSettingsTests()
+    let sceneState =
+        MediaReviewSceneState()
+    await store.openOrCreateWorkspace(
+        at:
+            URL(
+                fileURLWithPath:
+                    "/synthetic-visual-workspace"
+            ),
+        using: sceneState
+    )
+    return (store, sceneState)
+}
+
+@MainActor
+func makeFeatureRecordingLoadingVisualFixture()
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState,
+        setupGate: AsyncGate,
+        openTask: Task<Void, Never>
+    )
+{
+    let setupGate =
+        AsyncGate()
+    let store =
+        MediaReviewStore(
+            workflow:
+                try MediaReviewWorkflowProbe(
+                    recordingSetupGate:
+                        setupGate
+                )
+        )
+    let sceneState =
+        MediaReviewSceneState()
+    let openTask =
+        Task { @MainActor in
+            await store
+                .openOrCreateWorkspace(
+                    at:
+                        URL(
+                            fileURLWithPath:
+                                "/synthetic-recording-loading-workspace"
+                        ),
+                    using:
+                        sceneState
+                )
+        }
+    await setupGate
+        .waitUntilEntered()
+    return (
+        store,
+        sceneState,
+        setupGate,
+        openTask
+    )
+}
+
+@MainActor
+func makeFeatureLocalMediaVisualFixture()
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    let fixture =
+        try await makeFeatureOpenedVisualFixture()
+    await fixture.store.inspectMedia(
+        at:
+            URL(
+                fileURLWithPath:
+                    "/synthetic-visual-source.wav"
+            ),
+        using: fixture.sceneState
+    )
+    fixture.sceneState.meetingTitle =
+        "Synthetic Policy Review"
+    fixture.sceneState.selectedTrack =
+        try MediaTrackIdentifier(1)
+    return fixture
+}
+
+@MainActor
+func makeFeatureLocalMediaWorkingVisualFixture()
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    let store =
+        MediaReviewStore(
+            workflow:
+                try MediaReviewWorkflowProbe(
+                    seededRunningJob: true
+                )
+        )
+    let sceneState =
+        MediaReviewSceneState()
+    await store.openOrCreateWorkspace(
+        at:
+            URL(
+                fileURLWithPath:
+                    "/synthetic-visual-workspace"
+            ),
+        using: sceneState
+    )
+    await store.inspectMedia(
+        at:
+            URL(
+                fileURLWithPath:
+                    "/synthetic-visual-source.wav"
+            ),
+        using: sceneState
+    )
+    sceneState.meetingTitle =
+        "Synthetic Policy Review"
+    sceneState.selectedTrack =
+        try MediaTrackIdentifier(1)
+    await store.importAndProcess(
+        using: sceneState
+    )
+    return (store, sceneState)
+}
+
+@MainActor
+func makeFeatureRecordingVisualFixture(
+    active: Bool
+)
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    let activeSession =
+        RecordingSessionReview(
+            sessionID:
+                featureID(
+                    2_801,
+                    RecordingSessionID.self
+                ),
+            jobID:
+                featureID(
+                    2_802,
+                    JobID.self
+                ),
+            state: .recording,
+            stateVersion: 4,
+            activeTrackKinds: [
+                .applicationAudio
+            ],
+            durableThroughNanoseconds:
+                7_250_000_000,
+            knownGapCount: 0,
+            safeReason: nil
+        )
+    let setup =
+        RecordingSetupReview(
+            capability:
+                CaptureCapabilitySnapshot(
+                    microphonePermission:
+                        .authorized,
+                    applicationAudioAvailable:
+                        true,
+                    systemPickerAvailable:
+                        true,
+                    checkedAt:
+                        featureInstant(
+                            1_950_000_000_002
+                        )
+                ),
+            microphones: [],
+            recoverableSession:
+                active
+                ? activeSession
+                : nil
+        )
+    let store =
+        MediaReviewStore(
+            workflow:
+                try MediaReviewWorkflowProbe(
+                    recordingSetupReview:
+                        setup,
+                    recordingReviewOverride:
+                        active
+                        ? activeSession
+                        : nil
+                )
+        )
+    let sceneState =
+        MediaReviewSceneState()
+    await store.openOrCreateWorkspace(
+        at:
+            URL(
+                fileURLWithPath:
+                    "/synthetic-recording-visual-workspace"
+            ),
+        using: sceneState
+    )
+    sceneState.meetingTitle =
+        "Synthetic Security Council Briefing"
+    sceneState.captureMode =
+        .applicationAudioOnly
+    sceneState.recordingAcknowledged =
+        !active
+    await store.loadRecordingSetup(
+        using: sceneState
+    )
+    return (store, sceneState)
+}
+
+@MainActor
+func makeFeatureUNWebTVCandidateVisualFixture()
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    let candidate =
+        try makeFeatureUNWebTVCandidate()
+    let store =
+        MediaReviewStore(
+            workflow:
+                try MediaReviewWorkflowProbe(
+                    webMetadataCandidateOverride:
+                        candidate
+                )
+        )
+    let sceneState =
+        MediaReviewSceneState()
+    await store.openOrCreateWorkspace(
+        at:
+            URL(
+                fileURLWithPath:
+                    "/synthetic-un-web-tv-visual-workspace"
+            ),
+        using: sceneState
+    )
+    sceneState.unWebTVURL =
+        candidate.requestedURL
+        .absoluteString
+    sceneState.unWebTVNetworkAuthorized =
+        true
+    await store.fetchUNWebTVMetadata(
+        using: sceneState
+    )
+    return (store, sceneState)
+}
+
+@MainActor
+func makeFeatureReviewVisualFixture()
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    try await makeFeatureReviewVisualFixture(
+        briefingHumanConfirmed: false
+    )
+}
+
+@MainActor
+func makeFeatureReviewVisualFixture(
+    briefingHumanConfirmed: Bool
+)
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    try await makeFeatureReviewVisualFixture(
+        briefingHumanConfirmed:
+            briefingHumanConfirmed,
+        transcriptIncomplete: false,
+        analysisStale: false
+    )
+}
+
+@MainActor
+func makeFeatureReviewVisualFixture(
+    transcriptIncomplete: Bool
+)
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    try await makeFeatureReviewVisualFixture(
+        briefingHumanConfirmed: false,
+        transcriptIncomplete:
+            transcriptIncomplete,
+        analysisStale: false
+    )
+}
+
+@MainActor
+func makeFeatureReviewVisualFixture(
+    analysisStale: Bool
+)
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    try await makeFeatureReviewVisualFixture(
+        briefingHumanConfirmed: false,
+        transcriptIncomplete: false,
+        analysisStale:
+            analysisStale
+    )
+}
+
+@MainActor
+private func makeFeatureReviewVisualFixture(
+    briefingHumanConfirmed: Bool,
+    transcriptIncomplete: Bool,
+    analysisStale: Bool
+)
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    let store =
+        MediaReviewStore(
+            workflow:
+                try MediaReviewWorkflowProbe(
+                    seededReviewState: true,
+                    seededBriefingHumanConfirmed:
+                        briefingHumanConfirmed,
+                    seededTranscriptIncomplete:
+                        transcriptIncomplete,
+                    seededAnalysisStale:
+                        analysisStale
+                )
+        )
+    let sceneState =
+        MediaReviewSceneState()
+    try await loadSeededReviewState(
+        store: store,
+        sceneState: sceneState
+    )
+    await store.loadAnalysisReview()
+    await store.loadBriefingReview()
+    return (store, sceneState)
+}
+
+@MainActor
+func makeFeatureHistoryVisualFixture(
+    withResults: Bool = false
+)
+    async throws -> (
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState
+    )
+{
+    let results =
+        withResults
+        ? [
+            try
+                HostedHistoryReviewAccessibilityFixture()
+                .result
+        ]
+        : []
+    let store =
+        MediaReviewStore(
+            workflow:
+                try MediaReviewWorkflowProbe(
+                    historicalSearchResults:
+                        results,
+                    historicalIndexAvailability:
+                        .ready
+                )
+        )
+    let sceneState =
+        MediaReviewSceneState()
+    await store.openOrCreateWorkspace(
+        at:
+            URL(
+                fileURLWithPath:
+                    "/synthetic-history-visual-workspace"
+            ),
+        using: sceneState
+    )
+    await store
+        .loadHistoricalReview(
+            using: sceneState
+        )
+    return (store, sceneState)
+}
+
+@MainActor
+func makeFeatureStorageVisualFixture(
+    destructiveDisabled: Bool = false,
+    failure: Bool = false
+)
+    async throws -> MediaReviewStore {
+    let store =
+        try makeFeatureStoreForHostedStorageTests(
+            report:
+                failure
+                ? nil
+                : makeFeatureStorageVisualReport(
+                    destructiveDisabled:
+                        destructiveDisabled
+                ),
+            storageReportFailureCall:
+                failure
+                ? 1
+                : nil
+        )
+    let sceneState =
+        MediaReviewSceneState()
+    await store.openOrCreateWorkspace(
+        at:
+            URL(
+                fileURLWithPath:
+                    "/synthetic-storage-visual-workspace"
+            ),
+        using: sceneState
+    )
+    await store.loadStorageReport()
+    return store
+}
+
+private func makeFeatureStorageVisualReport(
+    destructiveDisabled: Bool
+) throws -> WorkspaceStorageReport {
+    try WorkspaceStorageReport(
+        calculatedAt:
+            featureInstant(
+                1_950_000_000_000
+            ),
+        totalByteCount: 128,
+        categories: [
+            WorkspaceStorageCategoryUsage(
+                category: .trash,
+                byteCount: 128,
+                fileCount: 1
+            )
+        ],
+        trashItems: [
+            WorkspaceTrashItem(
+                storageObjectID:
+                    featureID(
+                        20,
+                        StorageObjectID.self
+                    ),
+                byteSize: 128,
+                trashedAt:
+                    featureInstant(
+                        1_940_000_000_000
+                    ),
+                purgeEligibleAt:
+                    featureInstant(
+                        destructiveDisabled
+                        ? 1_960_000_000_000
+                        : 1_949_000_000_000
+                    ),
+                dataClassification:
+                    .sensitive,
+                retentionClass:
+                    .workspaceManaged
+            )
+        ],
+        permissionIssueCount: 0,
+        scanTruncated: false
+    )
+}
+
+private func makeFeatureUNWebTVCandidate()
+    throws -> UNWebTVMetadataCandidate
+{
+    let url =
+        try ValidatedUNWebTVAssetURL(
+            "https://webtv.un.org/en/asset/security-council/synthetic-briefing"
+        )
+    let values: [
+        (
+            UNWebTVMetadataField,
+            String,
+            UNWebTVParserSource,
+            String
+        )
+    ] = [
+        (
+            .title,
+            "Synthetic Security Council Briefing",
+            .htmlTitle,
+            "title"
+        ),
+        (
+            .description,
+            "Synthetic, offline metadata used only to verify the local review surface.",
+            .metaProperty,
+            "og:description"
+        )
+    ]
+    let fields =
+        try values.enumerated().map {
+            index,
+            value in
+            let (
+                field,
+                text,
+                source,
+                sourceKey
+            ) = value
+            return try UNWebTVFieldCandidate(
+                id:
+                    UUID(
+                        uuidString:
+                            String(
+                                format:
+                                    "51000000-0000-0000-0000-%012d",
+                                2_900
+                                    + index
+                            )
+                    )!,
+                field: field,
+                value: text,
+                provenance:
+                    UNWebTVFieldProvenance(
+                        source: source,
+                        sourceKey:
+                            sourceKey,
+                        normalizedValueDigest:
+                            try ContentDigest
+                            .sha256(
+                                ofUTF8Text:
+                                    text
+                            ),
+                        confidence: .high
+                    )
+            )
+        }
+    return try UNWebTVMetadataCandidate(
+        requestedURL: url,
+        finalURL: url,
+        fields: fields,
+        fetchedAt:
+            featureInstant(
+                1_950_000_000_300
+            )
+    )
+}
+
+@MainActor
 private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let inspection: MediaInspection
     private let restoreGate: AsyncGate?
@@ -5321,6 +5887,10 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let stoppedRecordingReview: RecordingSessionReview?
     private let webMetadataShouldFail: Bool
     private var currentRecordingReview: RecordingSessionReview?
+    private let webMetadataCandidateOverride:
+        UNWebTVMetadataCandidate?
+    private let historicalSearchResults:
+        [HistoricalPositionResult]
     private let historicalSearchFailureCall: Int?
     private let historicalSearchPages:
         [HistoricalSearchPage]
@@ -5409,9 +5979,22 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         startedRecordingReview: RecordingSessionReview? = nil,
         stoppedRecordingReview: RecordingSessionReview? = nil,
         webMetadataShouldFail: Bool = false,
+        recordingReviewOverride:
+            RecordingSessionReview? = nil,
+        webMetadataCandidateOverride:
+            UNWebTVMetadataCandidate? = nil,
+        seededRunningJob: Bool = false,
         seededReviewState: Bool = false,
         seededLearnedPreferenceID:
             LearnedPreferenceID? = nil,
+        seededBriefingHumanConfirmed:
+            Bool = false,
+        seededTranscriptIncomplete:
+            Bool = false,
+        seededAnalysisStale:
+            Bool = false,
+        historicalSearchResults:
+            [HistoricalPositionResult] = [],
         historicalSearchFailureCall: Int? = nil,
         historicalSearchPages:
             [HistoricalSearchPage] = [],
@@ -5473,9 +6056,15 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
                 ),
                 microphones: []
             )
-        currentRecordingReview = startedRecordingReview
+        currentRecordingReview =
+            recordingReviewOverride
+            ?? startedRecordingReview
         self.stoppedRecordingReview = stoppedRecordingReview
         self.webMetadataShouldFail = webMetadataShouldFail
+        self.webMetadataCandidateOverride =
+            webMetadataCandidateOverride
+        self.historicalSearchResults =
+            historicalSearchResults
         self.historicalSearchFailureCall =
             historicalSearchFailureCall
         self.historicalSearchPages =
@@ -5500,17 +6089,31 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             historicalIndexAvailability
         self.historicalRebuildCompletesImmediately =
             historicalRebuildCompletesImmediately
-        pollingJob = try pollGate == nil && !seededReviewState
+        pollingJob = try pollGate == nil
+            && !seededRunningJob
+            && !seededReviewState
             ? nil
-            : makeFeatureJobReview(succeeded: seededReviewState)
+            : makeFeatureJobReview(
+                succeeded:
+                    seededReviewState
+            )
         currentTranscriptReview = try seededReviewState
-            ? makeFeatureTranscriptReview()
+            ? makeFeatureTranscriptReview(
+                incomplete:
+                    seededTranscriptIncomplete
+            )
             : nil
         currentAnalysisReview = try seededReviewState
-            ? makeFeatureAnalysisReview()
+            ? makeFeatureAnalysisReview(
+                staleCard:
+                    seededAnalysisStale
+            )
             : nil
         currentBriefingReview = try seededReviewState
-            ? makeFeatureBriefingReview()
+            ? makeFeatureBriefingReview(
+                humanConfirmed:
+                    seededBriefingHumanConfirmed
+            )
             : nil
         if let seededLearnedPreferenceID {
             let timestamp =
@@ -5936,7 +6539,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             ]
         }
         return HistoricalSearchPage(
-            results: [],
+            results:
+                historicalSearchResults,
             nextCursor: nil,
             indexGeneration: 7
         )
@@ -6096,13 +6700,22 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
 
     func fetchUNWebTVMetadata(
         url _: String,
-        explicitNetworkAuthorization _: Bool
+        explicitNetworkAuthorization:
+            Bool
     ) async throws -> UNWebTVMetadataCandidate {
         webMetadataFetchCallCount += 1
         if webMetadataShouldFail {
             throw ProbeError.unexpectedCall
         }
-        throw ProbeError.unexpectedCall
+        guard
+            explicitNetworkAuthorization,
+            let webMetadataCandidateOverride
+        else {
+            throw
+                TranscriptWorkflowError
+                .unavailable
+        }
+        return webMetadataCandidateOverride
     }
 }
 
@@ -6604,7 +7217,8 @@ private func makeFeatureTranscriptReview(
     transcriptRevisionID: RevisionID = featureID(56, RevisionID.self),
     translationRevisionID: RevisionID? = featureID(58, RevisionID.self),
     transcriptText: String = "Workspace A transcript fixture",
-    translationText: String? = "Workspace A translation fixture"
+    translationText: String? = "Workspace A translation fixture",
+    incomplete: Bool = false
 ) throws -> TranscriptReviewBundle {
     let canonicalSourceRevision = try SemanticRevisionReference(
         logicalID: featureID(50, SourceAssetID.self),
@@ -6717,10 +7331,23 @@ private func makeFeatureTranscriptReview(
         index: plan.index,
         coreRange: plan.coreRange,
         physicalRange: plan.physicalRange,
-        disposition: .transcribed,
+        disposition:
+            incomplete
+            ? .failed
+            : .transcribed,
         attemptCount: 1,
-        reviewedSegmentRevision: transcriptReference,
-        translationRevision: translationReference
+        reviewedSegmentRevision:
+            incomplete
+            ? nil
+            : transcriptReference,
+        translationRevision:
+            incomplete
+            ? nil
+            : translationReference,
+        safeFailureCode:
+            incomplete
+            ? "synthetic-offline-provider-unavailable"
+            : nil
     )
     let manifest = try TranscriptCoverageManifest(
         manifestID: featureID(52, TranscriptCoverageManifestID.self),
@@ -6730,7 +7357,10 @@ private func makeFeatureTranscriptReview(
         canonicalFrameCount: 16_000,
         transcriptionRoute: transcriptionRoute,
         translationRoute: translationRoute,
-        status: .published,
+        status:
+            incomplete
+            ? .incomplete
+            : .published,
         chunks: [coverage],
         createdAt: featureInstant(1_950_000_000_105)
     )
@@ -6743,7 +7373,8 @@ private func makeFeatureTranscriptReview(
 
 private func makeFeatureAnalysisReview(
     positionRevisionID: RevisionID = featureID(814, RevisionID.self),
-    statementText: String = "Workspace A analysis fixture position"
+    statementText: String = "Workspace A analysis fixture position",
+    staleCard: Bool = false
 ) throws -> AnalysisReviewBundle {
     let transcript = try makeFeatureTranscriptReview()
     let segment = try #require(transcript.transcriptSegments.first)
@@ -6864,6 +7495,80 @@ private func makeFeatureAnalysisReview(
         reviewStatus: .unreviewed,
         userConfirmed: false
     )
+    let delegationPositionCards:
+        [DelegationPositionCardV1]
+    if staleCard {
+        let stalePositionReference =
+            try featureReference(
+                position.positionID,
+                featureID(
+                    2_950,
+                    RevisionID.self
+                )
+            )
+        let card =
+            try DelegationPositionCardV1(
+                revision:
+                    RevisionEnvelope(
+                        logicalID:
+                            featureID(
+                                2_951,
+                                DelegationPositionCardID
+                                    .self
+                            ),
+                        revisionID:
+                            featureID(
+                                2_952,
+                                RevisionID.self
+                            ),
+                        schemaVersion: .v1,
+                        lifecycleStatus:
+                            .draft,
+                        validationState:
+                            .notValidated,
+                        createdAt:
+                            featureInstant(
+                                1_950_000_000_202
+                            ),
+                        createdBy:
+                            .application,
+                        inputRevisions: [
+                            meetingReference,
+                            organizationReference,
+                            capacityReference,
+                            issueReference,
+                            stalePositionReference
+                        ],
+                        evidenceRevisions: [
+                            evidenceReference
+                        ],
+                        dataClassification:
+                            .internal
+                    ),
+                meetingID:
+                    transcript.manifest.meetingID,
+                representedEntityRevision:
+                    organizationReference,
+                speakingCapacityRevisions: [
+                    capacityReference
+                ],
+                issueRevision:
+                    issueReference,
+                positionRevisions: [
+                    stalePositionReference
+                ],
+                overallPosition:
+                    position.statement,
+                reviewStatus:
+                    .needsReview,
+                userConfirmed: false
+            )
+        delegationPositionCards = [
+            card
+        ]
+    } else {
+        delegationPositionCards = []
+    }
     return AnalysisReviewBundle(
         ledger: ledger,
         evidence: [],
@@ -6874,13 +7579,15 @@ private func makeFeatureAnalysisReview(
         commitments: [],
         decisions: [],
         interventionCards: [],
-        delegationPositionCards: []
+        delegationPositionCards:
+            delegationPositionCards
     )
 }
 
 private func makeFeatureBriefingReview(
     overviewRevisionID: RevisionID = featureID(930, RevisionID.self),
-    overviewText: String = "Workspace A overview fixture"
+    overviewText: String = "Workspace A overview fixture",
+    humanConfirmed: Bool = false
 ) throws -> BriefingReviewBundle {
     let analysis = try makeFeatureAnalysisReview()
     let meetingID = featureID(54, MeetingID.self)
@@ -7001,7 +7708,11 @@ private func makeFeatureBriefingReview(
         "Workspace A major issues fixture",
         "Workspace A delegations fixture"
     ]
-    let sections = try zip(template.sections, sectionMarkers)
+    let generatedSections =
+        try zip(
+            template.sections,
+            sectionMarkers
+        )
         .enumerated()
         .map { index, value in
             let (definition, marker) = value
@@ -7080,6 +7791,135 @@ private func makeFeatureBriefingReview(
                 userConfirmed: draft.userConfirmed
             )
         }
+    let sections: [BriefingSectionV1]
+    if humanConfirmed {
+        sections =
+            try generatedSections
+            .enumerated()
+            .map { index, prior in
+                let priorReference =
+                    try featureReference(
+                        prior.sectionID,
+                        prior.revision.revisionID
+                    )
+                let items =
+                    try prior.items.map {
+                        item in
+                        try BriefingSectionItem(
+                            itemID: item.itemID,
+                            label: item.label,
+                            claim:
+                                EvidenceLinkedClaim(
+                                    text:
+                                        item.claim.text,
+                                    taxonomy:
+                                        .userConfirmedConclusion,
+                                    supportStatus:
+                                        item.claim.supportStatus,
+                                    evidenceRevisions:
+                                        item.claim
+                                        .evidenceRevisions,
+                                    confidence:
+                                        item.claim.confidence
+                                ),
+                            sourceObjectRevisions:
+                                item.sourceObjectRevisions
+                        )
+                    }
+                let draft =
+                    try BriefingSectionV1(
+                        revision:
+                            RevisionEnvelope(
+                                logicalID:
+                                    prior.sectionID,
+                                revisionID:
+                                    featureID(
+                                        1_800 + index,
+                                        RevisionID.self
+                                    ),
+                                schemaVersion: .v1,
+                                lifecycleStatus: .draft,
+                                validationState:
+                                    .notValidated,
+                                createdAt: createdAt,
+                                createdBy: .user,
+                                supersedesRevisionID:
+                                    prior.revision
+                                    .revisionID,
+                                inputRevisions:
+                                    prior.revision
+                                    .inputRevisions
+                                        + [priorReference],
+                                sourceAssetRevisions:
+                                    prior.revision
+                                    .sourceAssetRevisions,
+                                evidenceRevisions:
+                                    prior.revision
+                                    .evidenceRevisions,
+                                dataClassification:
+                                    prior.revision
+                                    .dataClassification
+                            ),
+                        meetingID:
+                            prior.meetingID,
+                        templateRevision:
+                            prior.templateRevision,
+                        graphRevision:
+                            prior.graphRevision,
+                        sectionType:
+                            prior.sectionType,
+                        order: prior.order,
+                        title: prior.title,
+                        outputLanguage:
+                            prior.outputLanguage,
+                        metadata:
+                            prior.metadata,
+                        items: items,
+                        generatorModules:
+                            prior.generatorModules,
+                        manualEditStatus:
+                            .userEdited,
+                        locked: prior.locked,
+                        reviewStatus:
+                            .confirmed,
+                        userConfirmed: true
+                    )
+                return try BriefingSectionV1(
+                    revision:
+                        publishedFeatureEnvelope(
+                            draft.revision,
+                            semanticContentHash:
+                                draft
+                                .calculatedSemanticContentHash(),
+                            at: createdAt
+                        ),
+                    meetingID: draft.meetingID,
+                    templateRevision:
+                        draft.templateRevision,
+                    graphRevision:
+                        draft.graphRevision,
+                    sectionType:
+                        draft.sectionType,
+                    order: draft.order,
+                    title: draft.title,
+                    outputLanguage:
+                        draft.outputLanguage,
+                    metadata: draft.metadata,
+                    items: draft.items,
+                    generatorModules:
+                        draft.generatorModules,
+                    manualEditStatus:
+                        draft.manualEditStatus,
+                    locked: draft.locked,
+                    reviewStatus:
+                        draft.reviewStatus,
+                    userConfirmed:
+                        draft.userConfirmed
+                )
+            }
+    } else {
+        sections = generatedSections
+    }
     let sectionReferences = try sections.map {
         try featureReference(
             $0.sectionID,
@@ -7209,7 +8049,10 @@ private func makeFeatureBriefingReview(
             lifecycleStatus: .draft,
             validationState: .notValidated,
             createdAt: createdAt,
-            createdBy: .application,
+            createdBy:
+                humanConfirmed
+                ? .user
+                : .application,
             inputRevisions: [
                 meetingReference,
                 templateReference
@@ -7226,9 +8069,16 @@ private func makeFeatureBriefingReview(
         renderer: template.rendererModules[0],
         markdown: markdown,
         markdownDigest: try ContentDigest.sha256(ofUTF8Text: markdown),
-        manualSectionCount: 0,
-        reviewStatus: .needsReview,
-        userConfirmed: false
+        manualSectionCount:
+            humanConfirmed
+            ? 3
+            : 0,
+        reviewStatus:
+            humanConfirmed
+            ? .confirmed
+            : .needsReview,
+        userConfirmed:
+            humanConfirmed
     )
     let final = try FinalBriefingV1(
         revision: publishedFeatureEnvelope(
