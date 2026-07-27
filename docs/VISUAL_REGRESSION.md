@@ -6,9 +6,15 @@ Scope: synthetic application-owned SwiftUI/AppKit content only
 ## Contract
 
 The harness runs inside `MeetingBuddyFeaturesTests`. Each case is hosted in a
-borderless `NSWindow` through `NSHostingView`, allowed to settle for one
-second, and captured as the exact process-owned desktop-independent window by
-macOS 26 `SCScreenshotManager` in canonical SDR. This captures native
+borderless `NSWindow` through `NSHostingView` and given an initial one-second
+settle. It then captures normalized probes every 250 milliseconds until two
+consecutive encoded frames are byte-identical, with at most 12 probes. Every
+recorded frame must still equal that stable reference or capture fails closed.
+The exact process-owned desktop-independent window is captured by macOS 26
+`SCScreenshotManager` in canonical SDR. The SwiftUI root, hosting layer, and
+opaque window share one explicit black or white application-owned underlay, so
+native material cannot inherit a desktop or unrelated foreground-window
+backdrop. This captures native
 compositor-owned Liquid Glass, inspector, list, and button layers that
 `NSView.cacheDisplay` does not contain. It includes no cursor, audio, desktop,
 or other application window. Shareable content is obtained through the

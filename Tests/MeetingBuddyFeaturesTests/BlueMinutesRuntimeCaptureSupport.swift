@@ -176,6 +176,7 @@ enum BlueMinutesRuntimeCaptureError:
     case invalidTimeZone(String)
     case bitmapAllocationFailed
     case compositedCaptureRequiresMacOS26
+    case compositedCaptureDidNotStabilize
     case applicationActivationFailed
     case imageCreationFailed
     case shareableWindowNotFound(Int)
@@ -191,6 +192,14 @@ enum BlueMinutesRuntimeCaptureError:
 }
 
 struct BlueMinutesCompositedCaptureValidationFailure:
+    Error
+{
+    let capturedData: Data
+    let underlyingError:
+        any Error
+}
+
+struct BlueMinutesCompositedCaptureStabilizationFailure:
     Error
 {
     let capturedData: Data
@@ -241,6 +250,10 @@ enum BlueMinutesRuntimeCapture {
         TimeInterval = 2
     private static let applicationActivationPollInterval:
         TimeInterval = 0.05
+    private static let compositorStabilizationMaximumAttempts =
+        12
+    private static let compositorFrameInterval:
+        Duration = .milliseconds(250)
 
     private static func prepareVisualWindow(
         descriptor:
@@ -298,6 +311,14 @@ enum BlueMinutesRuntimeCapture {
             size: size
         )
         hostingView.wantsLayer = true
+        hostingView.layer?
+            .backgroundColor =
+            captureBackgroundColor(
+                descriptor.appearance
+            )
+            .cgColor
+        hostingView.layer?
+            .isOpaque = true
 
         let window = VisualCaptureWindow(
             contentRect: CGRect(
@@ -312,9 +333,9 @@ enum BlueMinutesRuntimeCapture {
         window.hasShadow = false
         window.isOpaque = true
         window.backgroundColor =
-            descriptor.appearance == .dark
-                ? .black
-                : .white
+            captureBackgroundColor(
+                descriptor.appearance
+            )
         window.appearance =
             visualAppearance(
                 appearance:
@@ -339,6 +360,15 @@ enum BlueMinutesRuntimeCapture {
             hostingView: hostingView,
             window: window
         )
+    }
+
+    private static func captureBackgroundColor(
+        _ appearance:
+            BlueMinutesVisualAppearance
+    ) -> NSColor {
+        appearance == .dark
+            ? .black
+            : .white
     }
 
     private static func activateCaptureApplication(
@@ -589,88 +619,183 @@ enum BlueMinutesRuntimeCapture {
         configuration.dynamicRange =
             .sdr
 
+        var previousProbe =
+            try await captureValidatedCompositedFrame(
+                descriptor: descriptor,
+                viewport: viewport,
+                hostingView: hostingView,
+                window: window,
+                filter: filter,
+                configuration:
+                    configuration,
+                initialDelay:
+                    .seconds(1),
+                validating: validating
+            )
+        var stableReference: Data?
+        for _ in
+            1..<compositorStabilizationMaximumAttempts
+        {
+            let probe =
+                try await captureValidatedCompositedFrame(
+                    descriptor:
+                        descriptor,
+                    viewport: viewport,
+                    hostingView:
+                        hostingView,
+                    window: window,
+                    filter: filter,
+                    configuration:
+                        configuration,
+                    initialDelay:
+                        compositorFrameInterval,
+                    validating:
+                        validating
+                )
+            if probe == previousProbe {
+                stableReference = probe
+                break
+            }
+            previousProbe = probe
+        }
+        guard let stableReference
+        else {
+            throw
+                BlueMinutesCompositedCaptureStabilizationFailure(
+                    capturedData:
+                        previousProbe,
+                    underlyingError:
+                        BlueMinutesRuntimeCaptureError
+                        .compositedCaptureDidNotStabilize
+                )
+        }
+
         var captures: [Data] = []
         captures.reserveCapacity(count)
         for _ in 0..<count {
-            let completedFrameCount =
-                captures.count
-            let maximumAttempts =
-                validating == nil ? 1 : 3
-            var lastValidationError:
-                (any Error)?
-            var lastCapturedData:
-                Data?
-            for attempt in 1...maximumAttempts {
-                try await Task.sleep(
-                    for:
-                        attempt == 1
-                            ? .seconds(1)
-                            : .milliseconds(500)
+            let capture =
+                try await captureValidatedCompositedFrame(
+                    descriptor:
+                        descriptor,
+                    viewport: viewport,
+                    hostingView:
+                        hostingView,
+                    window: window,
+                    filter: filter,
+                    configuration:
+                        configuration,
+                    initialDelay:
+                        compositorFrameInterval,
+                    validating:
+                        validating
                 )
-                window.displayIfNeeded()
-                hostingView.layoutSubtreeIfNeeded()
-
-                let output =
-                    try await
-                    SCScreenshotManager
-                    .captureScreenshot(
-                        contentFilter: filter,
-                        configuration:
-                            configuration
-                    )
-                guard let sourceImage =
-                    output.sdrImage
-                else {
-                    throw BlueMinutesRuntimeCaptureError
-                        .imageCreationFailed
-                }
-                let normalized = try normalizedImage(
-                    sourceImage,
-                    width: viewport.width,
-                    height: viewport.height,
-                    appearance:
-                        descriptor.appearance,
-                    normalizeCompositorEdges:
-                        true
-                )
-                let data = try encodePNG(
-                    normalized
-                )
-                lastCapturedData = data
-                guard let validating
-                else {
-                    captures.append(data)
-                    break
-                }
-                do {
-                    try validating(data)
-                    captures.append(data)
-                    break
-                } catch {
-                    lastValidationError =
-                        error
-                }
-            }
-            if captures.count
-                == completedFrameCount + 1
-            {
-                continue
-            }
-            if let lastCapturedData,
-               let lastValidationError
-            {
+            guard capture == stableReference
+            else {
                 throw
-                    BlueMinutesCompositedCaptureValidationFailure(
+                    BlueMinutesCompositedCaptureStabilizationFailure(
                         capturedData:
-                            lastCapturedData,
+                            capture,
                         underlyingError:
-                            lastValidationError
+                            BlueMinutesRuntimeCaptureError
+                            .compositedCaptureDidNotStabilize
                     )
             }
+            captures.append(capture)
+        }
+        return captures
+    }
+
+    @available(macOS 26.0, *)
+    private static func captureValidatedCompositedFrame(
+        descriptor:
+            BlueMinutesVisualCaptureDescriptor,
+        viewport:
+            BlueMinutesVisualViewport,
+        hostingView: NSView,
+        window: NSWindow,
+        filter: SCContentFilter,
+        configuration:
+            SCScreenshotConfiguration,
+        initialDelay: Duration,
+        validating:
+            ((Data) throws -> Void)?
+    ) async throws -> Data {
+        let maximumAttempts =
+            validating == nil ? 1 : 3
+        var lastValidationError:
+            (any Error)?
+        var lastCapturedData:
+            Data?
+        for attempt in 1...maximumAttempts {
+            try await Task.sleep(
+                for:
+                    attempt == 1
+                        ? initialDelay
+                        : .milliseconds(500)
+            )
+            let application =
+                NSApplication.shared
+            if !application.isActive
+                || !window.isKeyWindow
+            {
+                try activateCaptureApplication(
+                    application,
+                    window: window
+                )
+            }
+            window.displayIfNeeded()
+            hostingView.layoutSubtreeIfNeeded()
+
+            let output =
+                try await
+                SCScreenshotManager
+                .captureScreenshot(
+                    contentFilter: filter,
+                    configuration:
+                        configuration
+                )
+            guard let sourceImage =
+                output.sdrImage
+            else {
+                throw BlueMinutesRuntimeCaptureError
+                    .imageCreationFailed
+            }
+            let normalized = try normalizedImage(
+                sourceImage,
+                width: viewport.width,
+                height: viewport.height,
+                appearance:
+                    descriptor.appearance,
+                normalizeCompositorEdges:
+                    true
+            )
+            let data = try encodePNG(
+                normalized
+            )
+            lastCapturedData = data
+            guard let validating
+            else { return data }
+            do {
+                try validating(data)
+                return data
+            } catch {
+                lastValidationError =
+                    error
+            }
+        }
+        guard let lastCapturedData,
+              let lastValidationError
+        else {
             throw BlueMinutesRuntimeCaptureError
                 .imageCreationFailed
         }
-        return captures
+        throw
+            BlueMinutesCompositedCaptureValidationFailure(
+                capturedData:
+                    lastCapturedData,
+                underlyingError:
+                    lastValidationError
+            )
     }
 
     static func validatePNG(
@@ -2050,6 +2175,11 @@ private struct BlueMinutesVisualCaptureRoot:
                 maxWidth: .infinity,
                 maxHeight: .infinity,
                 alignment: .topLeading
+            )
+            .background(
+                appearance == .dark
+                    ? Color.black
+                    : Color.white
             )
             .environment(
                 \.colorScheme,

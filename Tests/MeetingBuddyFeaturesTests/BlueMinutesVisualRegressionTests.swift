@@ -301,7 +301,8 @@ struct BlueMinutesVisualRegressionTests {
             )
 
         #expect(captures.count == 2)
-        #expect(validationCount == 2)
+        #expect(validationCount >= 4)
+        #expect(validationCount <= 14)
         #expect(
             captures.map {
                 BlueMinutesRuntimeCapture
@@ -1723,6 +1724,15 @@ struct BlueMinutesVisualRegressionTests {
             return captures
         } catch let failure
             as BlueMinutesCompositedCaptureValidationFailure
+        {
+            try? writeCompositedCaptureDiagnostic(
+                failure.capturedData,
+                fixture: fixture
+            )
+            await content.teardown()
+            throw failure.underlyingError
+        } catch let failure
+            as BlueMinutesCompositedCaptureStabilizationFailure
         {
             try? writeCompositedCaptureDiagnostic(
                 failure.capturedData,
