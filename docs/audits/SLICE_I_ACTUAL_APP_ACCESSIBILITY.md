@@ -1,84 +1,96 @@
 # Slice I Actual-App Accessibility Evidence
 
-Status: Partial local evidence; final Future Slice I acceptance pending
-Date: 2026-07-26
-Application: staged `MeetingBuddy.app` built from the Slice I working tree
+Status: Exact-source bounded actual-app evidence; manual system-integration
+boundary remains
+Date: 2026-07-27
+Application: staged `dist/MeetingBuddy.app`
 
 ## Environment and boundary
 
 - macOS 26.5.2 (25F84) on Apple M4 arm64, Xcode 26.6 (17F113), and
   Apple Swift 6.3.3.
-- The staged application was launched from
-  `/private/tmp/blueminutes-slice-i-proof/dist/MeetingBuddy.app`.
-- This record predates the final Slice I source commit and does not bind an
-  exact source revision or executable hash. It must be repeated against the
-  final staged application before acceptance.
-- No workspace was selected. The run used no meeting content, credentials,
-  provider or model access, network path, or new TCC permission.
-- This is separate hands-on actual-application evidence. The native host-view
-  goldens and automated AX tests are not substituted for this run.
+- Application source revision:
+  `31bd311b27a13444fa778abc75f5df47c9bbb5b2`.
+- Staged executable SHA-256:
+  `503e15f89c6d86f2ab0d3276e80f1a937e8b405d079e87bfd8af4d9d8cb9d712`.
+- The arm64 application used ad-hoc signing. `codesign --verify --deep
+  --strict` passed; this record does not claim Developer ID signing,
+  notarization, or distribution authorization.
+- The run used a temporary private workspace and a generated two-second,
+  mono, 48 kHz WAV containing only a 440 Hz tone. Its SHA-256 was
+  `aac5dc69dd34403e505f80abf52836101dc986195d45f8d8db34e84e0048d0c7`.
+- No real meeting content, credentials, provider or model access, outbound
+  processing route, or new TCC permission was used.
+- This is hands-on actual-application evidence. Native host-view goldens and
+  automated AX tests are separate gates and are not substituted for this run.
 
 ## Results
 
-### Runtime accessibility tree and VoiceOver
+### Runtime accessibility tree
 
-- The actual-app AX tree exposed one `SidebarNavigationSplitView` and the
-  stable sidebar order: Workspace, No workspace open, Choose Workspace,
-  Workflow, Local Media, Record Audio, UN Web TV Metadata, Transcript Review,
-  Analysis Review, Briefing, Meeting History, and Storage.
+- The actual-app AX tree exposed one `SidebarNavigationSplitView`, contained
+  110 nodes without an accessibility cycle, and preserved this sidebar order:
+  Workspace, Synthetic Workspace, Choose Workspace, Workflow, Local Media,
+  Record Audio, UN Web TV Metadata, Transcript Review, Analysis Review,
+  Briefing, Library, Meeting History, and Storage.
 - Sidebar destinations exposed distinct labels and selection state. The
-  workspace toolbar controls exposed `Hide Sidebar` and the workspace menu
-  with their descriptions and keyboard hints.
-- VoiceOver was enabled through System Settings for the run. With the
-  VoiceOver service active, the actual-app AX tree retained the same ordered
-  labels, roles, and selected state; no duplicate destination label or
-  inaccessible control was observed.
-- The VoiceOver caption panel setting was confirmed enabled in VoiceOver
-  Utility. This run verified navigable order and labels but did not retain a
-  machine-readable transcript of the spoken announcements, so it does not
-  claim byte-for-byte announcement wording.
-- VoiceOver was turned off after the check. System Settings showed the switch
-  off and `launchctl` reported `com.apple.VoiceOver` as `state = not running`.
+  workspace toolbar controls exposed `Hide Sidebar` and the current-workspace
+  menu with separate descriptions.
+- The main window was observed at approximately 863 by 652 points. The
+  sidebar, selected destination, editorial canvas, setup fields, and primary
+  actions remained represented in the ordered AX hierarchy at that size.
 
-### Keyboard focus and command surface
+### Import focus and local processing
 
-- Keyboard traversal placed a clearly visible focus ring on the toolbar
-  `Hide Sidebar` control.
-- The toolbar workspace menu remained separately labeled and reachable.
-- Selecting Transcript and then Storage updated both sidebar selection and
-  editorial-canvas title without stale or duplicate focus targets.
+- With the language field focused and set to `en`, Command-O opened the native
+  file importer. Cancelling with Escape restored AX focus to that same field
+  with its `en` value intact.
+- Importing the generated WAV copied and hash-verified the managed object.
+  The staged app then reported `Succeeded`, `3 of 3 verified stages`,
+  `chunk-0`, and `local_only`.
+- The first exact-app processing attempt exposed an
+  `AVAssetWriter.startWriting()` failure when the Task Manager had already
+  created a zero-byte, mode-0600 writer lease. The implementation now removes
+  only a verified ordinary, non-symlink, zero-byte lease immediately before
+  creating the writer. Non-empty destinations still fail closed. The repaired
+  staged executable produced the successful result above.
 
-### Resize and reflow
+### Transcript keyboard and evidence surface
 
-- The main window was narrowed from its initial larger layout to approximately
-  860 by 650 points.
-- At the narrow size, the sidebar, selected destination, editorial canvas,
-  empty-state copy, and primary `Choose Workspace` action remained visible and
-  readable without overlap or clipping.
-- The AX hierarchy remained ordered after the resize and after destination
-  changes.
-- The staged application exited normally with Command-Q after the run; no
-  test application or VoiceOver process remained active.
+- Keyboard traversal reached the source-language field, target-language
+  field, and manual transcript text area in order. The text area accepted
+  `Synthetic 440 hertz tone no speech.` through the real app.
+- The complete-timeline-coverage checkbox changed from unchecked to checked,
+  which enabled `Publish Manual Transcript`. Publishing created one
+  human-correction, human-confirmed segment covering the two-second source.
+- Command-Option-I opened the transcript evidence inspector. Native AX exposed:
+  - label: `Transcript evidence inspector`;
+  - identifier: `BlueMinutes.Transcript.EvidenceInspector`;
+  - value: `Exact source, coverage, and evidence for the selected transcript
+    segment`.
+- Pressing Command-Option-I again removed that AX element and restored the
+  toggle value to `Closed`.
+- On the single-segment transcript, the Transcript menu correctly exposed
+  Previous Segment, Next Segment, and Save Focused Transcript Draft as
+  disabled, while Toggle Evidence Inspector remained enabled.
 
-### System-owned accessibility settings
+## System-owned accessibility settings
 
-- Automated fixtures distribute Increase Contrast and larger text, while the
-  manifest records Reduce Transparency, Differentiate Without Color, and
-  Reduce Motion as system-owned manual descriptors that cannot be simulated by
-  the host-view harness.
-- No system-owned display or motion preference was changed during this
-  actual-app run. A late Computer Use native-pipe failure prevented a reliable
-  toggle-and-restore cycle, so this record does not overstate those three
-  hands-on checks.
-- The product surfaces use semantic text, icons plus labels or disabled
-  reasons, and explicit status copy; the automated visual/AX matrix separately
-  verifies the corresponding non-color-only and reduced-environment contracts.
+- Before and after this run, VoiceOver was off. Reduce Transparency,
+  Differentiate Without Color, and Reduce Motion remained at their original
+  false or unset values; this run did not change those settings.
+- The desktop-control bridge terminated while reading the complex System
+  Settings Display accessibility page. BlueMinutes remained healthy and its
+  native AX tree remained readable. Because a reliable toggle-and-restore
+  cycle was not available, this record does not claim hands-on passes for
+  those three system-owned settings.
+- Automated fixtures separately exercise Increase Contrast, larger text, and
+  the application-owned non-color-only and reduced-environment contracts.
+  Those fixtures do not impersonate system-owned settings.
 
 ## Residual manual boundary
 
-Exact spoken VoiceOver announcement wording and live toggles for Reduce
-Transparency, Differentiate Without Color, and Reduce Motion remain manual
-system-integration observations. The deterministic application-owned visual
-gate does not substitute for them. Final Slice I acceptance also requires a
-repeat run tied to the exact source revision and staged executable hash; none
-of these gaps is represented as captured golden pixels.
+Exact spoken VoiceOver announcement wording and live toggle-and-restore checks
+for Reduce Transparency, Differentiate Without Color, and Reduce Motion remain
+manual system-integration observations. They are not represented as captured
+golden pixels or as completed by the deterministic application-owned gate.
