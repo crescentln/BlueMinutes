@@ -167,7 +167,7 @@ struct HistoricalIndexSearchView: View {
                 title:
                     "Last successful index status",
                 detail:
-                    "The latest status reload failed. The metadata below is retained only as the last successful local snapshot. \(message)",
+                    "The cached metadata below is not current with the latest index-status operation or accepted search generation. \(message)",
                 systemImage:
                     "exclamationmark.arrow.triangle.2.circlepath",
                 tone: .warning
@@ -258,6 +258,9 @@ struct HistoricalIndexSearchView: View {
         HistoricalReviewPresentation
             .searchUnavailableReason(
                 index: status,
+                indexRebuildIsActive:
+                    job?.state.isTerminal
+                        == false,
                 isWorking: isWorking
             )
     }

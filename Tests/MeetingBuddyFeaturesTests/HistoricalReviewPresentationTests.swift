@@ -96,7 +96,8 @@ struct HistoricalReviewPresentationTests {
             HistoricalReviewPresentation.searchState(
                 page: nil,
                 isLoading: false,
-                failureMessage: nil,
+                searchFailureMessage: nil,
+                pageStaleReason: nil,
                 lastSuccessfulFilter: nil,
                 currentFilter: current
             ) == .initial
@@ -105,7 +106,8 @@ struct HistoricalReviewPresentationTests {
             HistoricalReviewPresentation.searchState(
                 page: nil,
                 isLoading: true,
-                failureMessage: nil,
+                searchFailureMessage: nil,
+                pageStaleReason: nil,
                 lastSuccessfulFilter: nil,
                 currentFilter: current
             ) == .loading
@@ -114,7 +116,8 @@ struct HistoricalReviewPresentationTests {
             HistoricalReviewPresentation.searchState(
                 page: empty,
                 isLoading: false,
-                failureMessage: nil,
+                searchFailureMessage: nil,
+                pageStaleReason: nil,
                 lastSuccessfulFilter: current,
                 currentFilter: current
             ) == .empty(generation: 7)
@@ -123,8 +126,9 @@ struct HistoricalReviewPresentationTests {
             HistoricalReviewPresentation.searchState(
                 page: nil,
                 isLoading: false,
-                failureMessage:
+                searchFailureMessage:
                     "Synthetic local failure.",
+                pageStaleReason: nil,
                 lastSuccessfulFilter: nil,
                 currentFilter: current
             ) == .failure(
@@ -144,7 +148,8 @@ struct HistoricalReviewPresentationTests {
             HistoricalReviewPresentation.searchState(
                 page: empty,
                 isLoading: false,
-                failureMessage: nil,
+                searchFailureMessage: nil,
+                pageStaleReason: nil,
                 lastSuccessfulFilter: current,
                 currentFilter: changed
             ) == .staleResults(
@@ -152,6 +157,23 @@ struct HistoricalReviewPresentationTests {
                 generation: 7,
                 reason:
                     "The filters changed after this bounded result page was loaded. Search again before treating it as current."
+            )
+        )
+        #expect(
+            HistoricalReviewPresentation.searchState(
+                page: empty,
+                isLoading: false,
+                searchFailureMessage:
+                    "A separate operation failed.",
+                pageStaleReason:
+                    "The accepted page is stale for a precise reason.",
+                lastSuccessfulFilter: current,
+                currentFilter: current
+            ) == .staleResults(
+                count: 0,
+                generation: 7,
+                reason:
+                    "The accepted page is stale for a precise reason."
             )
         )
     }
@@ -162,6 +184,7 @@ struct HistoricalReviewPresentationTests {
             HistoricalReviewPresentation
                 .searchUnavailableReason(
                     index: nil,
+                    indexRebuildIsActive: false,
                     isWorking: false
                 )
                 == "Load the local index status before searching."
@@ -170,6 +193,7 @@ struct HistoricalReviewPresentationTests {
             HistoricalReviewPresentation
                 .searchUnavailableReason(
                     index: status(.rebuildRequired),
+                    indexRebuildIsActive: false,
                     isWorking: false
                 )
                 == "Rebuild the local index before searching."
@@ -178,8 +202,18 @@ struct HistoricalReviewPresentationTests {
             HistoricalReviewPresentation
                 .searchUnavailableReason(
                     index: status(.ready),
+                    indexRebuildIsActive: false,
                     isWorking: false
                 ) == nil
+        )
+        #expect(
+            HistoricalReviewPresentation
+                .searchUnavailableReason(
+                    index: status(.ready),
+                    indexRebuildIsActive: true,
+                    isWorking: false
+                )
+                == "Wait for the local index rebuild to finish before searching."
         )
 
         let revisionID = RevisionID(UUID())
