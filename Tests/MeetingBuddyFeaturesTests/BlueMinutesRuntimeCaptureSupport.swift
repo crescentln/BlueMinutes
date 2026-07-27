@@ -996,12 +996,9 @@ enum BlueMinutesRuntimeCapture {
         let profile =
             try canonicalICCProfile()
         let compressed =
-            try (
-                profile as NSData
+            try zlibData(
+                compressing: profile
             )
-            .compressed(
-                using: .zlib
-            ) as Data
         var payload =
             Data(
                 "sRGB IEC61966-2.1"
@@ -1061,19 +1058,86 @@ enum BlueMinutesRuntimeCapture {
                     (nameEnd + 2)..<bytes.count
                 ]
             )
-        do {
-            return try (
-                compressed as NSData
+        return try zlibDecompressed(
+            compressed
+        )
+    }
+
+    private static func zlibData(
+        compressing data: Data
+    ) throws -> Data {
+        let rawDeflate =
+            try (
+                data as NSData
             )
-            .decompressed(
+            .compressed(
                 using: .zlib
             ) as Data
+        var result = Data([
+            0x78,
+            0x9c
+        ])
+        result.append(rawDeflate)
+        appendUInt32(
+            adler32(data),
+            to: &result
+        )
+        return result
+    }
+
+    private static func zlibDecompressed(
+        _ data: Data
+    ) throws -> Data {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 6,
+              bytes[0] & 0x0f == 8,
+              bytes[0] >> 4 <= 7,
+              (
+                  (
+                      UInt16(bytes[0]) << 8
+                  )
+                      | UInt16(bytes[1])
+              ) % 31 == 0,
+              bytes[1] & 0x20 == 0
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .pngContractViolation(
+                    "The PNG iCCP profile has an invalid zlib header."
+                )
+        }
+        let checksumOffset =
+            bytes.count - 4
+        let rawDeflate =
+            Data(
+                bytes[2..<checksumOffset]
+            )
+        let decompressed: Data
+        do {
+            decompressed =
+                try (
+                    rawDeflate as NSData
+                )
+                .decompressed(
+                    using: .zlib
+                ) as Data
         } catch {
             throw BlueMinutesRuntimeCaptureError
                 .pngContractViolation(
                     "The PNG iCCP profile cannot be decompressed."
                 )
         }
+        guard adler32(decompressed)
+                == readUInt32(
+                    bytes,
+                    at: checksumOffset
+                )
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .pngContractViolation(
+                    "The PNG iCCP profile has an invalid Adler-32 checksum."
+                )
+        }
+        return decompressed
     }
 
     private static func pngChunk(
@@ -1140,6 +1204,29 @@ enum BlueMinutesRuntimeCapture {
             }
         }
         return checksum ^ UInt32.max
+    }
+
+    private static func adler32(
+        _ data: Data
+    ) -> UInt32 {
+        let modulus: UInt32 = 65_521
+        var first: UInt32 = 1
+        var second: UInt32 = 0
+        for byte in data {
+            first =
+                (
+                    first
+                        + UInt32(byte)
+                ) % modulus
+            second =
+                (
+                    second
+                        + first
+                ) % modulus
+        }
+        return (
+            second << 16
+        ) | first
     }
 
     private static func decodedPixels(
