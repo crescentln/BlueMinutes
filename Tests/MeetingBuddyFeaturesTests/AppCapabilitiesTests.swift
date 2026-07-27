@@ -74,6 +74,44 @@ struct AppCapabilitiesTests {
         )
     }
 
+    @Test
+    func mediaImportCompletesFalliblePreflightBeforePersistentWrites() throws {
+        let workflow = try source(
+            "Sources/MeetingBuddyApp/AppMediaReviewWorkflow.swift"
+        )
+        let importStart = try #require(
+            workflow.range(
+                of:
+                    "func importAndProcess(_ submission: MediaImportSubmission)"
+            )
+        )
+        let importBody = workflow[importStart.lowerBound...]
+        let plan = try #require(
+            importBody.range(
+                of: "let intakePlan = try LocalMediaIntakeJobPlan("
+            )
+        )
+        let request = try #require(
+            importBody.range(
+                of: "let intakeRequest = try LocalMediaIntakeJobFactory().request("
+            )
+        )
+        let transientRegistration = try #require(
+            importBody.range(
+                of: "try runtime.transientSources.register(sourceURL, for: intakeJobID)"
+            )
+        )
+        let firstPersistentWrite = try #require(
+            importBody.range(
+                of: "try runtime.store.insert(meeting)"
+            )
+        )
+
+        #expect(plan.lowerBound < firstPersistentWrite.lowerBound)
+        #expect(request.lowerBound < firstPersistentWrite.lowerBound)
+        #expect(transientRegistration.lowerBound < firstPersistentWrite.lowerBound)
+    }
+
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
