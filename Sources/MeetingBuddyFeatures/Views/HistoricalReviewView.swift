@@ -80,6 +80,15 @@ struct HistoricalReviewView: View {
                     selectedPreviousRevisionID:
                         sceneState
                         .selectedPriorHistoryRevisionID,
+                    isLoadingNextPage:
+                        store
+                        .historicalSearchIsLoadingNextPage,
+                    canLoadNextPage:
+                        historicalResultsAreCurrent
+                        && store
+                        .historicalSearchPage?
+                        .nextCursor != nil
+                        && !store.isWorking,
                     selectCurrent: {
                         store
                             .selectHistoricalCurrentRevision(
@@ -93,6 +102,14 @@ struct HistoricalReviewView: View {
                                 $0,
                                 using: sceneState
                             )
+                    },
+                    loadNextPage: {
+                        Task {
+                            await store
+                                .loadMoreHistoricalResults(
+                                    using: sceneState
+                                )
+                        }
                     }
                 )
                 HistoricalComparisonView(

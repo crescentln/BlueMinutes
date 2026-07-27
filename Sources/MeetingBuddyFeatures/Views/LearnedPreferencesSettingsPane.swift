@@ -454,6 +454,12 @@ struct LearnedPreferencesSettingsPane: View {
                 .accessibilityLabel(
                     "Edit \(LearnedPreferencePresentation.label(record.kind)) preference"
                 )
+                .accessibilityIdentifier(
+                    preferenceActionIdentifier(
+                        record,
+                        action: "edit"
+                    )
+                )
                 Button(
                     record.enabled
                         ? "Disable"
@@ -469,6 +475,15 @@ struct LearnedPreferencesSettingsPane: View {
                 .accessibilityLabel(
                     "\(record.enabled ? "Disable" : "Enable") \(LearnedPreferencePresentation.label(record.kind)) preference"
                 )
+                .accessibilityIdentifier(
+                    preferenceActionIdentifier(
+                        record,
+                        action:
+                            record.enabled
+                            ? "disable"
+                            : "enable"
+                    )
+                )
                 Button(
                     "Remove",
                     role: .destructive
@@ -483,6 +498,12 @@ struct LearnedPreferencesSettingsPane: View {
                 }
                 .accessibilityLabel(
                     "Remove \(LearnedPreferencePresentation.label(record.kind)) preference"
+                )
+                .accessibilityIdentifier(
+                    preferenceActionIdentifier(
+                        record,
+                        action: "remove"
+                    )
                 )
             }
             Text(record.value.displaySummary)
@@ -500,5 +521,15 @@ struct LearnedPreferencesSettingsPane: View {
         .accessibilityLabel(
             "\(LearnedPreferencePresentation.label(record.kind)), \(record.enabled ? "enabled" : "disabled")"
         )
+    }
+
+    private func preferenceActionIdentifier(
+        _ record: LearnedPreferenceRecord,
+        action: String
+    ) -> String {
+        "blueminutes.settings.learned-preferences.preference."
+            + record.preferenceID.canonicalString
+            + "."
+            + action
     }
 }
