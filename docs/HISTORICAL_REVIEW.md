@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: User and Codex
-Last updated: 2026-07-21
+Last updated: 2026-07-27
 
 ## Boundary
 
@@ -58,6 +58,64 @@ then Position revision ID descending. Repeating the same query against the same
 generation produces the same ordered revision IDs. Every keyset cursor is bound
 to that generation; a rebuild makes an older cursor fail instead of silently
 mixing results from two generations.
+
+## UI result-bundle state
+
+The review surface accepts a search page only as one atomic result bundle. The
+bundle binds the exact page and filter snapshot to the current workspace
+session, page generation, freshness or stale reason, current and prior
+selection, any comparison derived from those selections, and any pagination
+operation failure. UI controls and direct store actions both require that
+bundle to be current for the exact visible filters and workspace session.
+
+Index-status freshness and accepted-page freshness are independent:
+
+- an index-status reload or poll failure makes the retained page explicitly
+  stale and disables Compare, Confirm, and Load More;
+- a later exact search may make its returned page current without claiming
+  that the separate index-status operation recovered;
+- when cached status and a returned page have different generations, the page
+  may be accepted as current only while the cached status is explicitly shown
+  as stale;
+- only a successful matching status-and-search sequence makes both surfaces
+  current together.
+
+A failed rebuild enqueue preserves the entire prior result bundle. A successful
+enqueue clears it before polling begins. Replacing, clearing, or marking a page
+stale also clears a comparison that is no longer authorized. Editing any
+accepted filter immediately makes the retained bundle stale and clears its
+comparison and pending confirmation; restoring the old text does not make that
+bundle current again. A manual, reload-driven, or post-rebuild automatic search
+also captures the filter revision before its first suspension and rejects its
+returned page if the visible filters changed in flight, even when their text
+was later restored. By contrast, a failed next-page request records a separate
+retry error while preserving the accepted prefix, its selections, its
+comparison, and its currentness. A retry must use the same filter, cursor,
+workspace session, and generation; malformed, duplicate, or
+generation-mismatched pages are rejected without changing the accepted prefix.
+
+Asynchronous read-only history operations check task cancellation and the
+captured workspace session after suspension before committing state.
+Successfully returned durable side effects are the deliberate exceptions. A
+returned rebuild enqueue records its job, clears the prior bundle, and begins
+polling even if the calling task was cancelled after enqueue. Returned
+comparison publication and confirmation publication likewise reconcile into
+an unchanged visible bundle despite caller cancellation. If that visible
+filter, page, or selection context changed while either publication was in
+flight, the result bundle is made stale and the UI reports that the durable
+operation completed instead of exposing an obsolete candidate as actionable.
+The captured workspace session remains a hard guard for every response.
+Switching workspaces resets the result bundle and invalidates late status,
+search, pagination, rebuild-enqueue, polling, comparison, and confirmation
+responses from the prior workspace.
+When a rebuild poll reports a terminal job, status refresh and its optional
+automatic search remain one busy finalization operation. Reload, Search,
+Compare, Confirm, and Load More cannot start in the middle and therefore cannot
+race the captured rebuild result. The index card remains in a loading state
+until that finalization completes; cached pre-rebuild status is never presented
+as ready while the new generation status is still pending. Search also remains
+disabled while the rebuild job is queued, running, paused, or awaiting
+cancellation, even if a cached pre-rebuild status was ready.
 
 Index rebuild is a restricted, local-only Task Manager job. It builds a new
 generation transactionally, checks cancellation between candidates, then

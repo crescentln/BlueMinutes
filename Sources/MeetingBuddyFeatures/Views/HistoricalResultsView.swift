@@ -6,6 +6,9 @@ struct HistoricalResultsView: View {
     let page: HistoricalSearchPage?
     let isLoading: Bool
     let failureMessage: String?
+    let pageStaleReason: String?
+    let paginationFailureMessage:
+        String?
     let lastSuccessfulFilter:
         HistoricalSearchFilterSnapshot?
     let currentFilter:
@@ -13,6 +16,7 @@ struct HistoricalResultsView: View {
     let selectedCurrentRevisionID: RevisionID?
     let selectedPreviousRevisionID: RevisionID?
     let isLoadingNextPage: Bool
+    let canSelectResults: Bool
     let canLoadNextPage: Bool
     let selectCurrent: (RevisionID) -> Void
     let selectPrevious: (RevisionID) -> Void
@@ -23,7 +27,10 @@ struct HistoricalResultsView: View {
             HistoricalReviewPresentation.searchState(
                 page: page,
                 isLoading: isLoading,
-                failureMessage: failureMessage,
+                searchFailureMessage:
+                    failureMessage,
+                pageStaleReason:
+                    pageStaleReason,
                 lastSuccessfulFilter:
                     lastSuccessfulFilter,
                 currentFilter: currentFilter
@@ -43,28 +50,52 @@ struct HistoricalResultsView: View {
                         }
                     }
                     if page.nextCursor != nil {
-                        HStack(spacing: 10) {
-                            if isLoadingNextPage {
-                                ProgressView()
-                                    .controlSize(.small)
+                        VStack(
+                            alignment: .leading,
+                            spacing: 8
+                        ) {
+                            if let paginationFailureMessage {
+                                Label(
+                                    "The next page did not load. The accepted results above remain current. \(paginationFailureMessage)",
+                                    systemImage:
+                                        "exclamationmark.arrow.triangle.2.circlepath"
+                                )
+                                .font(.caption)
+                                .foregroundStyle(
+                                    .secondary
+                                )
+                                .accessibilityIdentifier(
+                                    "blueminutes.history.pagination-error"
+                                )
                             }
-                            Button(
-                                isLoadingNextPage
-                                    ? "Loading More…"
-                                    : "Load More"
-                            ) {
-                                loadNextPage()
+                            HStack(spacing: 10) {
+                                if isLoadingNextPage {
+                                    ProgressView()
+                                        .controlSize(
+                                            .small
+                                        )
+                                }
+                                Button(
+                                    isLoadingNextPage
+                                        ? "Loading More…"
+                                        : paginationFailureMessage
+                                            == nil
+                                            ? "Load More"
+                                            : "Retry Load More"
+                                ) {
+                                    loadNextPage()
+                                }
+                                .disabled(
+                                    !canLoadNextPage
+                                        || isLoadingNextPage
+                                )
+                                .accessibilityIdentifier(
+                                    "blueminutes.history.load-more"
+                                )
+                                .accessibilityHint(
+                                    "Loads the next generation-bound page using the unchanged deterministic filters."
+                                )
                             }
-                            .disabled(
-                                !canLoadNextPage
-                                    || isLoadingNextPage
-                            )
-                            .accessibilityIdentifier(
-                                "blueminutes.history.load-more"
-                            )
-                            .accessibilityHint(
-                                "Loads the next generation-bound page using the unchanged deterministic filters."
-                            )
                         }
                     }
                 }
@@ -239,8 +270,14 @@ struct HistoricalResultsView: View {
                 Button("Use as Current") {
                     selectCurrent(revisionID)
                 }
+                .disabled(!canSelectResults)
                 .accessibilityLabel(
                     "Use \(result.actor.displayName) at \(dateLabel) as current position"
+                )
+                .accessibilityHint(
+                    canSelectResults
+                        ? "Selects this exact revision as the current position."
+                        : "Run a successful search for the current filters before changing the comparison selection."
                 )
                 .accessibilityIdentifier(
                     selectionIdentifier(
@@ -251,8 +288,14 @@ struct HistoricalResultsView: View {
                 Button("Use as Previous") {
                     selectPrevious(revisionID)
                 }
+                .disabled(!canSelectResults)
                 .accessibilityLabel(
                     "Use \(result.actor.displayName) at \(dateLabel) as previous position"
+                )
+                .accessibilityHint(
+                    canSelectResults
+                        ? "Selects this exact revision as the previous position."
+                        : "Run a successful search for the current filters before changing the comparison selection."
                 )
                 .accessibilityIdentifier(
                     selectionIdentifier(

@@ -551,9 +551,12 @@ struct MediaReviewModelTests {
             HistoricalReviewPresentation.searchState(
                 page: store.historicalSearchPage,
                 isLoading: false,
-                failureMessage:
+                searchFailureMessage:
                     store
                     .historicalSearchFailureMessage,
+                pageStaleReason:
+                    store
+                    .historicalSearchPageStaleReason,
                 lastSuccessfulFilter:
                     store
                     .historicalSearchFilterSnapshot,
@@ -802,6 +805,10 @@ struct MediaReviewModelTests {
             store.historicalSearchFailureMessage
                 == nil
         )
+        #expect(
+            store.historicalPaginationFailureMessage
+                == nil
+        )
     }
 
     @Test @MainActor
@@ -824,6 +831,65 @@ struct MediaReviewModelTests {
                 ),
             indexGeneration: 7
         )
+        let wrongGenerationWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchPages: [
+                    firstPage,
+                    HistoricalSearchPage(
+                        results: [nextResult],
+                        nextCursor: nil,
+                        indexGeneration: 8
+                    )
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let wrongGenerationStore =
+            MediaReviewStore(
+                workflow:
+                    wrongGenerationWorkflow
+            )
+        let wrongGenerationScene =
+            MediaReviewSceneState()
+        await wrongGenerationStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-wrong-generation-workspace"
+                ),
+                using: wrongGenerationScene
+            )
+        await wrongGenerationStore
+            .searchMeetingHistory(
+                using: wrongGenerationScene
+            )
+        await wrongGenerationStore
+            .loadMoreHistoricalResults(
+                using: wrongGenerationScene
+            )
+        #expect(
+            wrongGenerationStore
+                .historicalSearchPage
+                == firstPage
+        )
+        #expect(
+            wrongGenerationStore
+                .historicalPaginationFailureMessage
+                != nil
+        )
+        #expect(
+            wrongGenerationStore
+                .historicalSearchFailureMessage
+                == nil
+        )
+        #expect(
+            wrongGenerationStore
+                .historicalResultsAreCurrent(
+                    using:
+                        wrongGenerationScene
+                )
+        )
+
         let malformedCursor =
             HistoricalSearchCursor(
                 indexGeneration: 7,
@@ -879,8 +945,13 @@ struct MediaReviewModelTests {
         )
         #expect(
             malformedStore
-                .historicalSearchFailureMessage
+                .historicalPaginationFailureMessage
                 != nil
+        )
+        #expect(
+            malformedStore
+                .historicalSearchFailureMessage
+                == nil
         )
 
         let duplicateWorkflow =
@@ -926,8 +997,13 @@ struct MediaReviewModelTests {
         )
         #expect(
             duplicateStore
-                .historicalSearchFailureMessage
+                .historicalPaginationFailureMessage
                 != nil
+        )
+        #expect(
+            duplicateStore
+                .historicalSearchFailureMessage
+                == nil
         )
     }
 
@@ -971,6 +1047,487 @@ struct MediaReviewModelTests {
         )
         #expect(
             store.historicalSearchFailureMessage == nil
+        )
+    }
+
+    @Test @MainActor
+    func indexFailureAndSearchFreshnessRecoverIndependently()
+        async throws
+    {
+        let page7 = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 5
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let page8 = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 6
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 8
+        )
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchPages: [
+                    page7,
+                    page7,
+                    page8
+                ],
+                historicalIndexFailureCall: 2,
+                historicalIndexStatuses: [
+                    makeFeatureHistoricalIndexStatus(
+                        generation: 7
+                    ),
+                    makeFeatureHistoricalIndexStatus(
+                        generation: 7
+                    ),
+                    makeFeatureHistoricalIndexStatus(
+                        generation: 8
+                    )
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-independent-status-page-workspace"
+            ),
+            using: sceneState
+        )
+
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+        #expect(store.historicalIndex?.generation == 7)
+        #expect(store.historicalSearchPage == page7)
+        #expect(
+            store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+        #expect(store.historicalSearchPage == page7)
+        #expect(
+            store.historicalIndexFailureMessage
+                != nil
+        )
+        #expect(
+            store.historicalSearchFailureMessage
+                == nil
+        )
+        #expect(
+            !store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(
+            store.historicalSearchPageStaleReason
+                != nil
+        )
+
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        #expect(store.historicalSearchPage == page7)
+        #expect(
+            store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(
+            store.historicalIndexFailureMessage
+                != nil
+        )
+        #expect(
+            store.historicalSearchFailureMessage
+                == nil
+        )
+
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+        #expect(store.historicalIndex?.generation == 8)
+        #expect(store.historicalSearchPage == page8)
+        #expect(
+            store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(
+            store.historicalIndexFailureMessage
+                == nil
+        )
+        #expect(
+            store.historicalSearchFailureMessage
+                == nil
+        )
+    }
+
+    @Test @MainActor
+    func generationDriftNeverPresentsStatusAndPageAsJointlyCurrent()
+        async throws
+    {
+        let page7 = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 7
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let page8 = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 8
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 8
+        )
+        let cachedWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchPages: [
+                    page7,
+                    page8
+                ],
+                historicalIndexFailureCall: 2,
+                historicalIndexStatuses: [
+                    makeFeatureHistoricalIndexStatus(
+                        generation: 7
+                    )
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let cachedStore = MediaReviewStore(
+            workflow: cachedWorkflow
+        )
+        let cachedScene =
+            MediaReviewSceneState()
+        await cachedStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-cached-generation-workspace"
+            ),
+            using: cachedScene
+        )
+        await cachedStore.loadHistoricalReview(
+            using: cachedScene
+        )
+        await cachedStore.searchMeetingHistory(
+            using: cachedScene
+        )
+
+        #expect(
+            cachedStore.historicalIndex?
+                .generation == 7
+        )
+        #expect(
+            cachedStore.historicalSearchPage
+                == page8
+        )
+        #expect(
+            cachedStore.historicalResultsAreCurrent(
+                using: cachedScene
+            )
+        )
+        #expect(
+            cachedStore
+                .historicalIndexFailureMessage?
+                .contains("generation 7")
+                == true
+        )
+        #expect(
+            cachedStore
+                .historicalIndexFailureMessage?
+                .contains("generation 8")
+                == true
+        )
+
+        await cachedStore.loadHistoricalReview(
+            using: cachedScene
+        )
+        #expect(
+            cachedStore.historicalSearchPage
+                == page8
+        )
+        #expect(
+            !cachedStore.historicalResultsAreCurrent(
+                using: cachedScene
+            )
+        )
+        #expect(
+            cachedStore
+                .historicalSearchPageStaleReason
+                != nil
+        )
+
+        let freshWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchPages: [
+                    page8
+                ],
+                historicalIndexStatuses: [
+                    makeFeatureHistoricalIndexStatus(
+                        generation: 7
+                    )
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let freshStore = MediaReviewStore(
+            workflow: freshWorkflow
+        )
+        let freshScene =
+            MediaReviewSceneState()
+        await freshStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-fresh-generation-workspace"
+            ),
+            using: freshScene
+        )
+        await freshStore.loadHistoricalReview(
+            using: freshScene
+        )
+
+        #expect(
+            freshStore.historicalIndex?
+                .generation == 7
+        )
+        #expect(
+            freshStore.historicalSearchPage
+                == page8
+        )
+        #expect(
+            freshStore.historicalResultsAreCurrent(
+                using: freshScene
+            )
+        )
+        #expect(
+            freshStore.historicalIndexFailureMessage
+                != nil
+        )
+    }
+
+    @Test @MainActor
+    func historyLoadFreezesItsQueryAndRejectsInterveningFilterDrift()
+        async throws
+    {
+        let indexGate = AsyncGate()
+        let searchGate = AsyncGate()
+        let page = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 5
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                historicalIndexGate:
+                    indexGate,
+                historicalSearchGate:
+                    searchGate,
+                historicalSearchGateCall: 1,
+                historicalSearchPages: [
+                    page
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-frozen-history-query-workspace"
+            ),
+            using: sceneState
+        )
+        sceneState.historyActorOrCountry =
+            "Frozen actor A"
+        let loading = Task {
+            await store.loadHistoricalReview(
+                using: sceneState
+            )
+        }
+        await indexGate.waitUntilEntered()
+
+        sceneState.historyActorOrCountry =
+            "Transient actor B"
+        store.historicalFilterDidChange(
+            using: sceneState
+        )
+        await indexGate.release()
+        await searchGate.waitUntilEntered()
+        sceneState.historyActorOrCountry =
+            "Frozen actor A"
+        store.historicalFilterDidChange(
+            using: sceneState
+        )
+        await searchGate.release()
+        await loading.value
+
+        #expect(
+            workflow.lastHistoricalSearchQuery?
+                .actorOrCountry
+                == "Frozen actor A"
+        )
+        #expect(
+            store.historicalSearchFilterSnapshot
+                == nil
+        )
+        #expect(
+            store.historicalSearchPage == nil
+        )
+        #expect(
+            !store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(
+            store.historicalSearchFailureMessage?
+                .contains(
+                    "filters changed"
+                ) == true
+        )
+    }
+
+    @Test @MainActor
+    func cancelledSecondStageSearchCannotLeaveANewStatusWithAnOldCurrentPage()
+        async throws
+    {
+        let searchGate = AsyncGate()
+        let page7 = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 6
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let page8 = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 7
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 8
+        )
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchGate:
+                    searchGate,
+                historicalSearchGateCall: 2,
+                historicalSearchPages: [
+                    page7,
+                    page8
+                ],
+                historicalIndexStatuses: [
+                    makeFeatureHistoricalIndexStatus(
+                        generation: 7
+                    ),
+                    makeFeatureHistoricalIndexStatus(
+                        generation: 8
+                    )
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-two-stage-cancellation-workspace"
+            ),
+            using: sceneState
+        )
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+        #expect(
+            store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+
+        let reloading = Task {
+            await store.loadHistoricalReview(
+                using: sceneState
+            )
+        }
+        await searchGate.waitUntilEntered()
+
+        #expect(store.historicalIndex?.generation == 8)
+        #expect(store.historicalSearchPage == page7)
+        #expect(
+            !store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(
+            store.historicalSearchPageStaleReason?
+                .contains("generation 8")
+                == true
+        )
+        #expect(
+            store.historicalSearchPageStaleReason?
+                .contains("generation 7")
+                == true
+        )
+
+        reloading.cancel()
+        await searchGate.release()
+        await reloading.value
+
+        #expect(store.historicalIndex?.generation == 8)
+        #expect(store.historicalSearchPage == page7)
+        #expect(
+            !store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(
+            store.historicalIndexFailureMessage
+                == nil
+        )
+        #expect(
+            store.historicalSearchFailureMessage
+                == nil
+        )
+        #expect(
+            !store.historicalReviewIsLoading
+        )
+        #expect(
+            !store.historicalSearchIsLoading
         )
     }
 
@@ -1052,6 +1609,2068 @@ struct MediaReviewModelTests {
                     "/synthetic-rebuild-gate-workspace-b"
             ),
             using: sceneState
+        )
+    }
+
+    @Test @MainActor
+    func rebuildClearsTheAcceptedBundleOnlyAfterEnqueueSucceeds()
+        async throws
+    {
+        let historical =
+            try makeFeatureHistoricalResult(
+                suffix: 9
+            )
+        let current =
+            try makeFeatureHistoricalResult(
+                suffix: 10
+            )
+        let firstPage = HistoricalSearchPage(
+            results: [
+                historical,
+                current
+            ],
+            nextCursor:
+                current.cursor(
+                    indexGeneration: 7
+                ),
+            indexGeneration: 7
+        )
+        let comparison =
+            try makeFeatureHistoricalComparison(
+                current: current,
+                historical: historical
+            )
+        let pollGate = AsyncGate()
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                pollGate: pollGate,
+                historicalSearchFailureCall: 2,
+                historicalSearchPages: [
+                    firstPage
+                ],
+                historicalRebuildFailureCall: 1,
+                historicalComparisonResult:
+                    comparison,
+                historicalIndexAvailability:
+                    .ready,
+                historicalRebuildCompletesImmediately:
+                    false
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-rebuild-preservation-workspace"
+            ),
+            using: sceneState
+        )
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        store.selectHistoricalCurrentRevision(
+            current.position.revision.revisionID,
+            using: sceneState
+        )
+        store.selectHistoricalPreviousRevision(
+            historical.position.revision.revisionID,
+            using: sceneState
+        )
+        await store
+            .compareSelectedHistoricalPositions(
+                using: sceneState
+            )
+        await store.loadMoreHistoricalResults(
+            using: sceneState
+        )
+
+        let acceptedPage = try #require(
+            store.historicalSearchPage
+        )
+        let acceptedFilter = try #require(
+            store.historicalSearchFilterSnapshot
+        )
+        let acceptedComparison = try #require(
+            store.historicalComparison
+        )
+        let paginationFailure = try #require(
+            store
+                .historicalPaginationFailureMessage
+        )
+        #expect(
+            store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+
+        await store.rebuildHistoricalIndex(
+            using: sceneState
+        )
+
+        #expect(
+            workflow.historicalRebuildCallCount
+                == 1
+        )
+        #expect(
+            store.historicalSearchPage
+                == acceptedPage
+        )
+        #expect(
+            store.historicalSearchFilterSnapshot
+                == acceptedFilter
+        )
+        #expect(
+            store.historicalComparison
+                == acceptedComparison
+        )
+        #expect(
+            store
+                .historicalPaginationFailureMessage
+                == paginationFailure
+        )
+        #expect(
+            store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(
+            sceneState
+                .selectedCurrentHistoryRevisionID
+                == current.position.revision
+                .revisionID
+        )
+        #expect(
+            sceneState
+                .selectedPriorHistoryRevisionID
+                == historical.position.revision
+                .revisionID
+        )
+
+        await store.rebuildHistoricalIndex(
+            using: sceneState
+        )
+        await pollGate.waitUntilEntered()
+
+        #expect(
+            workflow.historicalRebuildCallCount
+                == 2
+        )
+        #expect(store.historicalSearchPage == nil)
+        #expect(store.historicalComparison == nil)
+        #expect(
+            store
+                .historicalPaginationFailureMessage
+                == nil
+        )
+        #expect(
+            sceneState
+                .selectedCurrentHistoryRevisionID
+                == nil
+        )
+        #expect(
+            sceneState
+                .selectedPriorHistoryRevisionID
+                == nil
+        )
+
+        await pollGate.release()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-rebuild-preservation-workspace-b"
+            ),
+            using: sceneState
+        )
+    }
+
+    @Test @MainActor
+    func paginationFailurePreservesPrefixComparisonAndRetryCapability()
+        async throws
+    {
+        let historical =
+            try makeFeatureHistoricalResult(
+                suffix: 11
+            )
+        let current =
+            try makeFeatureHistoricalResult(
+                suffix: 12
+            )
+        let next =
+            try makeFeatureHistoricalResult(
+                suffix: 13
+            )
+        let firstPage = HistoricalSearchPage(
+            results: [
+                historical,
+                current
+            ],
+            nextCursor:
+                current.cursor(
+                    indexGeneration: 7
+                ),
+            indexGeneration: 7
+        )
+        let nextPage = HistoricalSearchPage(
+            results: [next],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let comparison =
+            try makeFeatureHistoricalComparison(
+                current: current,
+                historical: historical,
+                suffix: 2
+            )
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchFailureCall: 2,
+                historicalSearchPages: [
+                    firstPage,
+                    HistoricalSearchPage(
+                        results: [],
+                        nextCursor: nil,
+                        indexGeneration: 7
+                    ),
+                    nextPage
+                ],
+                historicalComparisonResult:
+                    comparison,
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-pagination-retry-workspace"
+            ),
+            using: sceneState
+        )
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        store.selectHistoricalCurrentRevision(
+            current.position.revision.revisionID,
+            using: sceneState
+        )
+        store.selectHistoricalPreviousRevision(
+            historical.position.revision.revisionID,
+            using: sceneState
+        )
+        await store
+            .compareSelectedHistoricalPositions(
+                using: sceneState
+            )
+        #expect(
+            store.historicalComparison
+                == comparison
+        )
+
+        await store.loadMoreHistoricalResults(
+            using: sceneState
+        )
+
+        #expect(
+            store.historicalSearchPage
+                == firstPage
+        )
+        #expect(
+            store.historicalComparison
+                == comparison
+        )
+        #expect(
+            store
+                .historicalPaginationFailureMessage
+                != nil
+        )
+        #expect(
+            store.historicalSearchFailureMessage
+                == nil
+        )
+        #expect(
+            store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+
+        await store.loadMoreHistoricalResults(
+            using: sceneState
+        )
+
+        #expect(
+            workflow.historicalSearchCallCount
+                == 3
+        )
+        #expect(
+            store.historicalSearchPage
+                == HistoricalSearchPage(
+                    results: [
+                        historical,
+                        current,
+                        next
+                    ],
+                    nextCursor: nil,
+                    indexGeneration: 7
+                )
+        )
+        #expect(
+            store.historicalComparison
+                == comparison
+        )
+        #expect(
+            store
+                .historicalPaginationFailureMessage
+                == nil
+        )
+        #expect(
+            store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+    }
+
+    @Test @MainActor
+    func changingHistoryFiltersStalesTheBundleAndClearsComparison()
+        async throws
+    {
+        let historical =
+            try makeFeatureHistoricalResult(
+                suffix: 14
+            )
+        let current =
+            try makeFeatureHistoricalResult(
+                suffix: 15
+            )
+        let page = HistoricalSearchPage(
+            results: [
+                historical,
+                current
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let comparison =
+            try makeFeatureHistoricalComparison(
+                current: current,
+                historical: historical,
+                suffix: 3
+            )
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchPages: [
+                    page
+                ],
+                historicalComparisonResult:
+                    comparison,
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-history-filter-change-workspace"
+            ),
+            using: sceneState
+        )
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        store.selectHistoricalCurrentRevision(
+            current.position.revision.revisionID,
+            using: sceneState
+        )
+        store.selectHistoricalPreviousRevision(
+            historical.position.revision.revisionID,
+            using: sceneState
+        )
+        await store
+            .compareSelectedHistoricalPositions(
+                using: sceneState
+            )
+        sceneState.confirmHistoricalChange =
+            true
+
+        sceneState.historyTopic =
+            "changed after search"
+        store.historicalFilterDidChange(
+            using: sceneState
+        )
+
+        #expect(
+            store.historicalSearchPage == page
+        )
+        #expect(
+            !store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(
+            store.historicalSearchPageStaleReason
+                != nil
+        )
+        #expect(
+            store.historicalComparison == nil
+        )
+        #expect(
+            !sceneState.confirmHistoricalChange
+        )
+
+        sceneState.historyTopic = ""
+        store.historicalFilterDidChange(
+            using: sceneState
+        )
+
+        #expect(
+            !store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(
+            store.historicalSearchPageStaleReason
+                != nil
+        )
+        #expect(
+            store.historicalComparison == nil
+        )
+    }
+
+    @Test @MainActor
+    func completedManualAndRebuildSearchesRejectFilterRevisionDrift()
+        async throws
+    {
+        let page = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 16
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+
+        let manualGate = AsyncGate()
+        let manualWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchGate:
+                    manualGate,
+                historicalSearchGateCall: 1,
+                historicalSearchPages: [
+                    page
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let manualStore =
+            MediaReviewStore(
+                workflow: manualWorkflow
+            )
+        let manualScene =
+            MediaReviewSceneState()
+        await manualStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-manual-filter-revision-workspace"
+            ),
+            using: manualScene
+        )
+        manualScene.historyActorOrCountry =
+            "Captured actor"
+        let manualSearch = Task {
+            await manualStore
+                .searchMeetingHistory(
+                    using: manualScene
+                )
+        }
+        await manualGate.waitUntilEntered()
+        manualScene.historyActorOrCountry =
+            "Transient actor"
+        manualStore.historicalFilterDidChange(
+            using: manualScene
+        )
+        manualScene.historyActorOrCountry =
+            "Captured actor"
+        manualStore.historicalFilterDidChange(
+            using: manualScene
+        )
+        await manualGate.release()
+        await manualSearch.value
+
+        #expect(
+            manualWorkflow
+                .lastHistoricalSearchQuery?
+                .actorOrCountry
+                == "Captured actor"
+        )
+        #expect(
+            manualStore.historicalSearchPage
+                == nil
+        )
+        #expect(
+            manualStore
+                .historicalSearchFailureMessage?
+                .contains(
+                    "filters changed"
+                ) == true
+        )
+
+        let rebuildSearchGate = AsyncGate()
+        let rebuildWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchGate:
+                    rebuildSearchGate,
+                historicalSearchGateCall: 1,
+                seededReviewState: true,
+                historicalSearchPages: [
+                    page
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let rebuildStore =
+            MediaReviewStore(
+                workflow: rebuildWorkflow
+            )
+        let rebuildScene =
+            MediaReviewSceneState()
+        await rebuildStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-rebuild-filter-revision-workspace"
+            ),
+            using: rebuildScene
+        )
+        rebuildScene.historyActorOrCountry =
+            "Captured rebuild actor"
+        await rebuildStore.rebuildHistoricalIndex(
+            using: rebuildScene
+        )
+        await rebuildSearchGate.waitUntilEntered()
+        rebuildScene.historyActorOrCountry =
+            "Transient rebuild actor"
+        rebuildStore.historicalFilterDidChange(
+            using: rebuildScene
+        )
+        rebuildScene.historyActorOrCountry =
+            "Captured rebuild actor"
+        rebuildStore.historicalFilterDidChange(
+            using: rebuildScene
+        )
+        await rebuildSearchGate.release()
+        for _ in 0..<200
+            where rebuildStore
+                .historicalIndexFinalizationIsWorking
+        {
+            await Task.yield()
+        }
+
+        #expect(
+            rebuildWorkflow
+                .lastHistoricalSearchQuery?
+                .actorOrCountry
+                == "Captured rebuild actor"
+        )
+        #expect(
+            rebuildStore.historicalSearchPage
+                == nil
+        )
+        #expect(
+            rebuildStore
+                .historicalSearchFailureMessage?
+                .contains(
+                    "filters changed"
+                ) == true
+        )
+        #expect(
+            !rebuildStore
+                .historicalIndexFinalizationIsWorking
+        )
+    }
+
+    @Test @MainActor
+    func cancelledReturnedComparisonAndConfirmationReconcileInSameWorkspace()
+        async throws
+    {
+        let historical =
+            try makeFeatureHistoricalResult(
+                suffix: 16
+            )
+        let current =
+            try makeFeatureHistoricalResult(
+                suffix: 17
+            )
+        let page = HistoricalSearchPage(
+            results: [
+                historical,
+                current
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let candidate =
+            try makeFeatureHistoricalComparison(
+                current: current,
+                historical: historical,
+                suffix: 5
+            )
+        let confirmed =
+            try makeFeatureConfirmedHistoricalComparison(
+                candidate: candidate,
+                suffix: 5
+            )
+        let comparisonGate = AsyncGate()
+        let confirmationGate = AsyncGate()
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                historicalComparisonGate:
+                    comparisonGate,
+                historicalConfirmationGate:
+                    confirmationGate,
+                historicalSearchPages: [
+                    page
+                ],
+                historicalComparisonResult:
+                    candidate,
+                historicalConfirmedComparisonResult:
+                    confirmed,
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-cancelled-comparison-workspace"
+            ),
+            using: sceneState
+        )
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        store.selectHistoricalCurrentRevision(
+            current.position.revision.revisionID,
+            using: sceneState
+        )
+        store.selectHistoricalPreviousRevision(
+            historical.position.revision.revisionID,
+            using: sceneState
+        )
+
+        let cancelledComparison = Task {
+            await store
+                .compareSelectedHistoricalPositions(
+                    using: sceneState
+                )
+        }
+        await comparisonGate.waitUntilEntered()
+        cancelledComparison.cancel()
+        await comparisonGate.release()
+        await cancelledComparison.value
+
+        #expect(
+            store.historicalComparison
+                == candidate
+        )
+        #expect(
+            workflow.historicalCompareCallCount
+                == 1
+        )
+        #expect(
+            !store.historicalComparisonIsWorking
+        )
+
+        sceneState.confirmHistoricalChange =
+            true
+        let cancelledConfirmation = Task {
+            await store.confirmHistoricalChange(
+                using: sceneState
+            )
+        }
+        await confirmationGate.waitUntilEntered()
+        cancelledConfirmation.cancel()
+        await confirmationGate.release()
+        await cancelledConfirmation.value
+
+        #expect(
+            store.historicalComparison
+                == confirmed
+        )
+        #expect(
+            workflow.historicalConfirmCallCount
+                == 1
+        )
+        #expect(
+            !sceneState.confirmHistoricalChange
+        )
+        #expect(
+            !store.historicalComparisonIsWorking
+        )
+        #expect(store.safeErrorMessage == nil)
+    }
+
+    @Test @MainActor
+    func returnedComparisonInvalidatesAChangedVisibleContext()
+        async throws
+    {
+        let historical =
+            try makeFeatureHistoricalResult(
+                suffix: 16
+            )
+        let current =
+            try makeFeatureHistoricalResult(
+                suffix: 17
+            )
+        let page = HistoricalSearchPage(
+            results: [
+                historical,
+                current
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let candidate =
+            try makeFeatureHistoricalComparison(
+                current: current,
+                historical: historical,
+                suffix: 6
+            )
+        let comparisonGate = AsyncGate()
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                historicalComparisonGate:
+                    comparisonGate,
+                historicalSearchPages: [
+                    page
+                ],
+                historicalComparisonResult:
+                    candidate,
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-changed-comparison-context-workspace"
+            ),
+            using: sceneState
+        )
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        store.selectHistoricalCurrentRevision(
+            current.position.revision.revisionID,
+            using: sceneState
+        )
+        store.selectHistoricalPreviousRevision(
+            historical.position.revision.revisionID,
+            using: sceneState
+        )
+        let comparisonTask = Task {
+            await store
+                .compareSelectedHistoricalPositions(
+                    using: sceneState
+                )
+        }
+        await comparisonGate.waitUntilEntered()
+
+        sceneState.historyTopic =
+            "changed during comparison"
+        store.historicalFilterDidChange(
+            using: sceneState
+        )
+        await comparisonGate.release()
+        await comparisonTask.value
+
+        #expect(
+            store.historicalComparison == nil
+        )
+        #expect(
+            store.historicalSearchPageStaleReason?
+                .contains(
+                    "comparison was saved locally"
+                ) == true
+        )
+        #expect(
+            store.safeErrorMessage?
+                .contains(
+                    "comparison was saved locally"
+                ) == true
+        )
+        #expect(
+            !store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+    }
+
+    @Test @MainActor
+    func returnedConfirmationInvalidatesAChangedVisibleContext()
+        async throws
+    {
+        let historical =
+            try makeFeatureHistoricalResult(
+                suffix: 16
+            )
+        let current =
+            try makeFeatureHistoricalResult(
+                suffix: 17
+            )
+        let page = HistoricalSearchPage(
+            results: [
+                historical,
+                current
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let candidate =
+            try makeFeatureHistoricalComparison(
+                current: current,
+                historical: historical,
+                suffix: 7
+            )
+        let confirmed =
+            try makeFeatureConfirmedHistoricalComparison(
+                candidate: candidate,
+                suffix: 7
+            )
+        let confirmationGate = AsyncGate()
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                historicalConfirmationGate:
+                    confirmationGate,
+                historicalSearchPages: [
+                    page
+                ],
+                historicalComparisonResult:
+                    candidate,
+                historicalConfirmedComparisonResult:
+                    confirmed,
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-changed-confirmation-context-workspace"
+            ),
+            using: sceneState
+        )
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        store.selectHistoricalCurrentRevision(
+            current.position.revision.revisionID,
+            using: sceneState
+        )
+        store.selectHistoricalPreviousRevision(
+            historical.position.revision.revisionID,
+            using: sceneState
+        )
+        await store
+            .compareSelectedHistoricalPositions(
+                using: sceneState
+            )
+        sceneState.confirmHistoricalChange =
+            true
+        let confirmationTask = Task {
+            await store.confirmHistoricalChange(
+                using: sceneState
+            )
+        }
+        await confirmationGate.waitUntilEntered()
+
+        sceneState.historyMeetingType =
+            "changed during confirmation"
+        store.historicalFilterDidChange(
+            using: sceneState
+        )
+        await confirmationGate.release()
+        await confirmationTask.value
+
+        #expect(
+            store.historicalComparison == nil
+        )
+        #expect(
+            store.historicalSearchPageStaleReason?
+                .contains(
+                    "confirmation was saved locally"
+                ) == true
+        )
+        #expect(
+            store.safeErrorMessage?
+                .contains(
+                    "confirmation was saved locally"
+                ) == true
+        )
+        #expect(
+            !sceneState.confirmHistoricalChange
+        )
+        #expect(
+            workflow.historicalConfirmCallCount
+                == 1
+        )
+    }
+
+    @Test @MainActor
+    func staleResultBundleRejectsDirectSelectionComparisonAndConfirmation()
+        async throws
+    {
+        let historical =
+            try makeFeatureHistoricalResult(
+                suffix: 14
+            )
+        let current =
+            try makeFeatureHistoricalResult(
+                suffix: 15
+            )
+        let page = HistoricalSearchPage(
+            results: [
+                historical,
+                current
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let comparison =
+            try makeFeatureHistoricalComparison(
+                current: current,
+                historical: historical,
+                suffix: 3
+            )
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchPages: [
+                    page
+                ],
+                historicalIndexFailureCall: 1,
+                historicalComparisonResult:
+                    comparison,
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-direct-history-guard-workspace"
+            ),
+            using: sceneState
+        )
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        store.selectHistoricalCurrentRevision(
+            current.position.revision.revisionID,
+            using: sceneState
+        )
+        store.selectHistoricalPreviousRevision(
+            historical.position.revision.revisionID,
+            using: sceneState
+        )
+        await store
+            .compareSelectedHistoricalPositions(
+                using: sceneState
+            )
+        #expect(
+            workflow.historicalCompareCallCount
+                == 1
+        )
+        #expect(
+            store.historicalComparison
+                == comparison
+        )
+        sceneState.confirmHistoricalChange =
+            true
+
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+
+        #expect(
+            !store.historicalResultsAreCurrent(
+                using: sceneState
+            )
+        )
+        #expect(store.historicalComparison == nil)
+        #expect(
+            !sceneState.confirmHistoricalChange
+        )
+
+        store.selectHistoricalCurrentRevision(
+            historical.position.revision
+                .revisionID,
+            using: sceneState
+        )
+        await store
+            .compareSelectedHistoricalPositions(
+                using: sceneState
+            )
+        await store.confirmHistoricalChange(
+            using: sceneState
+        )
+
+        #expect(
+            sceneState
+                .selectedCurrentHistoryRevisionID
+                == current.position.revision
+                .revisionID
+        )
+        #expect(
+            workflow.historicalCompareCallCount
+                == 1
+        )
+        #expect(
+            workflow.historicalConfirmCallCount
+                == 0
+        )
+    }
+
+    @Test @MainActor
+    func terminalHistoryPollFinalizationBlocksCompetingManualLoads()
+        async throws
+    {
+        let initialPage = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 20
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let rebuiltPage = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 21
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let pollGate = AsyncGate()
+        let statusGate = AsyncGate()
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                pollGate:
+                    pollGate,
+                historicalIndexGate:
+                    statusGate,
+                historicalIndexGateCall: 2,
+                seededReviewState: true,
+                historicalSearchPages: [
+                    initialPage,
+                    rebuiltPage
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-terminal-finalization-workspace"
+            ),
+            using: sceneState
+        )
+        sceneState.historyActorOrCountry =
+            "Captured before rebuild"
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+        #expect(
+            store.historicalSearchPage
+                == initialPage
+        )
+
+        await store.rebuildHistoricalIndex(
+            using: sceneState
+        )
+        await pollGate.waitUntilEntered()
+
+        #expect(
+            store.historicalIndexJob?.state
+                == .succeeded
+        )
+        #expect(
+            store
+                .historicalIndexFinalizationIsWorking
+        )
+        #expect(
+            store.historicalControlsAreBusy
+        )
+        #expect(
+            HistoricalReviewPresentation
+                .indexState(
+                    status:
+                        store.historicalIndex,
+                    job:
+                        store.historicalIndexJob,
+                    isLoading:
+                        store
+                        .historicalIndexIsLoading,
+                    failureMessage:
+                        store
+                        .historicalIndexFailureMessage
+                ) == .loading
+        )
+
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+
+        #expect(
+            workflow.historicalIndexCallCount
+                == 1
+        )
+        #expect(
+            workflow.historicalSearchCallCount
+                == 1
+        )
+
+        await pollGate.release()
+        await statusGate.waitUntilEntered()
+
+        #expect(
+            store.historicalIndexJob?.state
+                == .succeeded
+        )
+        #expect(
+            store
+                .historicalIndexFinalizationIsWorking
+        )
+        #expect(
+            store.historicalControlsAreBusy
+        )
+        #expect(
+            HistoricalReviewPresentation
+                .indexState(
+                    status:
+                        store.historicalIndex,
+                    job:
+                        store.historicalIndexJob,
+                    isLoading:
+                        store
+                        .historicalIndexIsLoading,
+                    failureMessage:
+                        store
+                        .historicalIndexFailureMessage
+                ) == .loading
+        )
+
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        await store.loadHistoricalReview(
+            using: sceneState
+        )
+
+        #expect(
+            workflow.historicalIndexCallCount
+                == 2
+        )
+        #expect(
+            workflow.historicalSearchCallCount
+                == 1
+        )
+        #expect(
+            store.historicalIndexJob?.state
+                == .succeeded
+        )
+
+        await statusGate.release()
+        for _ in 0..<200
+            where store
+                .historicalIndexFinalizationIsWorking
+        {
+            await Task.yield()
+        }
+
+        #expect(
+            !store
+                .historicalIndexFinalizationIsWorking
+        )
+        #expect(
+            workflow.historicalIndexCallCount
+                == 2
+        )
+        #expect(
+            workflow.historicalSearchCallCount
+                == 2
+        )
+        #expect(
+            store.historicalSearchPage
+                == rebuiltPage
+        )
+        #expect(
+            HistoricalReviewPresentation
+                .indexState(
+                    status:
+                        store.historicalIndex,
+                    job:
+                        store.historicalIndexJob,
+                    isLoading:
+                        store
+                        .historicalIndexIsLoading,
+                    failureMessage:
+                        store
+                        .historicalIndexFailureMessage
+                ) == .ready
+        )
+        #expect(
+            workflow.lastHistoricalSearchQuery?
+                .actorOrCountry
+                == "Captured before rebuild"
+        )
+    }
+
+    @Test @MainActor
+    func terminalHistoryPollKeepsStatusAndAutomaticPageGenerationHonest()
+        async throws
+    {
+        let page8 = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 16
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 8
+        )
+        let matchingWorkflow =
+            try MediaReviewWorkflowProbe(
+                seededReviewState: true,
+                historicalSearchPages: [
+                    page8
+                ],
+                historicalIndexStatuses: [
+                    makeFeatureHistoricalIndexStatus(
+                        generation: 8
+                    )
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let matchingStore =
+            MediaReviewStore(
+                workflow: matchingWorkflow
+            )
+        let matchingScene =
+            MediaReviewSceneState()
+        await matchingStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-matching-poll-workspace"
+                ),
+                using: matchingScene
+            )
+        await matchingStore
+            .rebuildHistoricalIndex(
+                using: matchingScene
+            )
+        for _ in 0..<200
+            where matchingWorkflow
+                .historicalSearchCallCount == 0
+        {
+            await Task.yield()
+        }
+
+        #expect(
+            matchingStore.historicalIndexJob?
+                .state == .succeeded
+        )
+        #expect(
+            matchingStore.historicalIndex?
+                .generation == 8
+        )
+        #expect(
+            matchingStore.historicalSearchPage
+                == page8
+        )
+        #expect(
+            matchingStore
+                .historicalIndexFailureMessage
+                == nil
+        )
+        #expect(
+            matchingStore.historicalResultsAreCurrent(
+                using: matchingScene
+            )
+        )
+
+        let mismatchingWorkflow =
+            try MediaReviewWorkflowProbe(
+                seededReviewState: true,
+                historicalSearchPages: [
+                    page8
+                ],
+                historicalIndexStatuses: [
+                    makeFeatureHistoricalIndexStatus(
+                        generation: 7
+                    )
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let mismatchingStore =
+            MediaReviewStore(
+                workflow: mismatchingWorkflow
+            )
+        let mismatchingScene =
+            MediaReviewSceneState()
+        await mismatchingStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-mismatching-poll-workspace"
+                ),
+                using: mismatchingScene
+            )
+        await mismatchingStore
+            .rebuildHistoricalIndex(
+                using: mismatchingScene
+            )
+        for _ in 0..<200
+            where mismatchingWorkflow
+                .historicalSearchCallCount == 0
+        {
+            await Task.yield()
+        }
+
+        #expect(
+            mismatchingStore.historicalIndex?
+                .generation == 7
+        )
+        #expect(
+            mismatchingStore
+                .historicalSearchPage == page8
+        )
+        #expect(
+            mismatchingStore
+                .historicalIndexFailureMessage
+                != nil
+        )
+        #expect(
+            mismatchingStore
+                .historicalResultsAreCurrent(
+                    using: mismatchingScene
+                )
+        )
+    }
+
+    @Test @MainActor
+    func lateWorkspaceAHistoryOperationsCannotCommitIntoWorkspaceB()
+        async throws
+    {
+        let firstResult =
+            try makeFeatureHistoricalResult(
+                suffix: 17
+            )
+        let nextResult =
+            try makeFeatureHistoricalResult(
+                suffix: 18
+            )
+        let firstPage = HistoricalSearchPage(
+            results: [firstResult],
+            nextCursor:
+                firstResult.cursor(
+                    indexGeneration: 7
+                ),
+            indexGeneration: 7
+        )
+        let nextPage = HistoricalSearchPage(
+            results: [nextResult],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+
+        let indexGate = AsyncGate()
+        let workspaceBSearchGate =
+            AsyncGate()
+        let loadWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalIndexGate: indexGate,
+                historicalSearchGate:
+                    workspaceBSearchGate,
+                historicalSearchGateCall: 1,
+                historicalSearchPages: [
+                    firstPage
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let loadStore = MediaReviewStore(
+            workflow: loadWorkflow
+        )
+        let loadScene =
+            MediaReviewSceneState()
+        await loadStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-late-load-workspace-a"
+            ),
+            using: loadScene
+        )
+        let lateLoad = Task {
+            await loadStore
+                .loadHistoricalReview(
+                    using: loadScene
+                )
+        }
+        await indexGate.waitUntilEntered()
+        await loadStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-late-load-workspace-b"
+            ),
+            using: loadScene
+        )
+        let workspaceBSearch = Task {
+            await loadStore
+                .searchMeetingHistory(
+                    using: loadScene
+                )
+        }
+        await workspaceBSearchGate
+            .waitUntilEntered()
+        await indexGate.release()
+        await lateLoad.value
+
+        #expect(
+            loadStore.workspace?.displayName
+                == "Synthetic Workspace B"
+        )
+        #expect(loadStore.historicalIndex == nil)
+        #expect(loadStore.historicalSearchPage == nil)
+        #expect(
+            loadStore.historicalSearchIsLoading
+        )
+        #expect(
+            loadStore.historicalIndexFailureMessage
+                == nil
+        )
+        await workspaceBSearchGate.release()
+        await workspaceBSearch.value
+        #expect(
+            loadStore.historicalSearchPage
+                == firstPage
+        )
+
+        let searchGate = AsyncGate()
+        let searchWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchGate:
+                    searchGate,
+                historicalSearchGateCall: 1,
+                historicalSearchPages: [
+                    firstPage
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let searchStore = MediaReviewStore(
+            workflow: searchWorkflow
+        )
+        let searchScene =
+            MediaReviewSceneState()
+        await searchStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-late-search-workspace-a"
+                ),
+                using: searchScene
+            )
+        let lateSearch = Task {
+            await searchStore
+                .searchMeetingHistory(
+                    using: searchScene
+                )
+        }
+        await searchGate.waitUntilEntered()
+        await searchStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-late-search-workspace-b"
+                ),
+                using: searchScene
+            )
+        await searchGate.release()
+        await lateSearch.value
+        #expect(
+            searchStore.workspace?.displayName
+                == "Synthetic Workspace B"
+        )
+        #expect(
+            searchStore.historicalSearchPage
+                == nil
+        )
+        #expect(
+            searchStore
+                .historicalSearchFailureMessage
+                == nil
+        )
+
+        let paginationGate = AsyncGate()
+        let paginationWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchGate:
+                    paginationGate,
+                historicalSearchGateCall: 2,
+                historicalSearchPages: [
+                    firstPage,
+                    nextPage
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let paginationStore =
+            MediaReviewStore(
+                workflow:
+                    paginationWorkflow
+            )
+        let paginationScene =
+            MediaReviewSceneState()
+        await paginationStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-late-pagination-workspace-a"
+                ),
+                using: paginationScene
+            )
+        await paginationStore
+            .searchMeetingHistory(
+                using: paginationScene
+            )
+        let latePagination = Task {
+            await paginationStore
+                .loadMoreHistoricalResults(
+                    using: paginationScene
+                )
+        }
+        await paginationGate.waitUntilEntered()
+        await paginationStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-late-pagination-workspace-b"
+                ),
+                using: paginationScene
+            )
+        await paginationGate.release()
+        await latePagination.value
+        #expect(
+            paginationStore.workspace?
+                .displayName
+                == "Synthetic Workspace B"
+        )
+        #expect(
+            paginationStore
+                .historicalSearchPage == nil
+        )
+        #expect(
+            paginationStore
+                .historicalPaginationFailureMessage
+                == nil
+        )
+
+        let rebuildGate = AsyncGate()
+        let rebuildWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalRebuildGate:
+                    rebuildGate,
+                historicalIndexAvailability:
+                    .ready
+            )
+        let rebuildStore = MediaReviewStore(
+            workflow: rebuildWorkflow
+        )
+        let rebuildScene =
+            MediaReviewSceneState()
+        await rebuildStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-late-rebuild-workspace-a"
+                ),
+                using: rebuildScene
+            )
+        let lateRebuild = Task {
+            await rebuildStore
+                .rebuildHistoricalIndex(
+                    using: rebuildScene
+                )
+        }
+        await rebuildGate.waitUntilEntered()
+        await rebuildStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-late-rebuild-workspace-b"
+                ),
+                using: rebuildScene
+            )
+        await rebuildGate.release()
+        await lateRebuild.value
+        #expect(
+            rebuildStore.workspace?
+                .displayName
+                == "Synthetic Workspace B"
+        )
+        #expect(
+            rebuildStore.historicalIndexJob
+                == nil
+        )
+        #expect(
+            !rebuildStore
+                .historicalIndexRebuildIsEnqueuing
+        )
+
+        let pollGate = AsyncGate()
+        let pollWorkflow =
+            try MediaReviewWorkflowProbe(
+                pollGate: pollGate,
+                historicalRebuildCompletesImmediately:
+                    false
+            )
+        let pollStore = MediaReviewStore(
+            workflow: pollWorkflow
+        )
+        let pollScene =
+            MediaReviewSceneState()
+        await pollStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-late-poll-workspace-a"
+            ),
+            using: pollScene
+        )
+        await pollStore
+            .rebuildHistoricalIndex(
+                using: pollScene
+            )
+        await pollGate.waitUntilEntered()
+        await pollStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-late-poll-workspace-b"
+            ),
+            using: pollScene
+        )
+        await pollGate.release()
+        for _ in 0..<20 {
+            await Task.yield()
+        }
+        #expect(
+            pollStore.workspace?.displayName
+                == "Synthetic Workspace B"
+        )
+        #expect(pollStore.historicalIndex == nil)
+        #expect(
+            pollStore.historicalIndexJob == nil
+        )
+        #expect(
+            pollStore.historicalSearchPage == nil
+        )
+        #expect(
+            pollStore.historicalIndexFailureMessage
+                == nil
+        )
+    }
+
+    @Test @MainActor
+    func lateWorkspaceAComparisonSideEffectsNeverAttachToWorkspaceB()
+        async throws
+    {
+        let historical =
+            try makeFeatureHistoricalResult(
+                suffix: 18
+            )
+        let current =
+            try makeFeatureHistoricalResult(
+                suffix: 19
+            )
+        let page = HistoricalSearchPage(
+            results: [
+                historical,
+                current
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let candidate =
+            try makeFeatureHistoricalComparison(
+                current: current,
+                historical: historical,
+                suffix: 8
+            )
+        let confirmed =
+            try makeFeatureConfirmedHistoricalComparison(
+                candidate: candidate,
+                suffix: 8
+            )
+
+        let comparisonGate = AsyncGate()
+        let comparisonWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalComparisonGate:
+                    comparisonGate,
+                historicalSearchPages: [
+                    page
+                ],
+                historicalComparisonResult:
+                    candidate,
+                historicalIndexAvailability:
+                    .ready
+            )
+        let comparisonStore =
+            MediaReviewStore(
+                workflow:
+                    comparisonWorkflow
+            )
+        let comparisonScene =
+            MediaReviewSceneState()
+        await comparisonStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-late-comparison-workspace-a"
+            ),
+            using: comparisonScene
+        )
+        await comparisonStore.searchMeetingHistory(
+            using: comparisonScene
+        )
+        comparisonStore
+            .selectHistoricalCurrentRevision(
+                current.position.revision.revisionID,
+                using: comparisonScene
+            )
+        comparisonStore
+            .selectHistoricalPreviousRevision(
+                historical.position.revision.revisionID,
+                using: comparisonScene
+            )
+        let lateComparison = Task {
+            await comparisonStore
+                .compareSelectedHistoricalPositions(
+                    using: comparisonScene
+                )
+        }
+        await comparisonGate.waitUntilEntered()
+        await comparisonStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-late-comparison-workspace-b"
+            ),
+            using: comparisonScene
+        )
+        await comparisonGate.release()
+        await lateComparison.value
+
+        #expect(
+            comparisonStore.workspace?
+                .displayName
+                == "Synthetic Workspace B"
+        )
+        #expect(
+            comparisonStore
+                .historicalSearchPage == nil
+        )
+        #expect(
+            comparisonStore
+                .historicalComparison == nil
+        )
+        #expect(
+            comparisonStore.safeErrorMessage
+                == nil
+        )
+
+        let confirmationGate = AsyncGate()
+        let confirmationWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalConfirmationGate:
+                    confirmationGate,
+                historicalSearchPages: [
+                    page
+                ],
+                historicalComparisonResult:
+                    candidate,
+                historicalConfirmedComparisonResult:
+                    confirmed,
+                historicalIndexAvailability:
+                    .ready
+            )
+        let confirmationStore =
+            MediaReviewStore(
+                workflow:
+                    confirmationWorkflow
+            )
+        let confirmationScene =
+            MediaReviewSceneState()
+        await confirmationStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-late-confirmation-workspace-a"
+                ),
+                using: confirmationScene
+            )
+        await confirmationStore
+            .searchMeetingHistory(
+                using: confirmationScene
+            )
+        confirmationStore
+            .selectHistoricalCurrentRevision(
+                current.position.revision.revisionID,
+                using: confirmationScene
+            )
+        confirmationStore
+            .selectHistoricalPreviousRevision(
+                historical.position.revision.revisionID,
+                using: confirmationScene
+            )
+        await confirmationStore
+            .compareSelectedHistoricalPositions(
+                using: confirmationScene
+            )
+        let lateConfirmation = Task {
+            await confirmationStore
+                .confirmHistoricalChange(
+                    using: confirmationScene
+                )
+        }
+        await confirmationGate.waitUntilEntered()
+        await confirmationStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-late-confirmation-workspace-b"
+                ),
+                using: confirmationScene
+            )
+        await confirmationGate.release()
+        await lateConfirmation.value
+
+        #expect(
+            confirmationStore.workspace?
+                .displayName
+                == "Synthetic Workspace B"
+        )
+        #expect(
+            confirmationStore
+                .historicalSearchPage == nil
+        )
+        #expect(
+            confirmationStore
+                .historicalComparison == nil
+        )
+        #expect(
+            confirmationStore.safeErrorMessage
+                == nil
+        )
+    }
+
+    @Test @MainActor
+    func cancelledSearchPreservesTheBundleButReturnedRebuildReconciles()
+        async throws
+    {
+        let page7 = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 19
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let page8 = HistoricalSearchPage(
+            results: [
+                try makeFeatureHistoricalResult(
+                    suffix: 20
+                )
+            ],
+            nextCursor: nil,
+            indexGeneration: 8
+        )
+        let searchGate = AsyncGate()
+        let searchWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchGate:
+                    searchGate,
+                historicalSearchGateCall: 2,
+                historicalSearchPages: [
+                    page7,
+                    page8
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let searchStore = MediaReviewStore(
+            workflow: searchWorkflow
+        )
+        let searchScene =
+            MediaReviewSceneState()
+        await searchStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-cancelled-search-workspace"
+                ),
+                using: searchScene
+            )
+        await searchStore.searchMeetingHistory(
+            using: searchScene
+        )
+        let cancelledSearch = Task {
+            await searchStore
+                .searchMeetingHistory(
+                    using: searchScene
+                )
+        }
+        await searchGate.waitUntilEntered()
+        cancelledSearch.cancel()
+        await searchGate.release()
+        await cancelledSearch.value
+
+        #expect(
+            searchStore.historicalSearchPage
+                == page7
+        )
+        #expect(
+            searchStore.historicalResultsAreCurrent(
+                using: searchScene
+            )
+        )
+        #expect(
+            searchStore
+                .historicalSearchFailureMessage
+                == nil
+        )
+        #expect(
+            !searchStore
+                .historicalSearchIsLoading
+        )
+
+        let rebuildGate = AsyncGate()
+        let pollGate = AsyncGate()
+        let rebuildWorkflow =
+            try MediaReviewWorkflowProbe(
+                pollGate:
+                    pollGate,
+                historicalRebuildGate:
+                    rebuildGate,
+                historicalSearchPages: [
+                    page7
+                ],
+                historicalIndexAvailability:
+                    .ready,
+                historicalRebuildCompletesImmediately:
+                    false
+            )
+        let rebuildStore = MediaReviewStore(
+            workflow: rebuildWorkflow
+        )
+        let rebuildScene =
+            MediaReviewSceneState()
+        await rebuildStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-cancelled-rebuild-workspace"
+                ),
+                using: rebuildScene
+            )
+        await rebuildStore
+            .searchMeetingHistory(
+                using: rebuildScene
+            )
+        rebuildStore
+            .selectHistoricalCurrentRevision(
+                page7.results[0]
+                    .position.revision.revisionID,
+                using: rebuildScene
+            )
+        let cancelledRebuild = Task {
+            await rebuildStore
+                .rebuildHistoricalIndex(
+                    using: rebuildScene
+                )
+        }
+        await rebuildGate.waitUntilEntered()
+        cancelledRebuild.cancel()
+        await rebuildGate.release()
+        await cancelledRebuild.value
+        await pollGate.waitUntilEntered()
+
+        #expect(
+            rebuildStore.historicalSearchPage
+                == nil
+        )
+        #expect(
+            !rebuildStore.historicalResultsAreCurrent(
+                using: rebuildScene
+            )
+        )
+        #expect(
+            rebuildStore.historicalIndexJob?.state
+                == .running
+        )
+        #expect(
+            rebuildScene
+                .selectedCurrentHistoryRevisionID
+                == nil
+        )
+        #expect(
+            !rebuildStore
+                .historicalIndexRebuildIsEnqueuing
+        )
+
+        await pollGate.release()
+        await rebuildStore.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-cancelled-rebuild-workspace-b"
+            ),
+            using: rebuildScene
         )
     }
 
@@ -1337,9 +3956,12 @@ struct MediaReviewModelTests {
                 page: store.historicalSearchPage,
                 isLoading:
                     store.historicalSearchIsLoading,
-                failureMessage:
+                searchFailureMessage:
                     store
                     .historicalSearchFailureMessage,
+                pageStaleReason:
+                    store
+                    .historicalSearchPageStaleReason,
                 lastSuccessfulFilter:
                     store
                     .historicalSearchFilterSnapshot,
@@ -2300,6 +4922,12 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let storageReportGate: AsyncGate?
     private let recordingSetupGate: AsyncGate?
     private let historicalIndexGate: AsyncGate?
+    private let historicalIndexGateCall: Int?
+    private let historicalSearchGate: AsyncGate?
+    private let historicalSearchGateCall: Int?
+    private let historicalRebuildGate: AsyncGate?
+    private let historicalComparisonGate: AsyncGate?
+    private let historicalConfirmationGate: AsyncGate?
     private let recordingSetupFailureCall: Int?
     private let pollingJob: MediaJobReview?
     private let recordingSetupReview: RecordingSetupReview
@@ -2310,6 +4938,14 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let historicalSearchPages:
         [HistoricalSearchPage]
     private let historicalIndexFailureCall: Int?
+    private let historicalIndexStatuses:
+        [HistoricalIndexStatus]
+    private let historicalRebuildFailureCall:
+        Int?
+    private let historicalComparisonResult:
+        HistoricalComparisonV1?
+    private let historicalConfirmedComparisonResult:
+        HistoricalComparisonV1?
     private let learnedPreferenceFailureCall: Int?
     private let jobReviewFailureCall: Int?
     private let historicalIndexAvailability:
@@ -2326,6 +4962,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private(set) var historicalRebuildCallCount = 0
     private(set) var historicalIndexCallCount = 0
     private(set) var historicalSearchCallCount = 0
+    private(set) var historicalCompareCallCount = 0
+    private(set) var historicalConfirmCallCount = 0
     private(set) var learnedPreferenceStateCallCount = 0
     private(set) var jobReviewCallCount = 0
     private(set) var lastHistoricalSearchQuery: HistoricalSearchQuery?
@@ -2360,6 +4998,14 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         storageReportGate: AsyncGate? = nil,
         recordingSetupGate: AsyncGate? = nil,
         historicalIndexGate: AsyncGate? = nil,
+        historicalIndexGateCall: Int? = nil,
+        historicalSearchGate: AsyncGate? = nil,
+        historicalSearchGateCall: Int? = nil,
+        historicalRebuildGate: AsyncGate? = nil,
+        historicalComparisonGate:
+            AsyncGate? = nil,
+        historicalConfirmationGate:
+            AsyncGate? = nil,
         recordingSetupFailureCall: Int? = nil,
         recordingSetupReview: RecordingSetupReview? = nil,
         startedRecordingReview: RecordingSessionReview? = nil,
@@ -2372,6 +5018,14 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         historicalSearchPages:
             [HistoricalSearchPage] = [],
         historicalIndexFailureCall: Int? = nil,
+        historicalIndexStatuses:
+            [HistoricalIndexStatus] = [],
+        historicalRebuildFailureCall:
+            Int? = nil,
+        historicalComparisonResult:
+            HistoricalComparisonV1? = nil,
+        historicalConfirmedComparisonResult:
+            HistoricalComparisonV1? = nil,
         learnedPreferenceFailureCall: Int? = nil,
         jobReviewFailureCall: Int? = nil,
         historicalIndexAvailability:
@@ -2389,6 +5043,18 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         self.storageReportGate = storageReportGate
         self.recordingSetupGate = recordingSetupGate
         self.historicalIndexGate = historicalIndexGate
+        self.historicalIndexGateCall =
+            historicalIndexGateCall
+        self.historicalSearchGate =
+            historicalSearchGate
+        self.historicalSearchGateCall =
+            historicalSearchGateCall
+        self.historicalRebuildGate =
+            historicalRebuildGate
+        self.historicalComparisonGate =
+            historicalComparisonGate
+        self.historicalConfirmationGate =
+            historicalConfirmationGate
         self.recordingSetupFailureCall =
             recordingSetupFailureCall
         self.recordingSetupReview = recordingSetupReview
@@ -2410,6 +5076,14 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             historicalSearchPages
         self.historicalIndexFailureCall =
             historicalIndexFailureCall
+        self.historicalIndexStatuses =
+            historicalIndexStatuses
+        self.historicalRebuildFailureCall =
+            historicalRebuildFailureCall
+        self.historicalComparisonResult =
+            historicalComparisonResult
+        self.historicalConfirmedComparisonResult =
+            historicalConfirmedComparisonResult
         self.learnedPreferenceFailureCall =
             learnedPreferenceFailureCall
         self.jobReviewFailureCall =
@@ -2717,13 +5391,26 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
 
     func historicalIndexStatus() async throws -> HistoricalIndexStatus {
         historicalIndexCallCount += 1
-        if let historicalIndexGate {
+        if let historicalIndexGate,
+           historicalIndexGateCall == nil
+            || historicalIndexCallCount
+                == historicalIndexGateCall
+        {
             await historicalIndexGate.block()
         }
         if historicalIndexCallCount
             == historicalIndexFailureCall
         {
             throw ProbeError.unexpectedCall
+        }
+        let statusIndex =
+            historicalIndexCallCount - 1
+        if historicalIndexStatuses.indices
+            .contains(statusIndex)
+        {
+            return historicalIndexStatuses[
+                statusIndex
+            ]
         }
         return HistoricalIndexStatus(
             availability: historicalIndexAvailability,
@@ -2799,6 +5486,14 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
 
     func rebuildHistoricalIndex() async throws -> MediaJobReview {
         historicalRebuildCallCount += 1
+        if let historicalRebuildGate {
+            await historicalRebuildGate.block()
+        }
+        if historicalRebuildCallCount
+            == historicalRebuildFailureCall
+        {
+            throw ProbeError.unexpectedCall
+        }
         return try makeFeatureJobReview(
             succeeded:
                 historicalRebuildCompletesImmediately
@@ -2809,6 +5504,12 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         _ query: HistoricalSearchQuery
     ) async throws -> HistoricalSearchPage {
         historicalSearchCallCount += 1
+        if historicalSearchCallCount
+            == historicalSearchGateCall,
+           let historicalSearchGate
+        {
+            await historicalSearchGate.block()
+        }
         if historicalSearchCallCount
             == historicalSearchFailureCall
         {
@@ -2831,6 +5532,32 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             nextCursor: nil,
             indexGeneration: 7
         )
+    }
+
+    func compareHistoricalPositions(
+        current _: HistoricalPositionResult,
+        historical _: HistoricalPositionResult
+    ) async throws -> HistoricalComparisonV1 {
+        historicalCompareCallCount += 1
+        if let historicalComparisonGate {
+            await historicalComparisonGate.block()
+        }
+        guard let historicalComparisonResult
+        else { throw ProbeError.unexpectedCall }
+        return historicalComparisonResult
+    }
+
+    func confirmHistoricalChange(
+        candidateRevisionID _: RevisionID
+    ) async throws -> HistoricalComparisonV1 {
+        historicalConfirmCallCount += 1
+        if let historicalConfirmationGate {
+            await historicalConfirmationGate
+                .block()
+        }
+        guard let historicalConfirmedComparisonResult
+        else { throw ProbeError.unexpectedCall }
+        return historicalConfirmedComparisonResult
     }
 
     func cancel(jobID _: JobID) async throws -> MediaJobReview {
@@ -3182,12 +5909,202 @@ private func makeFeatureHistoricalResult(
     )
 }
 
+private func makeFeatureHistoricalIndexStatus(
+    generation: UInt64,
+    availability:
+        HistoricalIndexAvailability = .ready
+) -> HistoricalIndexStatus {
+    HistoricalIndexStatus(
+        availability: availability,
+        generation: generation,
+        normalizerVersion: 1,
+        indexedPositionCount: 3,
+        rebuiltAt: nil,
+        sourceFingerprint: nil
+    )
+}
+
+private func makeFeatureHistoricalComparison(
+    current: HistoricalPositionResult,
+    historical: HistoricalPositionResult,
+    suffix: Int = 1
+) throws -> HistoricalComparisonV1 {
+    let base = 8_000 + suffix * 30
+    let currentPositionReference =
+        try featureReference(
+            current.position.positionID,
+            current.position.revision.revisionID
+        )
+    let historicalPositionReference =
+        try featureReference(
+            historical.position.positionID,
+            historical.position.revision.revisionID
+        )
+    let currentMeetingReference =
+        try featureReference(
+            current.meeting.meetingID,
+            current.meeting.revision.revisionID
+        )
+    let historicalMeetingReference =
+        try featureReference(
+            historical.meeting.meetingID,
+            historical.meeting.revision.revisionID
+        )
+    let currentActorReference =
+        try featureReference(
+            current.actor.actorID,
+            current.actor.revision.revisionID
+        )
+    let historicalActorReference =
+        try featureReference(
+            historical.actor.actorID,
+            historical.actor.revision.revisionID
+        )
+    let currentIssueReference =
+        try featureReference(
+            current.issue.issueID,
+            current.issue.revision.revisionID
+        )
+    let historicalIssueReference =
+        try featureReference(
+            historical.issue.issueID,
+            historical.issue.revision.revisionID
+        )
+    let currentEvidenceReference =
+        try featureReference(
+            featureID(
+                base + 2,
+                EvidenceID.self
+            ),
+            featureID(
+                base + 3,
+                RevisionID.self
+            )
+        )
+    let historicalEvidenceReference =
+        try featureReference(
+            featureID(
+                base + 4,
+                EvidenceID.self
+            ),
+            featureID(
+                base + 5,
+                RevisionID.self
+            )
+        )
+    let inputs = [
+        currentPositionReference,
+        historicalPositionReference,
+        currentMeetingReference,
+        historicalMeetingReference,
+        currentActorReference,
+        historicalActorReference,
+        currentIssueReference,
+        historicalIssueReference,
+        current.sensitivityLabelRevision,
+        historical.sensitivityLabelRevision,
+        current.accessPolicyRevision,
+        historical.accessPolicyRevision
+    ]
+    return try HistoricalComparisonV1(
+        revision:
+            featureDraftEnvelope(
+                logicalID:
+                    featureID(
+                        base,
+                        HistoricalComparisonID.self
+                    ),
+                revisionID:
+                    featureID(
+                        base + 1,
+                        RevisionID.self
+                    ),
+                inputs: inputs,
+                evidence: [
+                    currentEvidenceReference,
+                    historicalEvidenceReference
+                ],
+                createdAt:
+                    featureInstant(
+                        1_950_000_200_000
+                            + Int64(suffix)
+                    )
+            ),
+        currentPositionRevision:
+            currentPositionReference,
+        historicalPositionRevision:
+            historicalPositionReference,
+        currentMeetingRevision:
+            currentMeetingReference,
+        historicalMeetingRevision:
+            historicalMeetingReference,
+        currentActorRevision:
+            currentActorReference,
+        historicalActorRevision:
+            historicalActorReference,
+        currentIssueRevision:
+            currentIssueReference,
+        historicalIssueRevision:
+            historicalIssueReference,
+        currentSensitivityLabelRevision:
+            current.sensitivityLabelRevision,
+        historicalSensitivityLabelRevision:
+            historical.sensitivityLabelRevision,
+        currentAccessPolicyRevision:
+            current.accessPolicyRevision,
+        historicalAccessPolicyRevision:
+            historical.accessPolicyRevision,
+        currentEffectiveDate:
+            current.meeting.meetingDate,
+        historicalEffectiveDate:
+            historical.meeting.meetingDate,
+        currentEffectiveTimeRange: nil,
+        historicalEffectiveTimeRange: nil,
+        currentConfidence:
+            current.position.statement.confidence,
+        historicalConfidence:
+            historical.position.statement.confidence,
+        currentEvidenceRevisions: [
+            currentEvidenceReference
+        ],
+        historicalEvidenceRevisions: [
+            historicalEvidenceReference
+        ],
+        differenceState: .possibleDifference,
+        finding: .possibleChange,
+        reviewStatus: .needsReview,
+        userConfirmed: false
+    )
+}
+
+private func makeFeatureConfirmedHistoricalComparison(
+    candidate: HistoricalComparisonV1,
+    suffix: Int = 1
+) throws -> HistoricalComparisonV1 {
+    try HistoricalComparisonFactory
+        .confirmedChange(
+            candidate: candidate,
+            revisionID:
+                featureID(
+                    9_000 + suffix,
+                    RevisionID.self
+                ),
+            confirmedAt:
+                featureInstant(
+                    1_950_000_300_000
+                        + Int64(suffix)
+                )
+        )
+}
+
 private func featureDraftEnvelope<
     Tag: LogicalObjectIDScope
 >(
     logicalID: StableID<Tag>,
     revisionID: RevisionID,
     inputs:
+        [SemanticRevisionReference] = [],
+    evidence:
         [SemanticRevisionReference] = [],
     createdAt: UTCInstant
 ) throws -> RevisionEnvelope<Tag> {
@@ -3200,6 +6117,7 @@ private func featureDraftEnvelope<
         createdAt: createdAt,
         createdBy: .application,
         inputRevisions: inputs,
+        evidenceRevisions: evidence,
         dataClassification: .internal
     )
 }

@@ -22,19 +22,18 @@ public final class MediaReviewStore {
     public private(set) var lastBriefingExport: BriefingExportRecord?
     public private(set) var historicalIndex: HistoricalIndexStatus?
     public private(set) var historicalIndexJob: MediaJobReview?
-    public private(set) var historicalSearchPage: HistoricalSearchPage?
-    public private(set) var historicalComparison: HistoricalComparisonV1?
     public private(set) var learnedPreferences: LearnedPreferenceState?
     public private(set) var historicalReviewIsLoading = false
     public private(set) var historicalSearchIsLoading = false
     public private(set) var historicalSearchIsLoadingNextPage = false
+    public private(set) var historicalIndexRebuildIsEnqueuing = false
+    public private(set) var historicalIndexFinalizationIsWorking = false
+    public private(set) var historicalComparisonIsWorking = false
     public private(set) var learnedPreferencesAreLoading = false
     private(set) var historicalIndexFailureMessage:
         String?
     private(set) var historicalSearchFailureMessage:
         String?
-    private(set) var historicalSearchFilterSnapshot:
-        HistoricalSearchFilterSnapshot?
     private(set) var learnedPreferencesFailureMessage:
         String?
     public private(set) var storageReport: WorkspaceStorageReport?
@@ -58,6 +57,58 @@ public final class MediaReviewStore {
     private var hasCompletedWorkspaceRestore = false
     @ObservationIgnored
     private var isWorkspaceRestoreInFlight = false
+    private var historicalSearchResultBundle:
+        HistoricalSearchResultBundle?
+    private var historicalFilterRevision:
+        UInt64 = 0
+
+    public var historicalSearchPage:
+        HistoricalSearchPage?
+    {
+        historicalSearchResultBundle?.page
+    }
+
+    public var historicalComparison:
+        HistoricalComparisonV1?
+    {
+        historicalSearchResultBundle?
+            .comparison
+    }
+
+    var historicalSearchFilterSnapshot:
+        HistoricalSearchFilterSnapshot?
+    {
+        historicalSearchResultBundle?.filter
+    }
+
+    var historicalSearchPageStaleReason:
+        String?
+    {
+        historicalSearchResultBundle?
+            .freshness.staleReason
+    }
+
+    var historicalPaginationFailureMessage:
+        String?
+    {
+        historicalSearchResultBundle?
+            .paginationFailureMessage
+    }
+
+    var historicalControlsAreBusy: Bool {
+        isWorking
+            || historicalReviewIsLoading
+            || historicalSearchIsLoading
+            || historicalSearchIsLoadingNextPage
+            || historicalIndexRebuildIsEnqueuing
+            || historicalIndexFinalizationIsWorking
+            || historicalComparisonIsWorking
+    }
+
+    var historicalIndexIsLoading: Bool {
+        historicalReviewIsLoading
+            || historicalIndexFinalizationIsWorking
+    }
 
     public var blocksWorkspaceSwitch: Bool {
         recordingSession?.blocksWorkspaceSwitch == true
@@ -799,20 +850,24 @@ public final class MediaReviewStore {
 
     public func loadHistoricalReview(using sceneState: MediaReviewSceneState) async {
         guard workspace != nil else { return }
+        guard !historicalIndexFinalizationIsWorking
+        else { return }
         if let activeJob = historicalIndexJob,
            !activeJob.state.isTerminal
         {
-            guard historicalIndexFailureMessage != nil
+            guard historicalIndexFailureMessage != nil,
+                  !historicalControlsAreBusy
             else { return }
             let filterSnapshot =
                 HistoricalSearchFilterSnapshot(
                     sceneState: sceneState
                 )
-            historicalSearchFailureMessage = nil
+            let filterRevision =
+                historicalFilterRevision
             let query: HistoricalSearchQuery?
             do {
                 query = try historicalQuery(
-                    using: sceneState
+                    using: filterSnapshot
                 )
             } catch {
                 query = nil
@@ -824,10 +879,14 @@ public final class MediaReviewStore {
                 jobID: activeJob.jobID,
                 acceptedQuery: query,
                 acceptedFilter: filterSnapshot,
+                acceptedFilterRevision:
+                    filterRevision,
                 using: sceneState
             )
             return
         }
+        guard !historicalControlsAreBusy
+        else { return }
         if historicalIndexJob?.state.isTerminal == true {
             historicalIndexJob = nil
         }
@@ -835,52 +894,101 @@ public final class MediaReviewStore {
             HistoricalSearchFilterSnapshot(
                 sceneState: sceneState
             )
-        historicalIndexFailureMessage = nil
-        historicalSearchFailureMessage = nil
+        let filterRevision =
+            historicalFilterRevision
+        let frozenQuery:
+            Result<
+                HistoricalSearchQuery,
+                Error
+            >
+        do {
+            frozenQuery = .success(
+                try historicalQuery(
+                    using: filterSnapshot
+                )
+            )
+        } catch {
+            frozenQuery = .failure(error)
+        }
+        let session = workspaceSession
+        safeErrorMessage = nil
         historicalReviewIsLoading = true
         var loadedIndex = false
         var attemptedSearch = false
         defer {
-            historicalReviewIsLoading = false
-            historicalSearchIsLoading = false
+            if session == workspaceSession {
+                historicalReviewIsLoading = false
+                historicalSearchIsLoading = false
+            }
         }
-        let succeeded = await perform {
+        do {
             let index =
                 try await workflow.historicalIndexStatus()
-            historicalIndex = index
+            guard historicalCommitIsAllowed(
+                session: session
+            ) else { return }
+            acceptHistoricalIndexStatus(
+                index,
+                using: sceneState
+            )
             loadedIndex = true
             if index.availability == .ready {
                 attemptedSearch = true
                 historicalSearchIsLoading = true
-                historicalSearchPage =
+                let page =
                     try validatedHistoricalPage(
                         try await workflow
                             .searchMeetingHistory(
-                                try historicalQuery(
-                                    using: sceneState
-                                )
+                                try frozenQuery.get()
                             )
                     )
-                historicalSearchFilterSnapshot =
-                    filterSnapshot
-                reconcileHistoricalSelection(
-                    in: historicalSearchPage,
+                guard historicalCommitIsAllowed(
+                    session: session
+                ) else { return }
+                guard historicalFilterContextIsUnchanged(
+                    filter: filterSnapshot,
+                    revision: filterRevision,
+                    using: sceneState
+                ) else {
+                    invalidateHistoricalSearchAfterFilterChange(
+                        using: sceneState
+                    )
+                    return
+                }
+                acceptHistoricalSearchPage(
+                    page,
+                    filter: filterSnapshot,
+                    session: session,
+                    statusWasFreshlyLoaded: true,
                     using: sceneState
                 )
             } else {
-                historicalSearchPage = nil
-                historicalComparison = nil
-                historicalSearchFilterSnapshot = nil
+                historicalSearchFailureMessage = nil
+                clearHistoricalSearchResultBundle(
+                    using: sceneState
+                )
             }
-        }
-        if !succeeded {
+        } catch {
+            guard historicalCommitIsAllowed(
+                session: session
+            ) else { return }
             let message =
-                safeErrorMessage
-                ?? "The local history review did not load."
+                historicalOperationErrorMessage(
+                    error
+                )
+            safeErrorMessage = message
             if !loadedIndex {
                 historicalIndexFailureMessage = message
+                markHistoricalSearchResultStale(
+                    "The latest index-status reload failed. These are the last successful authorized results. \(message)",
+                    using: sceneState
+                )
             } else if attemptedSearch {
                 historicalSearchFailureMessage = message
+                markHistoricalSearchResultStale(
+                    "The latest search failed. These are the last successful authorized results. \(message)",
+                    using: sceneState
+                )
             }
         }
     }
@@ -907,73 +1015,137 @@ public final class MediaReviewStore {
         guard workspace != nil else { return }
         guard historicalIndexJob?.state.isTerminal != false
         else { return }
+        guard !historicalControlsAreBusy
+        else { return }
         let filterSnapshot =
             HistoricalSearchFilterSnapshot(
                 sceneState: sceneState
             )
-        historicalIndexFailureMessage = nil
-        historicalSearchFailureMessage = nil
+        let filterRevision =
+            historicalFilterRevision
+        let session = workspaceSession
         let query: HistoricalSearchQuery?
+        let automaticSearchWarning: String?
         do {
-            query = try historicalQuery(using: sceneState)
+            query = try historicalQuery(
+                using: filterSnapshot
+            )
+            automaticSearchWarning = nil
         } catch {
             query = nil
-            historicalSearchFailureMessage =
+            automaticSearchWarning =
                 "The local index will still rebuild, but the automatic search was skipped because its date filters are invalid."
         }
-        historicalSearchFilterSnapshot = nil
-        let succeeded = await perform {
-            historicalIndexJob = try await workflow.rebuildHistoricalIndex()
-            historicalSearchPage = nil
-            historicalComparison = nil
+        safeErrorMessage = nil
+        historicalIndexRebuildIsEnqueuing = true
+        defer {
+            if session == workspaceSession {
+                historicalIndexRebuildIsEnqueuing =
+                    false
+            }
+        }
+        do {
+            let job =
+                try await workflow.rebuildHistoricalIndex()
+            guard session == workspaceSession
+            else { return }
+            historicalIndexJob = job
+            historicalIndexFailureMessage = nil
+            historicalSearchFailureMessage =
+                automaticSearchWarning
+            clearHistoricalSearchResultBundle(
+                using: sceneState
+            )
             if let historicalIndexJob {
                 beginHistoricalIndexPolling(
                     jobID: historicalIndexJob.jobID,
                     acceptedQuery: query,
                     acceptedFilter: filterSnapshot,
+                    acceptedFilterRevision:
+                        filterRevision,
                     using: sceneState
                 )
             }
-        }
-        if !succeeded {
+        } catch {
+            guard historicalCommitIsAllowed(
+                session: session
+            ) else { return }
+            let message =
+                historicalOperationErrorMessage(
+                    error
+                )
+            safeErrorMessage = message
             historicalIndexFailureMessage =
-                safeErrorMessage
-                ?? "The local history index rebuild could not be enqueued."
+                message
         }
     }
 
     public func searchMeetingHistory(using sceneState: MediaReviewSceneState) async {
+        guard workspace != nil,
+              historicalIndexJob?.state
+                .isTerminal != false,
+              !historicalControlsAreBusy
+        else { return }
         let filterSnapshot =
             HistoricalSearchFilterSnapshot(
                 sceneState: sceneState
             )
+        let filterRevision =
+            historicalFilterRevision
+        let session = workspaceSession
+        safeErrorMessage = nil
         historicalSearchFailureMessage = nil
         historicalSearchIsLoading = true
         defer {
-            historicalSearchIsLoading = false
+            if session == workspaceSession {
+                historicalSearchIsLoading = false
+            }
         }
-        let succeeded = await perform {
-            historicalSearchPage =
+        do {
+            let page =
                 try validatedHistoricalPage(
                     try await workflow
                         .searchMeetingHistory(
                             try historicalQuery(
-                                using: sceneState
+                                using: filterSnapshot
                             )
                         )
                 )
-            historicalSearchFilterSnapshot =
-                filterSnapshot
-            historicalComparison = nil
-            reconcileHistoricalSelection(
-                in: historicalSearchPage,
+            guard historicalCommitIsAllowed(
+                session: session
+            ) else { return }
+            guard historicalFilterContextIsUnchanged(
+                filter: filterSnapshot,
+                revision: filterRevision,
+                using: sceneState
+            ) else {
+                invalidateHistoricalSearchAfterFilterChange(
+                    using: sceneState
+                )
+                return
+            }
+            acceptHistoricalSearchPage(
+                page,
+                filter: filterSnapshot,
+                session: session,
+                statusWasFreshlyLoaded: false,
                 using: sceneState
             )
-        }
-        if !succeeded {
+        } catch {
+            guard historicalCommitIsAllowed(
+                session: session
+            ) else { return }
+            let message =
+                historicalOperationErrorMessage(
+                    error
+                )
+            safeErrorMessage = message
             historicalSearchFailureMessage =
-                safeErrorMessage
-                    ?? "The local history search did not complete."
+                message
+            markHistoricalSearchResultStale(
+                "The latest search failed. These are the last successful authorized results. \(message)",
+                using: sceneState
+            )
         }
     }
 
@@ -984,41 +1156,60 @@ public final class MediaReviewStore {
             HistoricalSearchFilterSnapshot(
                 sceneState: sceneState
             )
-        guard let acceptedFilter =
-                historicalSearchFilterSnapshot,
-              acceptedFilter == currentFilter,
-              historicalSearchFailureMessage == nil,
-              let currentPage =
-                historicalSearchPage,
+        guard var acceptedBundle =
+                currentHistoricalSearchResultBundle(
+                    filter: currentFilter
+                ),
               let cursor =
-                currentPage.nextCursor,
+                acceptedBundle.page.nextCursor,
               cursor.indexGeneration
-                == currentPage.indexGeneration,
-              !isWorking,
-              !historicalSearchIsLoadingNextPage
+                == acceptedBundle.page
+                .indexGeneration,
+              !historicalControlsAreBusy
         else { return }
+        let session = workspaceSession
+        let acceptedPage =
+            acceptedBundle.page
+        acceptedBundle
+            .paginationFailureMessage = nil
+        historicalSearchResultBundle =
+            acceptedBundle
+        safeErrorMessage = nil
 
         historicalSearchIsLoadingNextPage = true
         defer {
-            historicalSearchIsLoadingNextPage = false
+            if session == workspaceSession {
+                historicalSearchIsLoadingNextPage =
+                    false
+            }
         }
-        let succeeded = await perform {
+        do {
             let nextPage =
                 try validatedHistoricalPage(
                     try await workflow
                         .searchMeetingHistory(
                             try historicalQuery(
-                                using: sceneState,
+                                using: currentFilter,
                                 cursor: cursor
                             )
                         ),
                     expectedGeneration:
-                        currentPage
+                        acceptedPage
                         .indexGeneration
                 )
+            guard historicalCommitIsAllowed(
+                session: session
+            ),
+                  historicalSearchRequestStillMatches(
+                    page: acceptedPage,
+                    filter: currentFilter,
+                    session: session,
+                    cursor: cursor
+                  )
+            else { return }
             let existingRevisionIDs =
                 Set(
-                    currentPage.results.map {
+                    acceptedPage.results.map {
                         $0.position.revision.revisionID
                     }
                 )
@@ -1038,47 +1229,159 @@ public final class MediaReviewStore {
                         "The next history page repeated an exact position revision."
                     )
             }
-            historicalSearchPage =
+            guard var currentBundle =
+                    historicalSearchResultBundle
+            else { return }
+            currentBundle.page =
                 HistoricalSearchPage(
                     results:
-                        currentPage.results
+                        acceptedPage.results
                         + nextPage.results,
                     nextCursor:
                         nextPage.nextCursor,
                     indexGeneration:
-                        currentPage
+                        acceptedPage
                         .indexGeneration
                 )
-        }
-        if !succeeded {
-            historicalSearchFailureMessage =
-                safeErrorMessage
-                    ?? "The next local history page did not complete."
+            currentBundle
+                .paginationFailureMessage = nil
+            historicalSearchResultBundle =
+                currentBundle
+        } catch {
+            guard historicalCommitIsAllowed(
+                session: session
+            ),
+                  historicalSearchRequestStillMatches(
+                    page: acceptedPage,
+                    filter: currentFilter,
+                    session: session,
+                    cursor: cursor
+                  ),
+                  var currentBundle =
+                    historicalSearchResultBundle
+            else { return }
+            let message =
+                historicalOperationErrorMessage(
+                    error
+                )
+            safeErrorMessage = message
+            currentBundle
+                .paginationFailureMessage =
+                message
+            historicalSearchResultBundle =
+                currentBundle
         }
     }
 
     public func compareSelectedHistoricalPositions(
         using sceneState: MediaReviewSceneState
     ) async {
-        guard let results = historicalSearchPage?.results,
-              let currentID = sceneState.selectedCurrentHistoryRevisionID,
-              let priorID = sceneState.selectedPriorHistoryRevisionID,
+        let filter =
+            HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            )
+        guard let bundle =
+                currentHistoricalSearchResultBundle(
+                    filter: filter
+                ),
+              let currentID =
+                bundle
+                .selectedCurrentRevisionID,
+              let priorID =
+                bundle
+                .selectedPreviousRevisionID,
+              currentID
+                == sceneState
+                .selectedCurrentHistoryRevisionID,
+              priorID
+                == sceneState
+                .selectedPriorHistoryRevisionID,
               currentID != priorID,
-              let current = results.first(where: {
-                  $0.position.revision.revisionID == currentID
-              }),
-              let prior = results.first(where: {
-                  $0.position.revision.revisionID == priorID
-              })
+              let current =
+                bundle.page.results.first(
+                    where: {
+                        $0.position.revision
+                            .revisionID
+                            == currentID
+                    }
+                ),
+              let prior =
+                bundle.page.results.first(
+                    where: {
+                        $0.position.revision
+                            .revisionID
+                            == priorID
+                    }
+                ),
+              !historicalControlsAreBusy
         else {
-            safeErrorMessage = "Select two different evidence-linked history results."
+            safeErrorMessage =
+                "Compare only two different selections from the current accepted history result page."
             return
         }
-        await perform {
-            historicalComparison = try await workflow.compareHistoricalPositions(
-                current: current,
-                historical: prior
-            )
+        let session = workspaceSession
+        safeErrorMessage = nil
+        historicalComparisonIsWorking = true
+        defer {
+            if session == workspaceSession {
+                historicalComparisonIsWorking =
+                    false
+            }
+        }
+        do {
+            let comparison =
+                try await workflow
+                    .compareHistoricalPositions(
+                        current: current,
+                        historical: prior
+                    )
+            guard session == workspaceSession
+            else { return }
+            guard let currentBundle =
+                    currentHistoricalSearchResultBundle(
+                        filter: filter
+                    ),
+                  currentBundle
+                    .selectedCurrentRevisionID
+                    == currentID,
+                  currentBundle
+                    .selectedPreviousRevisionID
+                    == priorID,
+                  HistoricalReviewPresentation
+                    .comparisonMatchesSelection(
+                        comparisonCurrentRevisionID:
+                            comparison
+                            .currentPositionRevision
+                            .revisionID,
+                        comparisonPreviousRevisionID:
+                            comparison
+                            .historicalPositionRevision
+                            .revisionID,
+                        selectedCurrentRevisionID:
+                            currentID,
+                        selectedPreviousRevisionID:
+                            priorID
+                    )
+            else {
+                invalidateHistoricalResultAfterCompletedSideEffect(
+                    "The comparison was saved locally, but the visible history result context changed before it completed. Search again before comparing or confirming.",
+                    using: sceneState
+                )
+                return
+            }
+            var updatedBundle = currentBundle
+            updatedBundle.comparison =
+                comparison
+            historicalSearchResultBundle =
+                updatedBundle
+        } catch {
+            guard historicalCommitIsAllowed(
+                session: session
+            ) else { return }
+            safeErrorMessage =
+                historicalOperationErrorMessage(
+                    error
+                )
         }
     }
 
@@ -1086,34 +1389,97 @@ public final class MediaReviewStore {
         _ revisionID: RevisionID,
         using sceneState: MediaReviewSceneState
     ) {
-        if sceneState
-            .selectedCurrentHistoryRevisionID
+        let filter =
+            HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            )
+        guard var bundle =
+                currentHistoricalSearchResultBundle(
+                    filter: filter
+                ),
+              !historicalControlsAreBusy,
+              bundle.page.results.contains(
+                where: {
+                    $0.position.revision
+                        .revisionID
+                        == revisionID
+                }
+              )
+        else {
+            safeErrorMessage =
+                "Select only an exact revision from the accepted history result page."
+            return
+        }
+        if bundle.selectedCurrentRevisionID
             != revisionID
         {
-            historicalComparison = nil
+            bundle.comparison = nil
         }
-        sceneState.selectedCurrentHistoryRevisionID =
+        bundle.selectedCurrentRevisionID =
             revisionID
+        historicalSearchResultBundle =
+            bundle
+        sceneState
+            .selectedCurrentHistoryRevisionID =
+            revisionID
+        sceneState.confirmHistoricalChange =
+            false
     }
 
     public func selectHistoricalPreviousRevision(
         _ revisionID: RevisionID,
         using sceneState: MediaReviewSceneState
     ) {
-        if sceneState
-            .selectedPriorHistoryRevisionID
+        let filter =
+            HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            )
+        guard var bundle =
+                currentHistoricalSearchResultBundle(
+                    filter: filter
+                ),
+              !historicalControlsAreBusy,
+              bundle.page.results.contains(
+                where: {
+                    $0.position.revision
+                        .revisionID
+                        == revisionID
+                }
+              )
+        else {
+            safeErrorMessage =
+                "Select only an exact revision from the accepted history result page."
+            return
+        }
+        if bundle.selectedPreviousRevisionID
             != revisionID
         {
-            historicalComparison = nil
+            bundle.comparison = nil
         }
-        sceneState.selectedPriorHistoryRevisionID =
+        bundle.selectedPreviousRevisionID =
             revisionID
+        historicalSearchResultBundle =
+            bundle
+        sceneState
+            .selectedPriorHistoryRevisionID =
+            revisionID
+        sceneState.confirmHistoricalChange =
+            false
     }
 
     public func confirmHistoricalChange(
         using sceneState: MediaReviewSceneState
     ) async {
-        guard let comparison = historicalComparison,
+        let filter =
+            HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            )
+        guard let bundle =
+                currentHistoricalSearchResultBundle(
+                    filter: filter
+                ),
+              let comparison =
+                bundle.comparison,
               comparison.differenceState
                 == .possibleDifference,
               HistoricalReviewPresentation
@@ -1127,21 +1493,112 @@ public final class MediaReviewStore {
                         .historicalPositionRevision
                         .revisionID,
                     selectedCurrentRevisionID:
-                        sceneState
-                        .selectedCurrentHistoryRevisionID,
+                        bundle
+                        .selectedCurrentRevisionID,
                     selectedPreviousRevisionID:
-                        sceneState
-                        .selectedPriorHistoryRevisionID
-                )
+                        bundle
+                        .selectedPreviousRevisionID
+                ),
+              bundle.selectedCurrentRevisionID
+                == sceneState
+                .selectedCurrentHistoryRevisionID,
+              bundle.selectedPreviousRevisionID
+                == sceneState
+                .selectedPriorHistoryRevisionID,
+              !historicalControlsAreBusy
         else {
             safeErrorMessage =
-                "Confirm only the possible evidence-linked difference that exactly matches the visible current and previous selections."
+                "Confirm only the possible difference from the current accepted result page and its exact visible selections."
             return
         }
-        await perform {
-            historicalComparison = try await workflow.confirmHistoricalChange(
-                candidateRevisionID: comparison.revision.revisionID
-            )
+        let session = workspaceSession
+        safeErrorMessage = nil
+        historicalComparisonIsWorking = true
+        defer {
+            if session == workspaceSession {
+                historicalComparisonIsWorking =
+                    false
+            }
+        }
+        do {
+            let confirmed =
+                try await workflow
+                    .confirmHistoricalChange(
+                        candidateRevisionID:
+                            comparison
+                            .revision
+                            .revisionID
+                    )
+            guard session == workspaceSession
+            else { return }
+            guard let currentBundle =
+                    currentHistoricalSearchResultBundle(
+                        filter: filter
+                    ),
+                  currentBundle.comparison?
+                    .revision.revisionID
+                    == comparison
+                    .revision.revisionID,
+                  currentBundle
+                    .selectedCurrentRevisionID
+                    == bundle
+                    .selectedCurrentRevisionID,
+                  currentBundle
+                    .selectedPreviousRevisionID
+                    == bundle
+                    .selectedPreviousRevisionID,
+                  confirmed.comparisonID
+                    == comparison.comparisonID,
+                  confirmed.differenceState
+                    == .userConfirmedDifference,
+                  confirmed.userConfirmed,
+                  confirmed.revision
+                    .supersedesRevisionID
+                    == comparison
+                    .revision.revisionID,
+                  confirmed.confirmationOfRevision?
+                    .revisionID
+                    == comparison
+                    .revision.revisionID,
+                  HistoricalReviewPresentation
+                    .comparisonMatchesSelection(
+                        comparisonCurrentRevisionID:
+                            confirmed
+                            .currentPositionRevision
+                            .revisionID,
+                        comparisonPreviousRevisionID:
+                            confirmed
+                            .historicalPositionRevision
+                            .revisionID,
+                        selectedCurrentRevisionID:
+                            currentBundle
+                            .selectedCurrentRevisionID,
+                        selectedPreviousRevisionID:
+                            currentBundle
+                            .selectedPreviousRevisionID
+                    )
+            else {
+                invalidateHistoricalResultAfterCompletedSideEffect(
+                    "The confirmation was saved locally, but the visible history result context changed before it completed. Search again before comparing or confirming.",
+                    using: sceneState
+                )
+                return
+            }
+            var updatedBundle = currentBundle
+            updatedBundle.comparison =
+                confirmed
+            historicalSearchResultBundle =
+                updatedBundle
+            sceneState.confirmHistoricalChange =
+                false
+        } catch {
+            guard historicalCommitIsAllowed(
+                session: session
+            ) else { return }
+            safeErrorMessage =
+                historicalOperationErrorMessage(
+                    error
+                )
         }
     }
 
@@ -1367,16 +1824,17 @@ public final class MediaReviewStore {
         lastBriefingExport = nil
         historicalIndex = nil
         historicalIndexJob = nil
-        historicalSearchPage = nil
-        historicalComparison = nil
+        historicalSearchResultBundle = nil
         learnedPreferences = nil
         historicalReviewIsLoading = false
         historicalSearchIsLoading = false
         historicalSearchIsLoadingNextPage = false
+        historicalIndexRebuildIsEnqueuing = false
+        historicalIndexFinalizationIsWorking = false
+        historicalComparisonIsWorking = false
         learnedPreferencesAreLoading = false
         historicalIndexFailureMessage = nil
         historicalSearchFailureMessage = nil
-        historicalSearchFilterSnapshot = nil
         learnedPreferencesFailureMessage = nil
         storageReport = nil
         recordingSetup = nil
@@ -1556,28 +2014,55 @@ public final class MediaReviewStore {
         jobID: JobID,
         acceptedQuery: HistoricalSearchQuery?,
         acceptedFilter: HistoricalSearchFilterSnapshot,
+        acceptedFilterRevision: UInt64,
         using sceneState: MediaReviewSceneState
     ) {
         pollingTask?.cancel()
         let session = workspaceSession
+        historicalIndexFinalizationIsWorking =
+            historicalIndexJob?.jobID == jobID
+            && historicalIndexJob?.state
+                .isTerminal == true
         pollingTask = Task {
             @MainActor [weak self, weak sceneState] in
             guard let self else { return }
+            defer {
+                if session == workspaceSession {
+                    historicalIndexFinalizationIsWorking =
+                        false
+                }
+            }
             while !Task.isCancelled {
                 do {
                     let current = try await workflow.jobReview(jobID: jobID)
                     guard !Task.isCancelled, session == workspaceSession else { return }
+                    if current.state.isTerminal {
+                        historicalIndexFinalizationIsWorking =
+                            true
+                    }
                     historicalIndexJob = current
                     if current.state.isTerminal {
                         let index = try await workflow.historicalIndexStatus()
-                        guard !Task.isCancelled, session == workspaceSession else {
-                            return
-                        }
-                        historicalIndex = index
-                        historicalIndexFailureMessage = nil
+                        guard historicalCommitIsAllowed(
+                            session: session
+                        ) else { return }
+                        acceptHistoricalIndexStatus(
+                            index,
+                            using: sceneState
+                        )
                         if current.state == .succeeded,
                            let acceptedQuery
                         {
+                            historicalSearchIsLoading =
+                                true
+                            defer {
+                                if session
+                                    == workspaceSession
+                                {
+                                    historicalSearchIsLoading =
+                                        false
+                                }
+                            }
                             do {
                                 let page =
                                     try validatedHistoricalPage(
@@ -1586,74 +2071,61 @@ public final class MediaReviewStore {
                                                 acceptedQuery
                                             )
                                     )
-                                guard !Task.isCancelled,
-                                      session
-                                      == workspaceSession
-                                else {
-                                    return
-                                }
-                                historicalSearchPage = page
-                                historicalSearchFilterSnapshot =
-                                    acceptedFilter
-                                historicalSearchFailureMessage = nil
-                                historicalComparison = nil
-                                if let sceneState {
-                                    reconcileHistoricalSelection(
-                                        in: page,
+                                guard historicalCommitIsAllowed(
+                                    session: session
+                                ) else { return }
+                                guard historicalFilterContextIsUnchanged(
+                                    filter: acceptedFilter,
+                                    revision:
+                                        acceptedFilterRevision,
+                                    using: sceneState
+                                ) else {
+                                    invalidateHistoricalSearchAfterFilterChange(
                                         using: sceneState
                                     )
-                                }
-                            } catch {
-                                guard !Task.isCancelled,
-                                      session
-                                      == workspaceSession
-                                else {
                                     return
                                 }
+                                acceptHistoricalSearchPage(
+                                    page,
+                                    filter: acceptedFilter,
+                                    session: session,
+                                    statusWasFreshlyLoaded:
+                                        true,
+                                    using: sceneState
+                                )
+                            } catch {
+                                guard historicalCommitIsAllowed(
+                                    session: session
+                                ) else { return }
                                 let message =
                                     "The automatic history search after rebuilding the local index did not complete."
                                 historicalSearchFailureMessage =
                                     message
                                 safeErrorMessage = message
+                                markHistoricalSearchResultStale(
+                                    "The automatic search after the local index rebuild failed. These are the last successful authorized results. \(message)",
+                                    using: sceneState
+                                )
                             }
                         }
                         return
                     }
                 } catch {
-                    guard !Task.isCancelled, session == workspaceSession else { return }
+                    guard historicalCommitIsAllowed(
+                        session: session
+                    ) else { return }
                     let message =
                         "Meeting History index status is temporarily unavailable."
                     historicalIndexFailureMessage = message
                     safeErrorMessage = message
+                    markHistoricalSearchResultStale(
+                        "The latest index-status poll failed. These are the last successful authorized results. \(message)",
+                        using: sceneState
+                    )
                     return
                 }
                 try? await Task.sleep(for: .milliseconds(400))
             }
-        }
-    }
-
-    private func reconcileHistoricalSelection(
-        in page: HistoricalSearchPage?,
-        using sceneState: MediaReviewSceneState
-    ) {
-        let revisionIDs = Set(
-            page?.results.map {
-                $0.position.revision.revisionID
-            } ?? []
-        )
-        if let selected =
-            sceneState.selectedCurrentHistoryRevisionID,
-           !revisionIDs.contains(selected)
-        {
-            sceneState
-                .selectedCurrentHistoryRevisionID = nil
-        }
-        if let selected =
-            sceneState.selectedPriorHistoryRevisionID,
-           !revisionIDs.contains(selected)
-        {
-            sceneState
-                .selectedPriorHistoryRevisionID = nil
         }
     }
 
@@ -1679,17 +2151,295 @@ public final class MediaReviewStore {
         }
     }
 
+    func historicalResultsAreCurrent(
+        using sceneState: MediaReviewSceneState
+    ) -> Bool {
+        currentHistoricalSearchResultBundle(
+            filter:
+                HistoricalSearchFilterSnapshot(
+                    sceneState: sceneState
+                )
+        ) != nil
+    }
+
+    func historicalFilterDidChange(
+        using sceneState: MediaReviewSceneState
+    ) {
+        historicalFilterRevision &+= 1
+        let currentFilter =
+            HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            )
+        guard var bundle =
+                historicalSearchResultBundle,
+              bundle.workspaceSession
+                == workspaceSession,
+              bundle.filter != currentFilter
+        else { return }
+        bundle.freshness =
+            .stale(
+                reason:
+                    "The filters changed after this bounded result page was loaded. Search again before treating it as current."
+            )
+        bundle.comparison = nil
+        bundle.paginationFailureMessage =
+            nil
+        historicalSearchResultBundle =
+            bundle
+        sceneState.confirmHistoricalChange =
+            false
+    }
+
+    private func historicalCommitIsAllowed(
+        session: UInt64
+    ) -> Bool {
+        !Task.isCancelled
+            && session == workspaceSession
+    }
+
+    private func historicalOperationErrorMessage(
+        _ error: Error
+    ) -> String {
+        if let localizedError =
+            error as? LocalizedError
+        {
+            return localizedError
+                .errorDescription
+                ?? "The local operation could not be completed."
+        }
+        return
+            "The local operation could not be completed."
+    }
+
+    private func acceptHistoricalIndexStatus(
+        _ index: HistoricalIndexStatus,
+        using sceneState:
+            MediaReviewSceneState?
+    ) {
+        historicalIndex = index
+        historicalIndexFailureMessage = nil
+        guard let pageGeneration =
+                historicalSearchResultBundle?
+                .page.indexGeneration,
+              pageGeneration
+                != index.generation
+        else { return }
+        markHistoricalSearchResultStale(
+            "The latest index status is generation \(index.generation), so the retained generation \(pageGeneration) search page is no longer current. Complete a matching search before comparing, confirming, or loading more.",
+            using: sceneState
+        )
+    }
+
+    private func acceptHistoricalSearchPage(
+        _ page: HistoricalSearchPage,
+        filter: HistoricalSearchFilterSnapshot,
+        session: UInt64,
+        statusWasFreshlyLoaded: Bool,
+        using sceneState:
+            MediaReviewSceneState?
+    ) {
+        guard session == workspaceSession
+        else { return }
+        let revisionIDs =
+            Set(
+                page.results.map {
+                    $0.position.revision.revisionID
+                }
+            )
+        let requestedCurrent =
+            sceneState?
+            .selectedCurrentHistoryRevisionID
+                ?? historicalSearchResultBundle?
+                .selectedCurrentRevisionID
+        let requestedPrevious =
+            sceneState?
+            .selectedPriorHistoryRevisionID
+                ?? historicalSearchResultBundle?
+                .selectedPreviousRevisionID
+        let selectedCurrent =
+            requestedCurrent.flatMap {
+                revisionIDs.contains($0)
+                    ? $0
+                    : nil
+            }
+        let selectedPrevious =
+            requestedPrevious.flatMap {
+                revisionIDs.contains($0)
+                    ? $0
+                    : nil
+            }
+        historicalSearchResultBundle =
+            HistoricalSearchResultBundle(
+                page: page,
+                filter: filter,
+                workspaceSession: session,
+                freshness: .current,
+                selectedCurrentRevisionID:
+                    selectedCurrent,
+                selectedPreviousRevisionID:
+                    selectedPrevious,
+                comparison: nil,
+                paginationFailureMessage: nil
+            )
+        historicalSearchFailureMessage = nil
+        sceneState?
+            .selectedCurrentHistoryRevisionID =
+            selectedCurrent
+        sceneState?
+            .selectedPriorHistoryRevisionID =
+            selectedPrevious
+        sceneState?.confirmHistoricalChange =
+            false
+
+        if let historicalIndex,
+           historicalIndex.generation
+            != page.indexGeneration
+        {
+            historicalIndexFailureMessage =
+                "The last successful index status is generation \(historicalIndex.generation), while the accepted exact search page is generation \(page.indexGeneration). Reload status before treating the cached index metadata as current."
+        } else if statusWasFreshlyLoaded {
+            historicalIndexFailureMessage = nil
+        }
+    }
+
+    private func clearHistoricalSearchResultBundle(
+        using sceneState:
+            MediaReviewSceneState?
+    ) {
+        historicalSearchResultBundle = nil
+        sceneState?
+            .selectedCurrentHistoryRevisionID =
+            nil
+        sceneState?
+            .selectedPriorHistoryRevisionID =
+            nil
+        sceneState?.confirmHistoricalChange =
+            false
+    }
+
+    private func markHistoricalSearchResultStale(
+        _ reason: String,
+        using sceneState:
+            MediaReviewSceneState?
+    ) {
+        guard var bundle =
+                historicalSearchResultBundle,
+              bundle.workspaceSession
+                == workspaceSession
+        else { return }
+        bundle.freshness =
+            .stale(reason: reason)
+        bundle.comparison = nil
+        bundle.paginationFailureMessage =
+            nil
+        historicalSearchResultBundle =
+            bundle
+        sceneState?.confirmHistoricalChange =
+            false
+    }
+
+    private func invalidateHistoricalResultAfterCompletedSideEffect(
+        _ reason: String,
+        using sceneState:
+            MediaReviewSceneState
+    ) {
+        safeErrorMessage = reason
+        markHistoricalSearchResultStale(
+            reason,
+            using: sceneState
+        )
+    }
+
+    private func historicalFilterContextIsUnchanged(
+        filter: HistoricalSearchFilterSnapshot,
+        revision: UInt64,
+        using sceneState:
+            MediaReviewSceneState?
+    ) -> Bool {
+        guard let sceneState else { return false }
+        return historicalFilterRevision
+                == revision
+            && HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            ) == filter
+    }
+
+    private func invalidateHistoricalSearchAfterFilterChange(
+        using sceneState:
+            MediaReviewSceneState?
+    ) {
+        let reason =
+            "The history filters changed before the completed search could be accepted. Search again for the visible filters."
+        safeErrorMessage = reason
+        historicalSearchFailureMessage =
+            reason
+        markHistoricalSearchResultStale(
+            reason,
+            using: sceneState
+        )
+    }
+
+    private func currentHistoricalSearchResultBundle(
+        filter: HistoricalSearchFilterSnapshot
+    ) -> HistoricalSearchResultBundle? {
+        guard let bundle =
+                historicalSearchResultBundle,
+              bundle.workspaceSession
+                == workspaceSession,
+              bundle.filter == filter,
+              bundle.freshness == .current
+        else { return nil }
+        return bundle
+    }
+
+    private func historicalSearchRequestStillMatches(
+        page: HistoricalSearchPage,
+        filter: HistoricalSearchFilterSnapshot,
+        session: UInt64,
+        cursor: HistoricalSearchCursor
+    ) -> Bool {
+        guard let bundle =
+                currentHistoricalSearchResultBundle(
+                    filter: filter
+                )
+        else { return false }
+        return bundle.workspaceSession
+                == session
+            && bundle.page == page
+            && bundle.page.nextCursor
+                == cursor
+            && bundle.page.indexGeneration
+                == cursor.indexGeneration
+    }
+
     private func historicalQuery(
-        using sceneState: MediaReviewSceneState,
+        using filter:
+            HistoricalSearchFilterSnapshot,
         cursor: HistoricalSearchCursor? = nil
     ) throws -> HistoricalSearchQuery {
         try HistoricalSearchQuery(
-            actorOrCountry: optionalText(sceneState.historyActorOrCountry),
-            topic: optionalText(sceneState.historyTopic),
-            meetingBody: optionalText(sceneState.historyBody),
-            meetingType: optionalText(sceneState.historyMeetingType),
-            startDate: try optionalDate(sceneState.historyStartDate),
-            endDate: try optionalDate(sceneState.historyEndDate),
+            actorOrCountry:
+                optionalText(
+                    filter.actorOrCountry
+                ),
+            topic:
+                optionalText(filter.topic),
+            meetingBody:
+                optionalText(
+                    filter.organizationOrBody
+                ),
+            meetingType:
+                optionalText(
+                    filter.meetingType
+                ),
+            startDate:
+                try optionalDate(
+                    filter.startDate
+                ),
+            endDate:
+                try optionalDate(
+                    filter.endDate
+                ),
             reviewStatus: .confirmed,
             maximumClassification: .restricted,
             cursor: cursor,

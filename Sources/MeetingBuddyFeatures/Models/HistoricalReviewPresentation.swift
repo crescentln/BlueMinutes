@@ -75,6 +75,37 @@ struct HistoricalSearchFilterSnapshot:
     }
 }
 
+enum HistoricalSearchPageFreshness:
+    Equatable,
+    Sendable
+{
+    case current
+    case stale(reason: String)
+
+    var staleReason: String? {
+        switch self {
+        case .current:
+            nil
+        case let .stale(reason):
+            reason
+        }
+    }
+}
+
+struct HistoricalSearchResultBundle:
+    Equatable,
+    Sendable
+{
+    var page: HistoricalSearchPage
+    let filter: HistoricalSearchFilterSnapshot
+    let workspaceSession: UInt64
+    var freshness: HistoricalSearchPageFreshness
+    var selectedCurrentRevisionID: RevisionID?
+    var selectedPreviousRevisionID: RevisionID?
+    var comparison: HistoricalComparisonV1?
+    var paginationFailureMessage: String?
+}
+
 enum HistoricalReviewPresentation {
     static func indexState(
         status: HistoricalIndexStatus?,
@@ -132,7 +163,8 @@ enum HistoricalReviewPresentation {
     static func searchState(
         page: HistoricalSearchPage?,
         isLoading: Bool,
-        failureMessage: String?,
+        searchFailureMessage: String?,
+        pageStaleReason: String?,
         lastSuccessfulFilter:
             HistoricalSearchFilterSnapshot?,
         currentFilter:
@@ -142,17 +174,18 @@ enum HistoricalReviewPresentation {
             return .loading
         }
         guard let page else {
-            if let failureMessage {
-                return .failure(failureMessage)
+            if let searchFailureMessage {
+                return .failure(
+                    searchFailureMessage
+                )
             }
             return .initial
         }
-        if let failureMessage {
+        if let pageStaleReason {
             return .staleResults(
                 count: page.results.count,
                 generation: page.indexGeneration,
-                reason:
-                    "The latest search failed. These are the last successful authorized results. \(failureMessage)"
+                reason: pageStaleReason
             )
         }
         if lastSuccessfulFilter != currentFilter {
@@ -177,10 +210,14 @@ enum HistoricalReviewPresentation {
 
     static func searchUnavailableReason(
         index: HistoricalIndexStatus?,
+        indexRebuildIsActive: Bool,
         isWorking: Bool
     ) -> String? {
         if isWorking {
             return "Wait for the current local operation to finish."
+        }
+        if indexRebuildIsActive {
+            return "Wait for the local index rebuild to finish before searching."
         }
         guard let index else {
             return "Load the local index status before searching."

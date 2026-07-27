@@ -50,6 +50,41 @@ struct Task010HistoricalReviewAccessibilityTests {
                 "Run a successful search for the current filters"
             )
         )
+        #expect(
+            history.contains(
+                "The next page did not load. The accepted results above remain current."
+            )
+        )
+        #expect(
+            history.contains(
+                "\"blueminutes.history.pagination-error\""
+            )
+        )
+        #expect(
+            history.contains(
+                "\"Retry Load More\""
+            )
+        )
+        #expect(
+            history.contains(
+                "cached metadata below is not current"
+            )
+        )
+        #expect(
+            history.contains(
+                "historicalFilterDidChange"
+            )
+        )
+        #expect(
+            history.contains(
+                ".historicalIndexIsLoading"
+            )
+        )
+        #expect(
+            history.contains(
+                ".disabled(!canSelectResults)"
+            )
+        )
 
         #expect(
             preferences.contains(

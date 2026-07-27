@@ -17,11 +17,13 @@ struct HistoricalReviewView: View {
                     job: store.historicalIndexJob,
                     isLoading:
                         store
-                        .historicalReviewIsLoading,
+                        .historicalIndexIsLoading,
                     failureMessage:
                         store
                         .historicalIndexFailureMessage,
-                    isWorking: store.isWorking,
+                    isWorking:
+                        store
+                        .historicalControlsAreBusy,
                     actorOrCountry:
                         $sceneState
                         .historyActorOrCountry,
@@ -67,9 +69,13 @@ struct HistoricalReviewView: View {
                         .historicalSearchIsLoading,
                     failureMessage:
                         store
-                        .historicalSearchFailureMessage
-                        ?? store
-                        .historicalIndexFailureMessage,
+                        .historicalSearchFailureMessage,
+                    pageStaleReason:
+                        store
+                        .historicalSearchPageStaleReason,
+                    paginationFailureMessage:
+                        store
+                        .historicalPaginationFailureMessage,
                     lastSuccessfulFilter:
                         store
                         .historicalSearchFilterSnapshot,
@@ -83,12 +89,17 @@ struct HistoricalReviewView: View {
                     isLoadingNextPage:
                         store
                         .historicalSearchIsLoadingNextPage,
+                    canSelectResults:
+                        historicalResultsAreCurrent
+                        && !store
+                        .historicalControlsAreBusy,
                     canLoadNextPage:
                         historicalResultsAreCurrent
                         && store
                         .historicalSearchPage?
                         .nextCursor != nil
-                        && !store.isWorking,
+                        && !store
+                        .historicalControlsAreBusy,
                     selectCurrent: {
                         store
                             .selectHistoricalCurrentRevision(
@@ -114,14 +125,19 @@ struct HistoricalReviewView: View {
                 )
                 HistoricalComparisonView(
                     comparison:
-                        store.historicalComparison,
+                        historicalResultsAreCurrent
+                            ? store
+                                .historicalComparison
+                            : nil,
                     currentRevisionID:
                         sceneState
                         .selectedCurrentHistoryRevisionID,
                     previousRevisionID:
                         sceneState
                         .selectedPriorHistoryRevisionID,
-                    isWorking: store.isWorking,
+                    isWorking:
+                        store
+                        .historicalControlsAreBusy,
                     resultsAreCurrent:
                         historicalResultsAreCurrent,
                     compare: {
@@ -142,6 +158,11 @@ struct HistoricalReviewView: View {
             .frame(
                 maxWidth: 1_100,
                 alignment: .leading
+            )
+        }
+        .onChange(of: currentFilter) { _, _ in
+            store.historicalFilterDidChange(
+                using: sceneState
             )
         }
         .confirmationDialog(
@@ -179,13 +200,8 @@ struct HistoricalReviewView: View {
     private var historicalResultsAreCurrent:
         Bool
     {
-        store.historicalSearchPage != nil
-            && store
-            .historicalSearchFailureMessage == nil
-            && store
-            .historicalIndexFailureMessage == nil
-            && store
-            .historicalSearchFilterSnapshot
-                == currentFilter
+        store.historicalResultsAreCurrent(
+            using: sceneState
+        )
     }
 }

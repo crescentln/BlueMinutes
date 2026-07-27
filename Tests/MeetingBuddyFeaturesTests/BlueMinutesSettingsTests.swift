@@ -712,6 +712,7 @@ struct BlueMinutesSettingsTests {
         let reviewIdentifiers: Set<String> = [
             "blueminutes.history.results",
             "blueminutes.history.load-more",
+            "blueminutes.history.pagination-error",
             reviewFixture.currentSelectionIdentifier,
             reviewFixture.previousSelectionIdentifier
         ]
@@ -1372,6 +1373,9 @@ private struct HostedHistoryResultsAccessibilityProbe:
             ),
             isLoading: false,
             failureMessage: nil,
+            pageStaleReason: nil,
+            paginationFailureMessage:
+                "Synthetic pagination failure.",
             lastSuccessfulFilter: fixture.filter,
             currentFilter: fixture.filter,
             selectedCurrentRevisionID:
@@ -1379,6 +1383,7 @@ private struct HostedHistoryResultsAccessibilityProbe:
             selectedPreviousRevisionID:
                 fixture.previousRevisionID,
             isLoadingNextPage: false,
+            canSelectResults: true,
             canLoadNextPage: true,
             selectCurrent: { _ in },
             selectPrevious: { _ in },
