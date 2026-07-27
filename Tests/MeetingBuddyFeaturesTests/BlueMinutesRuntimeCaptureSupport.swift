@@ -172,6 +172,7 @@ enum BlueMinutesRuntimeCaptureError:
     Equatable
 {
     case invalidViewport
+    case invalidCaptureCount
     case invalidTimeZone(String)
     case bitmapAllocationFailed
     case compositedCaptureRequiresMacOS26
@@ -500,6 +501,34 @@ enum BlueMinutesRuntimeCapture {
         validating:
             ((Data) throws -> Void)? = nil
     ) async throws -> Data {
+        guard let capture =
+            try await captureCompositedFrames(
+                descriptor: descriptor,
+                content: content,
+                count: 1,
+                validating: validating
+            )
+            .first
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .imageCreationFailed
+        }
+        return capture
+    }
+
+    static func captureCompositedFrames(
+        descriptor:
+            BlueMinutesVisualCaptureDescriptor,
+        content: AnyView,
+        count: Int,
+        validating:
+            ((Data) throws -> Void)? = nil
+    ) async throws -> [Data] {
+        guard count > 0
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .invalidCaptureCount
+        }
         let prepared =
             try prepareVisualWindow(
                 descriptor: descriptor,
@@ -560,72 +589,88 @@ enum BlueMinutesRuntimeCapture {
         configuration.dynamicRange =
             .sdr
 
-        let maximumAttempts =
-            validating == nil ? 1 : 3
-        var lastValidationError:
-            (any Error)?
-        var lastCapturedData:
-            Data?
-        for attempt in 1...maximumAttempts {
-            try await Task.sleep(
-                for:
-                    attempt == 1
-                        ? .seconds(1)
-                        : .milliseconds(500)
-            )
-            window.displayIfNeeded()
-            hostingView.layoutSubtreeIfNeeded()
-
-            let output =
-                try await
-                SCScreenshotManager
-                .captureScreenshot(
-                    contentFilter: filter,
-                    configuration:
-                        configuration
+        var captures: [Data] = []
+        captures.reserveCapacity(count)
+        for _ in 0..<count {
+            let completedFrameCount =
+                captures.count
+            let maximumAttempts =
+                validating == nil ? 1 : 3
+            var lastValidationError:
+                (any Error)?
+            var lastCapturedData:
+                Data?
+            for attempt in 1...maximumAttempts {
+                try await Task.sleep(
+                    for:
+                        attempt == 1
+                            ? .seconds(1)
+                            : .milliseconds(500)
                 )
-            guard let sourceImage =
-                output.sdrImage
-            else {
-                throw BlueMinutesRuntimeCaptureError
-                    .imageCreationFailed
+                window.displayIfNeeded()
+                hostingView.layoutSubtreeIfNeeded()
+
+                let output =
+                    try await
+                    SCScreenshotManager
+                    .captureScreenshot(
+                        contentFilter: filter,
+                        configuration:
+                            configuration
+                    )
+                guard let sourceImage =
+                    output.sdrImage
+                else {
+                    throw BlueMinutesRuntimeCaptureError
+                        .imageCreationFailed
+                }
+                let normalized = try normalizedImage(
+                    sourceImage,
+                    width: viewport.width,
+                    height: viewport.height,
+                    appearance:
+                        descriptor.appearance,
+                    normalizeCompositorEdges:
+                        true
+                )
+                let data = try encodePNG(
+                    normalized
+                )
+                lastCapturedData = data
+                guard let validating
+                else {
+                    captures.append(data)
+                    break
+                }
+                do {
+                    try validating(data)
+                    captures.append(data)
+                    break
+                } catch {
+                    lastValidationError =
+                        error
+                }
             }
-            let normalized = try normalizedImage(
-                sourceImage,
-                width: viewport.width,
-                height: viewport.height,
-                appearance:
-                    descriptor.appearance,
-                normalizeCompositorEdges:
-                    true
-            )
-            let data = try encodePNG(
-                normalized
-            )
-            lastCapturedData = data
-            guard let validating
-            else { return data }
-            do {
-                try validating(data)
-                return data
-            } catch {
-                lastValidationError =
-                    error
+            if captures.count
+                == completedFrameCount + 1
+            {
+                continue
             }
-        }
-        guard let lastCapturedData,
-              let lastValidationError
-        else {
+            if let lastCapturedData,
+               let lastValidationError
+            {
+                throw
+                    BlueMinutesCompositedCaptureValidationFailure(
+                        capturedData:
+                            lastCapturedData,
+                        underlyingError:
+                            lastValidationError
+                    )
+            }
             throw BlueMinutesRuntimeCaptureError
                 .imageCreationFailed
         }
-        throw
-            BlueMinutesCompositedCaptureValidationFailure(
-                capturedData:
-                    lastCapturedData,
-                underlyingError:
-                    lastValidationError
-            )
+        return captures
     }
 
     static func validatePNG(
