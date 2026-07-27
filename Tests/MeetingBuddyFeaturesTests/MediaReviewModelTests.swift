@@ -5133,6 +5133,81 @@ struct MediaReviewModelTests {
     }
 
     @Test @MainActor
+    func storageOperationsCannotStartWhileRecordingStopIsSealing()
+        async throws
+    {
+        let recordingStopGate = AsyncGate()
+        let active = RecordingSessionReview(
+            sessionID: featureID(85, RecordingSessionID.self),
+            jobID: featureID(86, JobID.self),
+            state: .recording,
+            stateVersion: 1,
+            activeTrackKinds: [.applicationAudio],
+            durableThroughNanoseconds: 1_000_000_000,
+            knownGapCount: 0,
+            safeReason: nil
+        )
+        let stopped = RecordingSessionReview(
+            sessionID: active.sessionID,
+            jobID: active.jobID,
+            state: .completed,
+            stateVersion: 2,
+            activeTrackKinds: [.applicationAudio],
+            durableThroughNanoseconds: 2_000_000_000,
+            knownGapCount: 0,
+            safeReason: nil
+        )
+        let workflow = try MediaReviewWorkflowProbe(
+            recordingStopGate: recordingStopGate,
+            restoreReportFailsAfterMutation: true,
+            permanentDeletionReportFailsAfterMutation: true,
+            startedRecordingReview: active,
+            stoppedRecordingReview: stopped
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(fileURLWithPath: "/synthetic-recording-workspace"),
+            using: sceneState
+        )
+        sceneState.meetingTitle = "Synthetic recording"
+        sceneState.captureMode = .applicationAudioOnly
+        sceneState.recordingAcknowledged = true
+        await store.startRecording(using: sceneState)
+
+        let stopTask = Task { @MainActor in
+            await store.stopRecording()
+        }
+        await recordingStopGate.waitUntilEntered()
+        #expect(store.isStoppingRecording)
+
+        let storageObjectID = featureID(87, StorageObjectID.self)
+        await store.loadStorageReport()
+        await store.restoreTrashItem(storageObjectID)
+        await store.permanentlyDeleteTrashItem(
+            storageObjectID,
+            confirmedByVisibleDialog: true
+        )
+
+        #expect(workflow.storageReportCallCount == 0)
+        #expect(workflow.restoreMutationCallCount == 0)
+        #expect(workflow.permanentDeletionCallCount == 0)
+        #expect(store.storageReport == nil)
+        #expect(store.storageOperation == nil)
+        #expect(store.storageFailureMessage == nil)
+        #expect(store.safeErrorMessage == nil)
+        #expect(!store.isWorking)
+        #expect(store.isStoppingRecording)
+
+        await recordingStopGate.release()
+        await stopTask.value
+
+        #expect(workflow.recordingStopCallCount == 1)
+        #expect(store.recordingSession?.state == .completed)
+        #expect(!store.isStoppingRecording)
+    }
+
+    @Test @MainActor
     func failedUNWebTVRequestConsumesExactURLAuthorization() async throws {
         let workflow = try MediaReviewWorkflowProbe(
             webMetadataShouldFail: true
@@ -5226,6 +5301,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let editorSaveGate: AsyncGate?
     private let storageReportGate: AsyncGate?
     private let recordingSetupGate: AsyncGate?
+    private let recordingStopGate: AsyncGate?
     private let historicalIndexGate: AsyncGate?
     private let historicalIndexGateCall: Int?
     private let historicalSearchGate: AsyncGate?
@@ -5312,6 +5388,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         editorSaveGate: AsyncGate? = nil,
         storageReportGate: AsyncGate? = nil,
         recordingSetupGate: AsyncGate? = nil,
+        recordingStopGate: AsyncGate? = nil,
         historicalIndexGate: AsyncGate? = nil,
         historicalIndexGateCall: Int? = nil,
         historicalSearchGate: AsyncGate? = nil,
@@ -5364,6 +5441,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         self.editorSaveGate = editorSaveGate
         self.storageReportGate = storageReportGate
         self.recordingSetupGate = recordingSetupGate
+        self.recordingStopGate = recordingStopGate
         self.historicalIndexGate = historicalIndexGate
         self.historicalIndexGateCall =
             historicalIndexGateCall
@@ -6006,6 +6084,9 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         jobID _: JobID
     ) async throws -> RecordingSessionReview {
         recordingStopCallCount += 1
+        if let recordingStopGate {
+            await recordingStopGate.block()
+        }
         guard let stoppedRecordingReview else {
             throw TranscriptWorkflowError.unavailable
         }
