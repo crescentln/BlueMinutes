@@ -12,8 +12,11 @@ struct HistoricalResultsView: View {
         HistoricalSearchFilterSnapshot
     let selectedCurrentRevisionID: RevisionID?
     let selectedPreviousRevisionID: RevisionID?
+    let isLoadingNextPage: Bool
+    let canLoadNextPage: Bool
     let selectCurrent: (RevisionID) -> Void
     let selectPrevious: (RevisionID) -> Void
+    let loadNextPage: () -> Void
 
     var body: some View {
         let state =
@@ -37,6 +40,31 @@ struct HistoricalResultsView: View {
                     ) {
                         ForEach(page.results) { result in
                             resultRow(result)
+                        }
+                    }
+                    if page.nextCursor != nil {
+                        HStack(spacing: 10) {
+                            if isLoadingNextPage {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Button(
+                                isLoadingNextPage
+                                    ? "Loading More…"
+                                    : "Load More"
+                            ) {
+                                loadNextPage()
+                            }
+                            .disabled(
+                                !canLoadNextPage
+                                    || isLoadingNextPage
+                            )
+                            .accessibilityIdentifier(
+                                "blueminutes.history.load-more"
+                            )
+                            .accessibilityHint(
+                                "Loads the next generation-bound page using the unchanged deterministic filters."
+                            )
                         }
                     }
                 }
@@ -124,7 +152,7 @@ struct HistoricalResultsView: View {
                 .foregroundStyle(.secondary)
                 if hasNextPage {
                     Text(
-                        "Additional matches exist beyond this bounded page; refine the deterministic filters to narrow the result set."
+                        "Additional authorized matches are available in the next generation-bound page."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)

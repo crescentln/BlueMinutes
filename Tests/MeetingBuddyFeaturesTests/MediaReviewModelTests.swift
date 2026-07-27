@@ -692,6 +692,246 @@ struct MediaReviewModelTests {
     }
 
     @Test @MainActor
+    func historyPaginationUsesTheAcceptedGenerationFilterAndCursor()
+        async throws
+    {
+        let firstResult =
+            try makeFeatureHistoricalResult(
+                suffix: 1
+            )
+        let nextResult =
+            try makeFeatureHistoricalResult(
+                suffix: 2
+            )
+        let cursor =
+            firstResult.cursor(
+                indexGeneration: 7
+            )
+        let firstPage = HistoricalSearchPage(
+            results: [firstResult],
+            nextCursor: cursor,
+            indexGeneration: 7
+        )
+        let finalPage = HistoricalSearchPage(
+            results: [nextResult],
+            nextCursor: nil,
+            indexGeneration: 7
+        )
+        let workflow = try MediaReviewWorkflowProbe(
+            historicalSearchPages: [
+                firstPage,
+                finalPage
+            ],
+            historicalIndexAvailability: .ready
+        )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-paginated-history-workspace"
+            ),
+            using: sceneState
+        )
+        sceneState.historyActorOrCountry =
+            "Synthetic actor"
+
+        await store.searchMeetingHistory(
+            using: sceneState
+        )
+        #expect(
+            store.historicalSearchPage
+                == firstPage
+        )
+        #expect(
+            workflow.historicalSearchCallCount
+                == 1
+        )
+
+        sceneState.historyTopic =
+            "Changed after the accepted page"
+        await store.loadMoreHistoricalResults(
+            using: sceneState
+        )
+        #expect(
+            workflow.historicalSearchCallCount
+                == 1
+        )
+        #expect(
+            store.historicalSearchPage
+                == firstPage
+        )
+
+        sceneState.historyTopic = ""
+        await store.loadMoreHistoricalResults(
+            using: sceneState
+        )
+
+        #expect(
+            workflow.historicalSearchCallCount
+                == 2
+        )
+        #expect(
+            workflow.lastHistoricalSearchQuery?
+                .actorOrCountry
+                == "Synthetic actor"
+        )
+        #expect(
+            workflow.lastHistoricalSearchQuery?
+                .cursor
+                == cursor
+        )
+        #expect(
+            store.historicalSearchPage
+                == HistoricalSearchPage(
+                    results: [
+                        firstResult,
+                        nextResult
+                    ],
+                    nextCursor: nil,
+                    indexGeneration: 7
+                )
+        )
+        #expect(
+            !store
+                .historicalSearchIsLoadingNextPage
+        )
+        #expect(
+            store.historicalSearchFailureMessage
+                == nil
+        )
+    }
+
+    @Test @MainActor
+    func historyPaginationRejectsMalformedCursorsAndDuplicateRevisions()
+        async throws
+    {
+        let firstResult =
+            try makeFeatureHistoricalResult(
+                suffix: 3
+            )
+        let nextResult =
+            try makeFeatureHistoricalResult(
+                suffix: 4
+            )
+        let firstPage = HistoricalSearchPage(
+            results: [firstResult],
+            nextCursor:
+                firstResult.cursor(
+                    indexGeneration: 7
+                ),
+            indexGeneration: 7
+        )
+        let malformedCursor =
+            HistoricalSearchCursor(
+                indexGeneration: 7,
+                effectiveDate: nil,
+                mediaStartMilliseconds: nil,
+                positionRevisionID:
+                    featureID(
+                        1_042,
+                        RevisionID.self
+                    )
+            )
+        let malformedWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchPages: [
+                    firstPage,
+                    HistoricalSearchPage(
+                        results: [nextResult],
+                        nextCursor:
+                            malformedCursor,
+                        indexGeneration: 7
+                    )
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let malformedStore =
+            MediaReviewStore(
+                workflow:
+                    malformedWorkflow
+            )
+        let malformedScene =
+            MediaReviewSceneState()
+        await malformedStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-malformed-cursor-workspace"
+                ),
+                using: malformedScene
+            )
+        await malformedStore
+            .searchMeetingHistory(
+                using: malformedScene
+            )
+        await malformedStore
+            .loadMoreHistoricalResults(
+                using: malformedScene
+            )
+        #expect(
+            malformedStore
+                .historicalSearchPage
+                == firstPage
+        )
+        #expect(
+            malformedStore
+                .historicalSearchFailureMessage
+                != nil
+        )
+
+        let duplicateWorkflow =
+            try MediaReviewWorkflowProbe(
+                historicalSearchPages: [
+                    firstPage,
+                    HistoricalSearchPage(
+                        results: [firstResult],
+                        nextCursor: nil,
+                        indexGeneration: 7
+                    )
+                ],
+                historicalIndexAvailability:
+                    .ready
+            )
+        let duplicateStore =
+            MediaReviewStore(
+                workflow:
+                    duplicateWorkflow
+            )
+        let duplicateScene =
+            MediaReviewSceneState()
+        await duplicateStore
+            .openOrCreateWorkspace(
+                at: URL(
+                    fileURLWithPath:
+                        "/synthetic-duplicate-page-workspace"
+                ),
+                using: duplicateScene
+            )
+        await duplicateStore
+            .searchMeetingHistory(
+                using: duplicateScene
+            )
+        await duplicateStore
+            .loadMoreHistoricalResults(
+                using: duplicateScene
+            )
+        #expect(
+            duplicateStore
+                .historicalSearchPage
+                == firstPage
+        )
+        #expect(
+            duplicateStore
+                .historicalSearchFailureMessage
+                != nil
+        )
+    }
+
+    @Test @MainActor
     func failedIndexReloadRetainsOnlyAnExplicitlyStaleSnapshot()
         async throws
     {
@@ -2035,11 +2275,17 @@ private func loadSeededReviewState(
 }
 
 @MainActor
-func makeFeatureStoreForHostedSettingsTests()
+func makeFeatureStoreForHostedSettingsTests(
+    seededLearnedPreferenceID:
+        LearnedPreferenceID? = nil
+)
     throws -> MediaReviewStore
 {
     MediaReviewStore(
-        workflow: try MediaReviewWorkflowProbe()
+        workflow: try MediaReviewWorkflowProbe(
+            seededLearnedPreferenceID:
+                seededLearnedPreferenceID
+        )
     )
 }
 
@@ -2061,6 +2307,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let webMetadataShouldFail: Bool
     private var currentRecordingReview: RecordingSessionReview?
     private let historicalSearchFailureCall: Int?
+    private let historicalSearchPages:
+        [HistoricalSearchPage]
     private let historicalIndexFailureCall: Int?
     private let learnedPreferenceFailureCall: Int?
     private let jobReviewFailureCall: Int?
@@ -2118,7 +2366,11 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         stoppedRecordingReview: RecordingSessionReview? = nil,
         webMetadataShouldFail: Bool = false,
         seededReviewState: Bool = false,
+        seededLearnedPreferenceID:
+            LearnedPreferenceID? = nil,
         historicalSearchFailureCall: Int? = nil,
+        historicalSearchPages:
+            [HistoricalSearchPage] = [],
         historicalIndexFailureCall: Int? = nil,
         learnedPreferenceFailureCall: Int? = nil,
         jobReviewFailureCall: Int? = nil,
@@ -2154,6 +2406,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         self.webMetadataShouldFail = webMetadataShouldFail
         self.historicalSearchFailureCall =
             historicalSearchFailureCall
+        self.historicalSearchPages =
+            historicalSearchPages
         self.historicalIndexFailureCall =
             historicalIndexFailureCall
         self.learnedPreferenceFailureCall =
@@ -2176,6 +2430,34 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         currentBriefingReview = try seededReviewState
             ? makeFeatureBriefingReview()
             : nil
+        if let seededLearnedPreferenceID {
+            let timestamp =
+                featureInstant(
+                    1_950_000_000_090
+                )
+            currentLearnedPreferenceState =
+                LearnedPreferenceState(
+                    globallyEnabled: true,
+                    settingsVersion: 2,
+                    preferences: [
+                        try LearnedPreferenceRecord(
+                            preferenceID:
+                                seededLearnedPreferenceID,
+                            value:
+                                .briefingLength(
+                                    240
+                                ),
+                            enabled: true,
+                            version: 1,
+                            sourceAction:
+                                "synthetic-hosted-settings",
+                            createdAt: timestamp,
+                            updatedAt: timestamp
+                        )
+                    ],
+                    recentEvents: []
+                )
+        }
         inspection = try MediaInspection(
             format: .wav,
             durationFrameCount: 32_000,
@@ -2535,6 +2817,15 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             )
         }
         lastHistoricalSearchQuery = query
+        let pageIndex =
+            historicalSearchCallCount - 1
+        if historicalSearchPages.indices
+            .contains(pageIndex)
+        {
+            return historicalSearchPages[
+                pageIndex
+            ]
+        }
         return HistoricalSearchPage(
             results: [],
             nextCursor: nil,
@@ -2658,6 +2949,259 @@ private func featureID<Tag>(_ suffix: Int, _ type: StableID<Tag>.Type) -> Stable
 
 private func featureInstant(_ milliseconds: Int64) -> UTCInstant {
     try! UTCInstant(millisecondsSinceUnixEpoch: milliseconds)
+}
+
+private func makeFeatureHistoricalResult(
+    suffix: Int
+) throws -> HistoricalPositionResult {
+    let base = 4_000 + suffix * 20
+    let createdAt =
+        featureInstant(
+            1_950_000_100_000
+                + Int64(suffix)
+        )
+    let meetingID =
+        featureID(base, MeetingID.self)
+    let meetingRevisionID =
+        featureID(
+            base + 1,
+            RevisionID.self
+        )
+    let meetingReference =
+        try featureReference(
+            meetingID,
+            meetingRevisionID
+        )
+    let meeting = try MeetingProfileV1(
+        revision:
+            featureDraftEnvelope(
+                logicalID: meetingID,
+                revisionID:
+                    meetingRevisionID,
+                createdAt: createdAt
+            ),
+        title:
+            "Synthetic pagination meeting \(suffix)",
+        meetingDate:
+            try CalendarDate(
+                year: 2026,
+                month: 7,
+                day: UInt8(10 + suffix)
+            ),
+        outputLanguage: LanguageTag("en"),
+        cloudProcessingPolicy: .localOnly,
+        reviewStatus: .unreviewed,
+        userConfirmed: false
+    )
+
+    let actorID =
+        featureID(
+            base + 2,
+            ActorID.self
+        )
+    let actorRevisionID =
+        featureID(
+            base + 3,
+            RevisionID.self
+        )
+    let actorReference =
+        try featureReference(
+            actorID,
+            actorRevisionID
+        )
+    let actor = try ActorV1(
+        revision:
+            featureDraftEnvelope(
+                logicalID: actorID,
+                revisionID:
+                    actorRevisionID,
+                createdAt: createdAt
+            ),
+        identity:
+            .other(
+                displayName:
+                    "Synthetic Pagination Actor \(suffix)"
+            ),
+        reviewStatus: .unreviewed,
+        userConfirmed: false
+    )
+
+    let issueID =
+        featureID(
+            base + 4,
+            IssueID.self
+        )
+    let issueRevisionID =
+        featureID(
+            base + 5,
+            RevisionID.self
+        )
+    let issueReference =
+        try featureReference(
+            issueID,
+            issueRevisionID
+        )
+    let issue = try IssueV1(
+        revision:
+            featureDraftEnvelope(
+                logicalID: issueID,
+                revisionID:
+                    issueRevisionID,
+                inputs: [
+                    meetingReference
+                ],
+                createdAt: createdAt
+            ),
+        meetingID: meetingID,
+        title:
+            EvidenceLinkedClaim(
+                text:
+                    "Synthetic pagination issue \(suffix)",
+                taxonomy:
+                    .meetingBuddyExtraction,
+                supportStatus:
+                    .unsupported,
+                evidenceRevisions: [],
+                confidence:
+                    ConfidenceScore(
+                        millionths:
+                            500_000
+                    )
+            ),
+        reviewStatus: .unreviewed,
+        userConfirmed: false
+    )
+
+    let organizationReference =
+        try featureReference(
+            featureID(
+                base + 6,
+                OrganizationID.self
+            ),
+            featureID(
+                base + 7,
+                RevisionID.self
+            )
+        )
+    let capacityReference =
+        try featureReference(
+            featureID(
+                base + 8,
+                SpeakingCapacityID.self
+            ),
+            featureID(
+                base + 9,
+                RevisionID.self
+            )
+        )
+    let positionID =
+        featureID(
+            base + 10,
+            PositionID.self
+        )
+    let positionRevisionID =
+        featureID(
+            base + 11,
+            RevisionID.self
+        )
+    let position = try PositionV1(
+        revision:
+            featureDraftEnvelope(
+                logicalID: positionID,
+                revisionID:
+                    positionRevisionID,
+                inputs: [
+                    meetingReference,
+                    actorReference,
+                    organizationReference,
+                    capacityReference,
+                    issueReference
+                ],
+                createdAt: createdAt
+            ),
+        meetingID: meetingID,
+        actorRevision: actorReference,
+        representedEntityRevision:
+            organizationReference,
+        speakingCapacityRevision:
+            capacityReference,
+        issueRevision: issueReference,
+        positionType: .supports,
+        statement:
+            EvidenceLinkedClaim(
+                text:
+                    "Synthetic pagination position \(suffix)",
+                taxonomy:
+                    .meetingBuddyExtraction,
+                supportStatus:
+                    .unsupported,
+                evidenceRevisions: [],
+                confidence:
+                    ConfidenceScore(
+                        millionths:
+                            500_000
+                    )
+            ),
+        comparisonState: .unknown,
+        reviewStatus: .unreviewed,
+        userConfirmed: false
+    )
+    return HistoricalPositionResult(
+        position: position,
+        meeting: meeting,
+        actor: actor,
+        issue: issue,
+        evidence: [],
+        sensitivityLabelRevision:
+            try featureReference(
+                featureID(
+                    base + 12,
+                    SensitivityLabelID.self
+                ),
+                featureID(
+                    base + 13,
+                    RevisionID.self
+                )
+            ),
+        accessPolicyRevision:
+            try featureReference(
+                featureID(
+                    base + 14,
+                    AccessPolicyID.self
+                ),
+                featureID(
+                    base + 15,
+                    RevisionID.self
+                )
+            ),
+        organizationLabel:
+            "Synthetic Pagination Organization",
+        meetingType: nil,
+        effectiveClassification:
+            .internal
+    )
+}
+
+private func featureDraftEnvelope<
+    Tag: LogicalObjectIDScope
+>(
+    logicalID: StableID<Tag>,
+    revisionID: RevisionID,
+    inputs:
+        [SemanticRevisionReference] = [],
+    createdAt: UTCInstant
+) throws -> RevisionEnvelope<Tag> {
+    try RevisionEnvelope(
+        logicalID: logicalID,
+        revisionID: revisionID,
+        schemaVersion: .v1,
+        lifecycleStatus: .draft,
+        validationState: .notValidated,
+        createdAt: createdAt,
+        createdBy: .application,
+        inputRevisions: inputs,
+        dataClassification: .internal
+    )
 }
 
 private func makeFeatureJobReview(

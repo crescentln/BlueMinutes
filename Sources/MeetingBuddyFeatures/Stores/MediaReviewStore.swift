@@ -27,6 +27,7 @@ public final class MediaReviewStore {
     public private(set) var learnedPreferences: LearnedPreferenceState?
     public private(set) var historicalReviewIsLoading = false
     public private(set) var historicalSearchIsLoading = false
+    public private(set) var historicalSearchIsLoadingNextPage = false
     public private(set) var learnedPreferencesAreLoading = false
     private(set) var historicalIndexFailureMessage:
         String?
@@ -851,9 +852,15 @@ public final class MediaReviewStore {
             if index.availability == .ready {
                 attemptedSearch = true
                 historicalSearchIsLoading = true
-                historicalSearchPage = try await workflow.searchMeetingHistory(
-                    try historicalQuery(using: sceneState)
-                )
+                historicalSearchPage =
+                    try validatedHistoricalPage(
+                        try await workflow
+                            .searchMeetingHistory(
+                                try historicalQuery(
+                                    using: sceneState
+                                )
+                            )
+                    )
                 historicalSearchFilterSnapshot =
                     filterSnapshot
                 reconcileHistoricalSelection(
@@ -946,9 +953,15 @@ public final class MediaReviewStore {
             historicalSearchIsLoading = false
         }
         let succeeded = await perform {
-            historicalSearchPage = try await workflow.searchMeetingHistory(
-                try historicalQuery(using: sceneState)
-            )
+            historicalSearchPage =
+                try validatedHistoricalPage(
+                    try await workflow
+                        .searchMeetingHistory(
+                            try historicalQuery(
+                                using: sceneState
+                            )
+                        )
+                )
             historicalSearchFilterSnapshot =
                 filterSnapshot
             historicalComparison = nil
@@ -961,6 +974,86 @@ public final class MediaReviewStore {
             historicalSearchFailureMessage =
                 safeErrorMessage
                     ?? "The local history search did not complete."
+        }
+    }
+
+    public func loadMoreHistoricalResults(
+        using sceneState: MediaReviewSceneState
+    ) async {
+        let currentFilter =
+            HistoricalSearchFilterSnapshot(
+                sceneState: sceneState
+            )
+        guard let acceptedFilter =
+                historicalSearchFilterSnapshot,
+              acceptedFilter == currentFilter,
+              historicalSearchFailureMessage == nil,
+              let currentPage =
+                historicalSearchPage,
+              let cursor =
+                currentPage.nextCursor,
+              cursor.indexGeneration
+                == currentPage.indexGeneration,
+              !isWorking,
+              !historicalSearchIsLoadingNextPage
+        else { return }
+
+        historicalSearchIsLoadingNextPage = true
+        defer {
+            historicalSearchIsLoadingNextPage = false
+        }
+        let succeeded = await perform {
+            let nextPage =
+                try validatedHistoricalPage(
+                    try await workflow
+                        .searchMeetingHistory(
+                            try historicalQuery(
+                                using: sceneState,
+                                cursor: cursor
+                            )
+                        ),
+                    expectedGeneration:
+                        currentPage
+                        .indexGeneration
+                )
+            let existingRevisionIDs =
+                Set(
+                    currentPage.results.map {
+                        $0.position.revision.revisionID
+                    }
+                )
+            let nextRevisionIDs =
+                nextPage.results.map {
+                    $0.position.revision.revisionID
+                }
+            guard Set(nextRevisionIDs).count
+                    == nextRevisionIDs.count,
+                  existingRevisionIDs
+                    .isDisjoint(
+                        with: nextRevisionIDs
+                    )
+            else {
+                throw HistoricalReviewError
+                    .invalidQuery(
+                        "The next history page repeated an exact position revision."
+                    )
+            }
+            historicalSearchPage =
+                HistoricalSearchPage(
+                    results:
+                        currentPage.results
+                        + nextPage.results,
+                    nextCursor:
+                        nextPage.nextCursor,
+                    indexGeneration:
+                        currentPage
+                        .indexGeneration
+                )
+        }
+        if !succeeded {
+            historicalSearchFailureMessage =
+                safeErrorMessage
+                    ?? "The next local history page did not complete."
         }
     }
 
@@ -1279,6 +1372,7 @@ public final class MediaReviewStore {
         learnedPreferences = nil
         historicalReviewIsLoading = false
         historicalSearchIsLoading = false
+        historicalSearchIsLoadingNextPage = false
         learnedPreferencesAreLoading = false
         historicalIndexFailureMessage = nil
         historicalSearchFailureMessage = nil
@@ -1486,9 +1580,11 @@ public final class MediaReviewStore {
                         {
                             do {
                                 let page =
-                                    try await workflow
-                                    .searchMeetingHistory(
-                                        acceptedQuery
+                                    try validatedHistoricalPage(
+                                        try await workflow
+                                            .searchMeetingHistory(
+                                                acceptedQuery
+                                            )
                                     )
                                 guard !Task.isCancelled,
                                       session
@@ -1584,7 +1680,8 @@ public final class MediaReviewStore {
     }
 
     private func historicalQuery(
-        using sceneState: MediaReviewSceneState
+        using sceneState: MediaReviewSceneState,
+        cursor: HistoricalSearchCursor? = nil
     ) throws -> HistoricalSearchQuery {
         try HistoricalSearchQuery(
             actorOrCountry: optionalText(sceneState.historyActorOrCountry),
@@ -1595,8 +1692,53 @@ public final class MediaReviewStore {
             endDate: try optionalDate(sceneState.historyEndDate),
             reviewStatus: .confirmed,
             maximumClassification: .restricted,
+            cursor: cursor,
             pageSize: 100
         )
+    }
+
+    private func validatedHistoricalPage(
+        _ page: HistoricalSearchPage,
+        expectedGeneration: UInt64? = nil
+    ) throws -> HistoricalSearchPage {
+        if let expectedGeneration {
+            guard page.indexGeneration
+                    == expectedGeneration
+            else {
+                throw HistoricalReviewError
+                    .invalidQuery(
+                        "The history page did not match the accepted local index generation."
+                    )
+            }
+        }
+        let revisionIDs =
+            page.results.map {
+                $0.position.revision.revisionID
+            }
+        guard Set(revisionIDs).count
+                == revisionIDs.count
+        else {
+            throw HistoricalReviewError
+                .invalidQuery(
+                    "The history page repeated an exact position revision."
+                )
+        }
+        if let nextCursor = page.nextCursor {
+            guard let lastResult =
+                    page.results.last,
+                  nextCursor
+                    == lastResult.cursor(
+                        indexGeneration:
+                            page.indexGeneration
+                    )
+            else {
+                throw HistoricalReviewError
+                    .invalidQuery(
+                        "The history page cursor did not identify its final exact position revision."
+                    )
+            }
+        }
+        return page
     }
 
     private func optionalText(_ value: String) -> String? {

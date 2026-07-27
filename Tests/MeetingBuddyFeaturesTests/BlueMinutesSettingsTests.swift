@@ -563,6 +563,97 @@ struct BlueMinutesSettingsTests {
     }
 
     @Test @MainActor
+    func learnedPreferenceRowActionsAreNativeAndAXActivatable()
+        async throws
+    {
+        let preferenceID = LearnedPreferenceID(
+            UUID(
+                uuidString:
+                    "52000000-0000-0000-0000-000000001041"
+            )!
+        )
+        let store =
+            try makeFeatureStoreForHostedSettingsTests(
+                seededLearnedPreferenceID:
+                    preferenceID
+            )
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/synthetic-preference-action-workspace"
+            ),
+            using: sceneState
+        )
+        await store.loadLearnedPreferences()
+        let editorState =
+            LearnedPreferenceEditorState()
+        let identifierPrefix =
+            "blueminutes.settings.learned-preferences.preference."
+            + preferenceID.canonicalString
+        let editIdentifier =
+            identifierPrefix + ".edit"
+        let identifiers: Set<String> = [
+            editIdentifier,
+            identifierPrefix + ".disable",
+            identifierPrefix + ".remove"
+        ]
+        let title =
+            "BlueMinutes Preference Row AX Probe"
+
+        try withHostedWindow(
+            title: title,
+            size: CGSize(
+                width: 720,
+                height: 620
+            ),
+            content: {
+                LearnedPreferencesSettingsPane(
+                    store: store,
+                    editorState: editorState
+                )
+            },
+            operation: { _ in
+                let snapshots =
+                    try accessibilitySnapshots(
+                        windowTitle: title,
+                        identifiers: identifiers
+                    )
+                for identifier in identifiers {
+                    #expect(
+                        snapshots
+                            .roleOccurrenceCount(
+                                identifier,
+                                role:
+                                    kAXButtonRole
+                            ) == 1
+                    )
+                }
+                let editElement =
+                    try accessibilityElement(
+                        windowTitle: title,
+                        identifier:
+                            editIdentifier
+                    )
+                #expect(
+                    AXUIElementPerformAction(
+                        editElement,
+                        kAXPressAction
+                            as CFString
+                    ) == .success
+                )
+                #expect(
+                    waitUntil {
+                        editorState
+                            .editingPreferenceID
+                            == preferenceID
+                    }
+                )
+            }
+        )
+    }
+
+    @Test @MainActor
     func historyStatesAndCommandsExposeNativeRuntimeAccessibility()
         throws
     {
@@ -620,6 +711,7 @@ struct BlueMinutesSettingsTests {
             try HostedHistoryReviewAccessibilityFixture()
         let reviewIdentifiers: Set<String> = [
             "blueminutes.history.results",
+            "blueminutes.history.load-more",
             reviewFixture.currentSelectionIdentifier,
             reviewFixture.previousSelectionIdentifier
         ]
@@ -653,6 +745,7 @@ struct BlueMinutesSettingsTests {
             )
         }
         for identifier in [
+            "blueminutes.history.load-more",
             reviewFixture.currentSelectionIdentifier,
             reviewFixture.previousSelectionIdentifier
         ] {
@@ -987,6 +1080,95 @@ struct BlueMinutesSettingsTests {
     }
 
     @MainActor
+    private func accessibilityElement(
+        windowTitle: String,
+        identifier: String
+    ) throws -> AXUIElement {
+        let application =
+            AXUIElementCreateApplication(
+                getpid()
+            )
+        let deadline =
+            Date(
+                timeIntervalSinceNow: 1
+            )
+        var matchingWindow: AXUIElement?
+
+        repeat {
+            matchingWindow = axElements(
+                application,
+                attribute:
+                    kAXWindowsAttribute
+            ).first {
+                axString(
+                    $0,
+                    attribute:
+                        kAXTitleAttribute
+                ) == windowTitle
+            }
+            if matchingWindow == nil {
+                RunLoop.main.run(
+                    until:
+                        Date(
+                            timeIntervalSinceNow:
+                                0.02
+                        )
+                )
+            }
+        } while matchingWindow == nil
+            && Date() < deadline
+
+        guard let matchingWindow,
+              let element =
+                findAccessibilityElement(
+                    from: matchingWindow,
+                    identifier: identifier,
+                    depth: 0
+                )
+        else {
+            throw BlueMinutesSettingsTestError
+                .accessibilityElementUnavailable(
+                    identifier
+                )
+        }
+        return element
+    }
+
+    @MainActor
+    private func findAccessibilityElement(
+        from element: AXUIElement,
+        identifier: String,
+        depth: Int
+    ) -> AXUIElement? {
+        guard depth < 20 else {
+            return nil
+        }
+        if axString(
+            element,
+            attribute:
+                kAXIdentifierAttribute
+        ) == identifier {
+            return element
+        }
+        for child in axElements(
+            element,
+            attribute:
+                kAXChildrenAttribute
+        ) {
+            if let match =
+                findAccessibilityElement(
+                    from: child,
+                    identifier: identifier,
+                    depth: depth + 1
+                )
+            {
+                return match
+            }
+        }
+        return nil
+    }
+
+    @MainActor
     private func collectAccessibilitySnapshots(
         from element: AXUIElement,
         identifiers: Set<String>,
@@ -1182,7 +1364,10 @@ private struct HostedHistoryResultsAccessibilityProbe:
         HistoricalResultsView(
             page: HistoricalSearchPage(
                 results: [fixture.result],
-                nextCursor: nil,
+                nextCursor:
+                    fixture.result.cursor(
+                        indexGeneration: 7
+                    ),
                 indexGeneration: 7
             ),
             isLoading: false,
@@ -1193,8 +1378,11 @@ private struct HostedHistoryResultsAccessibilityProbe:
                 fixture.currentRevisionID,
             selectedPreviousRevisionID:
                 fixture.previousRevisionID,
+            isLoadingNextPage: false,
+            canLoadNextPage: true,
             selectCurrent: { _ in },
-            selectPrevious: { _ in }
+            selectPrevious: { _ in },
+            loadNextPage: {}
         )
     }
 }
@@ -1747,4 +1935,5 @@ private struct BlueMinutesAXSnapshots {
 private enum BlueMinutesSettingsTestError: Error {
     case accessibilityWindowUnavailable(String)
     case accessibilityFrameUnavailable(String)
+    case accessibilityElementUnavailable(String)
 }
