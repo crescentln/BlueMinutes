@@ -423,11 +423,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "35facfc338b68399b51f77b2944ca67710a5d31390b6ce47e836d2ef7e4e4614",
-        "35facfc338b68399b51f77b2944ca67710a5d31390b6ce47e836d2ef7e4e4614",
-        "35facfc338b68399b51f77b2944ca67710a5d31390b6ce47e836d2ef7e4e4614",
-        "35facfc338b68399b51f77b2944ca67710a5d31390b6ce47e836d2ef7e4e4614",
-        "35facfc338b68399b51f77b2944ca67710a5d31390b6ce47e836d2ef7e4e4614"
+        "694123dcbdc202e6b5a406ae4725440fa6b09893a4d3d60265c215841752907e",
+        "694123dcbdc202e6b5a406ae4725440fa6b09893a4d3d60265c215841752907e",
+        "694123dcbdc202e6b5a406ae4725440fa6b09893a4d3d60265c215841752907e",
+        "694123dcbdc202e6b5a406ae4725440fa6b09893a4d3d60265c215841752907e",
+        "694123dcbdc202e6b5a406ae4725440fa6b09893a4d3d60265c215841752907e"
       ],
       "id" : "analysis-selected-light",
       "maximumChangedPixelRatio" : 0,
@@ -438,11 +438,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "a205f85e6d041439858fca84c27273986a033fd3a349f90858fb3ef4774aca7f",
-        "a205f85e6d041439858fca84c27273986a033fd3a349f90858fb3ef4774aca7f",
-        "a205f85e6d041439858fca84c27273986a033fd3a349f90858fb3ef4774aca7f",
-        "a205f85e6d041439858fca84c27273986a033fd3a349f90858fb3ef4774aca7f",
-        "a205f85e6d041439858fca84c27273986a033fd3a349f90858fb3ef4774aca7f"
+        "bf7ed405029d2b85271bf8d1843930b0d8be61043e7df8e766f832c9dad8d20e",
+        "bf7ed405029d2b85271bf8d1843930b0d8be61043e7df8e766f832c9dad8d20e",
+        "bf7ed405029d2b85271bf8d1843930b0d8be61043e7df8e766f832c9dad8d20e",
+        "bf7ed405029d2b85271bf8d1843930b0d8be61043e7df8e766f832c9dad8d20e",
+        "bf7ed405029d2b85271bf8d1843930b0d8be61043e7df8e766f832c9dad8d20e"
       ],
       "id" : "analysis-selected-dark",
       "maximumChangedPixelRatio" : 0,
@@ -453,11 +453,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "56776d2bafe502b7eead9ec7714ee7da3a039dc2b2709ab308b8384343ff69bb",
-        "56776d2bafe502b7eead9ec7714ee7da3a039dc2b2709ab308b8384343ff69bb",
-        "56776d2bafe502b7eead9ec7714ee7da3a039dc2b2709ab308b8384343ff69bb",
-        "56776d2bafe502b7eead9ec7714ee7da3a039dc2b2709ab308b8384343ff69bb",
-        "56776d2bafe502b7eead9ec7714ee7da3a039dc2b2709ab308b8384343ff69bb"
+        "6ad0d67c4fd9be68ba87a5e7b858636ea7b3d120b2b3d7830d72efd102b5e35a",
+        "6ad0d67c4fd9be68ba87a5e7b858636ea7b3d120b2b3d7830d72efd102b5e35a",
+        "6ad0d67c4fd9be68ba87a5e7b858636ea7b3d120b2b3d7830d72efd102b5e35a",
+        "6ad0d67c4fd9be68ba87a5e7b858636ea7b3d120b2b3d7830d72efd102b5e35a",
+        "6ad0d67c4fd9be68ba87a5e7b858636ea7b3d120b2b3d7830d72efd102b5e35a"
       ],
       "id" : "analysis-stale-light",
       "maximumChangedPixelRatio" : 0,
@@ -468,11 +468,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "0773de8da211ac04b243e5c73189744cf54177985f8e4f1184ff57e958a98a33",
-        "0773de8da211ac04b243e5c73189744cf54177985f8e4f1184ff57e958a98a33",
-        "0773de8da211ac04b243e5c73189744cf54177985f8e4f1184ff57e958a98a33",
-        "0773de8da211ac04b243e5c73189744cf54177985f8e4f1184ff57e958a98a33",
-        "0773de8da211ac04b243e5c73189744cf54177985f8e4f1184ff57e958a98a33"
+        "3dcdbc24f51f28cc926a99ce6b211f19ce5bae4e983a1e584225562c1a62db1d",
+        "3dcdbc24f51f28cc926a99ce6b211f19ce5bae4e983a1e584225562c1a62db1d",
+        "3dcdbc24f51f28cc926a99ce6b211f19ce5bae4e983a1e584225562c1a62db1d",
+        "3dcdbc24f51f28cc926a99ce6b211f19ce5bae4e983a1e584225562c1a62db1d",
+        "3dcdbc24f51f28cc926a99ce6b211f19ce5bae4e983a1e584225562c1a62db1d"
       ],
       "id" : "analysis-stale-dark",
       "maximumChangedPixelRatio" : 0,
@@ -777,11 +777,11 @@
     "xcodeBuild" : "17F113",
     "xcodeVersion" : "26.6"
   },
-  "fixtureCatalogSHA256" : "89e36083055d242d85ebacc5812a0e435898d92f07d7937a565babc054605153",
+  "fixtureCatalogSHA256" : "115715977aa7e2bf2ad01324cd7015104d45ff505a0f39c1a5ca49c652074156",
   "githubRunAttempt" : "1",
-  "githubRunID" : "30307533539",
-  "manifestSHA256" : "07e9a4afb34812996ad9bedc31aa3352a634d8d230fb9498e93d555503c548c6",
+  "githubRunID" : "30313797786",
+  "manifestSHA256" : "d558e643f5a33b6f0109f188a6d376e8ce1631e5ec8a0fefaca23a848320ee9f",
   "processIndex" : 1,
-  "sourceRevision" : "f203010c3a645d11ccdb97538d6baf9af9a94b04",
+  "sourceRevision" : "b86264d6d207ed8c2c96b3a87c5cfdfa4a49cdaa",
   "version" : 1
 }

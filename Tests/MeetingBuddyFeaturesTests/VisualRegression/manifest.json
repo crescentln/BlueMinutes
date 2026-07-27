@@ -1,5 +1,5 @@
 {
-  "baselineSourceRevision" : "f203010c3a645d11ccdb97538d6baf9af9a94b04",
+  "baselineSourceRevision" : "b86264d6d207ed8c2c96b3a87c5cfdfa4a49cdaa",
   "environment" : {
     "architecture" : "arm64",
     "clangBuild" : "clang-2100.1.1.101",
@@ -51,8 +51,8 @@
         }
       },
       "fileName" : "analysis-selected-dark.png",
-      "pixelSHA256" : "5844907e3eb4081b683f525302ce5fd517beb03160a18e4c1d2954f0526be938",
-      "pngSHA256" : "a205f85e6d041439858fca84c27273986a033fd3a349f90858fb3ef4774aca7f",
+      "pixelSHA256" : "2a709603d1dee254602f465668726b2e22a259a76ab699fa2f50a9304ce01f80",
+      "pngSHA256" : "bf7ed405029d2b85271bf8d1843930b0d8be61043e7df8e766f832c9dad8d20e",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -84,8 +84,8 @@
         }
       },
       "fileName" : "analysis-selected-light.png",
-      "pixelSHA256" : "e27048d7f901fcfdfb010f007d1bbdce66952a20031e14f613d97f810a510191",
-      "pngSHA256" : "35facfc338b68399b51f77b2944ca67710a5d31390b6ce47e836d2ef7e4e4614",
+      "pixelSHA256" : "0c751ab8c6368d8b159604912f4e3fc38ae92ca2effbedf575e0cbbc6e64e501",
+      "pngSHA256" : "694123dcbdc202e6b5a406ae4725440fa6b09893a4d3d60265c215841752907e",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -105,7 +105,7 @@
         },
         "appearance" : "dark",
         "id" : "analysis-stale-dark",
-        "inspectorPresented" : false,
+        "inspectorPresented" : true,
         "locale" : "en_US_POSIX",
         "state" : "stale",
         "surface" : "analysis",
@@ -117,8 +117,8 @@
         }
       },
       "fileName" : "analysis-stale-dark.png",
-      "pixelSHA256" : "a50d8af8e1501075b3041e85ed13d93eb8c657da9cce25847af65cfcc8aff1e2",
-      "pngSHA256" : "0773de8da211ac04b243e5c73189744cf54177985f8e4f1184ff57e958a98a33",
+      "pixelSHA256" : "3b080459000502980a14ba1c34dd99983859967b3c70b80e145fbace02d15fc5",
+      "pngSHA256" : "3dcdbc24f51f28cc926a99ce6b211f19ce5bae4e983a1e584225562c1a62db1d",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -138,7 +138,7 @@
         },
         "appearance" : "light",
         "id" : "analysis-stale-light",
-        "inspectorPresented" : false,
+        "inspectorPresented" : true,
         "locale" : "en_US_POSIX",
         "state" : "stale",
         "surface" : "analysis",
@@ -150,8 +150,8 @@
         }
       },
       "fileName" : "analysis-stale-light.png",
-      "pixelSHA256" : "3dcd43f78ffc21595fadacb985bcb82280cf7040280d46c1c2c3582cb4202034",
-      "pngSHA256" : "56776d2bafe502b7eead9ec7714ee7da3a039dc2b2709ab308b8384343ff69bb",
+      "pixelSHA256" : "f87069254fa4d517dd95d6b19c1201a5391199a3284f3283a1070811d1d7f596",
+      "pngSHA256" : "6ad0d67c4fd9be68ba87a5e7b858636ea7b3d120b2b3d7830d72efd102b5e35a",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
