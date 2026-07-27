@@ -103,11 +103,52 @@ jobs:
           swift test -Xswiftc -warnings-as-errors
           --filter historicalIndexAndFilteredQueryStayBoundedAtTenThousandPublishedPositions
 
+      - name: Validate isolated native-window contracts
+        run: |
+          native_window_tests=(
+            completeSettingsLayoutSurvivesThemesAndLargerMacText
+            visualMatrixProductionInspectorsExposeExactRuntimeAccessibility
+            visualLayerSmokeRegionsExposeTheirExactRuntimeControls
+            productionTranscriptInspectorOpenAndClosedStatesChangeNativeLayout
+            transcriptInspectorToolbarAXActionPreservesFocusAndTogglesProductionBinding
+            learnedPreferencesTabHostsRepositoryBackedControlsInsideSettings
+            learnedPreferenceRowActionsAreNativeAndAXActivatable
+            historyStatesAndCommandsExposeNativeRuntimeAccessibility
+            storageLedgerAndTrashActionsExposeNativeRuntimeAccessibility
+            storageStateVariantsExposeExactRuntimeAccessibility
+            storageStaleAndRetentionBlocksExposeExactRuntimeAXReasons
+            itemEditorsExposeDistinctNativeAccessibilityContracts
+          )
+          for test_name in "${native_window_tests[@]}"; do
+            test_log="$(mktemp "$RUNNER_TEMP/blueminutes-native-window-${test_name}.XXXXXX")"
+            swift test -Xswiftc -warnings-as-errors \
+              --filter "$test_name" \
+              2>&1 | tee "$test_log"
+            grep -Eq \
+              'Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed' \
+              "$test_log"
+          done
+
+      - name: Validate isolated visual regression contracts
+        run: |
+          test_log="$(mktemp "$RUNNER_TEMP/blueminutes-visual-contracts.XXXXXX")"
+          swift test -Xswiftc -warnings-as-errors \
+            --filter BlueMinutesVisualRegressionTests \
+            2>&1 | tee "$test_log"
+          grep -Eq \
+            'Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed' \
+            "$test_log"
+
       - name: Run remaining synthetic-safe suite
-        run: >-
-          swift test -Xswiftc -warnings-as-errors
-          --skip
-          'historicalIndexAndFilteredQueryStayBoundedAtTenThousandPublishedPositions|threeHourRetryAcrossManagerRestartPreservesExactCoverageAndTraceability'
+        run: |
+          test_log="$(mktemp "$RUNNER_TEMP/blueminutes-remaining-tests.XXXXXX")"
+          remaining_skip='BlueMinutesVisualRegressionTests|completeSettingsLayoutSurvivesThemesAndLargerMacText|visualMatrixProductionInspectorsExposeExactRuntimeAccessibility|visualLayerSmokeRegionsExposeTheirExactRuntimeControls|productionTranscriptInspectorOpenAndClosedStatesChangeNativeLayout|transcriptInspectorToolbarAXActionPreservesFocusAndTogglesProductionBinding|learnedPreferencesTabHostsRepositoryBackedControlsInsideSettings|learnedPreferenceRowActionsAreNativeAndAXActivatable|historyStatesAndCommandsExposeNativeRuntimeAccessibility|storageLedgerAndTrashActionsExposeNativeRuntimeAccessibility|storageStateVariantsExposeExactRuntimeAccessibility|storageStaleAndRetentionBlocksExposeExactRuntimeAXReasons|itemEditorsExposeDistinctNativeAccessibilityContracts|historicalIndexAndFilteredQueryStayBoundedAtTenThousandPublishedPositions|threeHourRetryAcrossManagerRestartPreservesExactCoverageAndTraceability'
+          swift test -Xswiftc -warnings-as-errors \
+            --skip "$remaining_skip" \
+            2>&1 | tee "$test_log"
+          grep -Eq \
+            'Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed' \
+            "$test_log"
 
   visual-regression:
     name: Native visual regression

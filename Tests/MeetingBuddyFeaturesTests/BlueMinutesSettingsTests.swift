@@ -2053,6 +2053,60 @@ struct BlueMinutesSettingsTests {
         )
     }
 
+    @Test
+    func hostedCIIsolatesNativeWindowsWithoutWaivingCoverage()
+        throws
+    {
+        let workflow = try source(
+            ".github/workflows/ci.yml"
+        )
+        let nativeWindowTests = [
+            "completeSettingsLayoutSurvivesThemesAndLargerMacText",
+            "visualMatrixProductionInspectorsExposeExactRuntimeAccessibility",
+            "visualLayerSmokeRegionsExposeTheirExactRuntimeControls",
+            "productionTranscriptInspectorOpenAndClosedStatesChangeNativeLayout",
+            "transcriptInspectorToolbarAXActionPreservesFocusAndTogglesProductionBinding",
+            "learnedPreferencesTabHostsRepositoryBackedControlsInsideSettings",
+            "learnedPreferenceRowActionsAreNativeAndAXActivatable",
+            "historyStatesAndCommandsExposeNativeRuntimeAccessibility",
+            "storageLedgerAndTrashActionsExposeNativeRuntimeAccessibility",
+            "storageStateVariantsExposeExactRuntimeAccessibility",
+            "storageStaleAndRetentionBlocksExposeExactRuntimeAXReasons",
+            "itemEditorsExposeDistinctNativeAccessibilityContracts"
+        ]
+        let summaryContract =
+            "Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed"
+
+        #expect(
+            workflow.contains(
+                "Validate isolated native-window contracts"
+            )
+        )
+        #expect(
+            workflow.contains(
+                "--filter \"$test_name\""
+            )
+        )
+        for testName in nativeWindowTests {
+            #expect(
+                workflow.components(
+                    separatedBy: testName
+                ).count == 3
+            )
+        }
+        #expect(
+            workflow.components(
+                separatedBy:
+                    "BlueMinutesVisualRegressionTests"
+            ).count == 3
+        )
+        #expect(
+            workflow.components(
+                separatedBy: summaryContract
+            ).count == 4
+        )
+    }
+
     @MainActor
     private func hostWindow<Content: View>(
         title: String,
