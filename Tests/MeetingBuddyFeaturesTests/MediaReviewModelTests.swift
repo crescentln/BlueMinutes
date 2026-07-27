@@ -158,6 +158,62 @@ struct MediaReviewModelTests {
     }
 
     @Test @MainActor
+    func rejectedOverlappingStorageRefreshCannotStaleTheOwningSuccess()
+        async throws
+    {
+        let gate = AsyncGate()
+        let workflow = try MediaReviewWorkflowProbe(
+            storageReportGate: gate
+        )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState = MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at: URL(
+                fileURLWithPath:
+                    "/selected-workspace"
+            ),
+            using: sceneState
+        )
+
+        let owningRefresh = Task {
+            await store.loadStorageReport()
+        }
+        await gate.waitUntilEntered()
+
+        await store.loadStorageReport()
+        #expect(store.safeErrorMessage == nil)
+        #expect(store.storageFailureMessage == nil)
+        #expect(
+            workflow.storageReportCallCount == 1
+        )
+
+        await gate.release()
+        await owningRefresh.value
+
+        let accepted = try #require(
+            store.storageReport
+        )
+        #expect(store.storageOperation == nil)
+        #expect(store.storageFailureMessage == nil)
+        #expect(store.safeErrorMessage == nil)
+        #expect(
+            StorageDashboardPresentation
+                .state(
+                    report: store.storageReport,
+                    operation:
+                        store.storageOperation,
+                    failureMessage:
+                        store.storageFailureMessage
+                ) == .ready(accepted)
+        )
+        #expect(
+            workflow.storageReportCallCount == 1
+        )
+    }
+
+    @Test @MainActor
     func storageMutationFailurePreservesTheReportAndWorkspaceSwitchClearsIt()
         async throws
     {
