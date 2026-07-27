@@ -138,13 +138,24 @@ This step is intentionally confined to the disposable hosted runner; the local
 entry point never changes a developer Mac. The three nonstandard descriptors
 remain manual-system cases and are not simulated by the automated harness.
 
-`calibration` takes five captures per case in each of three fresh test
-processes and writes one record per process.
+`calibration` takes five compositor frames from one continuously hosted
+production window per case in each of three fresh test processes and writes
+one record per process. Reconstructing the view and window between those five
+frames is not capture calibration: it changes the WindowServer history being
+measured and can manufacture state drift that a single baseline or regression
+capture never exercises. The first process's one-hash-per-case result becomes
+the in-job reference for processes two and three.
 Identical encoded hashes prove every pair is exact without repeatedly decoding
 the same pixels; any unequal hash triggers full channel, changed-pixel, and
 luminance comparisons. Each record includes its process index, exact
 environment, five per-case PNG hashes, source revision, committed-manifest
 hash, fixture-catalog hash, and GitHub run identity.
+Any within-process or cross-process hash difference fails the evidence job
+after writing the JSON available at that point and retaining only the
+synthetic differing frames under `CalibrationDiagnostics`. A successful
+evidence job is therefore a hard zero-difference gate, but the downloaded
+records and their candidate-hash relationship must still be reviewed before
+baseline import.
 
 The accepted calibration records under
 `docs/audits/visual-regression-calibration/` must come from the same exact

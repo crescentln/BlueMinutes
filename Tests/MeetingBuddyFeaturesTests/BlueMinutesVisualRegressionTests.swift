@@ -240,6 +240,81 @@ struct BlueMinutesVisualRegressionTests {
         }
     }
 
+    @Test @MainActor
+    func compositedFrameSequenceReusesOneValidatedWindow()
+        async throws
+    {
+        guard #available(macOS 26.0, *)
+        else { return }
+        let descriptor =
+            BlueMinutesVisualCaptureDescriptor(
+                id:
+                    "composited-sequence-probe",
+                surface:
+                    "capture-contract",
+                state: "ready",
+                viewport:
+                    BlueMinutesVisualViewport(
+                        width: 320,
+                        height: 240
+                    ),
+                appearance: .light,
+                accessibility:
+                    .standard,
+                locale: "en_US_POSIX",
+                timeZone: "UTC",
+                accent: "systemBlue",
+                textSize: "large",
+                inspectorPresented: false
+            )
+        var validationCount = 0
+        let captures =
+            try await BlueMinutesRuntimeCapture
+            .captureCompositedFrames(
+                descriptor: descriptor,
+                content:
+                    AnyView(
+                        Text(
+                            "Synthetic composited sequence probe"
+                        )
+                        .frame(
+                            maxWidth:
+                                .infinity,
+                            maxHeight:
+                                .infinity
+                        )
+                        .background(
+                            Color.white
+                        )
+                    ),
+                count: 2,
+                validating: {
+                    data in
+                    validationCount += 1
+                    _ = try BlueMinutesRuntimeCapture
+                        .validatePNG(
+                            data,
+                            expectedViewport:
+                                descriptor.viewport
+                        )
+                }
+            )
+
+        #expect(captures.count == 2)
+        #expect(validationCount == 2)
+        #expect(
+            captures.map {
+                BlueMinutesRuntimeCapture
+                    .sha256($0)
+            }
+                .allSatisfy {
+                    $0
+                        == BlueMinutesRuntimeCapture
+                        .sha256(captures[0])
+                }
+        )
+    }
+
     @Test
     func representativeMatrixHasExactCoverage()
     {
@@ -1129,30 +1204,83 @@ struct BlueMinutesVisualRegressionTests {
                 BlueMinutesVisualHarnessError
                 .executionEnvironmentMismatch
         }
+        let outputRoot =
+            try artifactRoot()
+        try FileManager.default
+            .createDirectory(
+                at: outputRoot,
+                withIntermediateDirectories:
+                    true
+            )
+        let manifestData =
+            try Data(
+                contentsOf:
+                    try visualResourceRoot()
+                    .appendingPathComponent(
+                        "manifest.json"
+                    )
+            )
+        let catalogData =
+            try encodedJSON(
+                BlueMinutesVisualFixtureCase
+                .all
+                .map(\.descriptor)
+                .sorted {
+                    $0.id < $1.id
+                }
+            )
+        let sourceRevision =
+            try sourceRevision()
+        let manifestSHA256 =
+            BlueMinutesRuntimeCapture
+            .sha256(manifestData)
+        let fixtureCatalogSHA256 =
+            BlueMinutesRuntimeCapture
+            .sha256(catalogData)
+        let processEnvironment =
+            ProcessInfo.processInfo
+            .environment
+        let referenceHashes =
+            try calibrationReferenceHashes(
+                processIndex: processIndex,
+                outputRoot: outputRoot,
+                sourceRevision:
+                    sourceRevision,
+                manifestSHA256:
+                    manifestSHA256,
+                fixtureCatalogSHA256:
+                    fixtureCatalogSHA256,
+                githubRunID:
+                    processEnvironment[
+                        "GITHUB_RUN_ID"
+                    ],
+                githubRunAttempt:
+                    processEnvironment[
+                        "GITHUB_RUN_ATTEMPT"
+                    ]
+            )
         var evidence:
             [BlueMinutesVisualCalibrationEvidence] =
             []
+        var varianceDetected = false
         for fixture in
             BlueMinutesVisualFixtureCase.all
         {
-            var captures: [Data] = []
-            for _ in 0..<5 {
-                captures.append(
-                    try await capture(
-                        fixture
-                    )
+            let captures =
+                try await captureFrames(
+                    fixture,
+                    count: 5
                 )
-            }
+            let captureHashes =
+                captures.map {
+                    BlueMinutesRuntimeCapture
+                        .sha256($0)
+                }
             var maximumDelta: UInt8 = 0
             var maximumChangedRatio = 0.0
             var minimumSSIM = 1.0
             let hashes =
-                Set(
-                    captures.map {
-                        BlueMinutesRuntimeCapture
-                            .sha256($0)
-                    }
-                )
+                Set(captureHashes)
             if hashes.count > 1 {
                 for first in captures.indices {
                     for second in
@@ -1186,16 +1314,35 @@ struct BlueMinutesVisualRegressionTests {
                     }
                 }
             }
+            let referenceHash =
+                referenceHashes?[
+                    fixture.id
+                ]
+            let differsFromReference =
+                referenceHash.map {
+                    reference in
+                    captureHashes.contains {
+                        $0 != reference
+                    }
+                } ?? false
+            if hashes.count > 1
+                || differsFromReference
+            {
+                varianceDetected = true
+                try writeCalibrationDiagnostics(
+                    captures,
+                    fixture: fixture,
+                    processIndex:
+                        processIndex
+                )
+            }
             evidence.append(
                 BlueMinutesVisualCalibrationEvidence(
                     id: fixture.id,
                     captureCount: 5,
                     pairCount: 10,
                     capturePNGHashes:
-                        captures.map {
-                            BlueMinutesRuntimeCapture
-                            .sha256($0)
-                        },
+                        captureHashes,
                     maximumChannelDelta:
                         maximumDelta,
                     maximumChangedPixelRatio:
@@ -1205,34 +1352,6 @@ struct BlueMinutesVisualRegressionTests {
                 )
             )
         }
-        let outputRoot =
-            try artifactRoot()
-        try FileManager.default
-            .createDirectory(
-                at: outputRoot,
-                withIntermediateDirectories:
-                    true
-            )
-        let manifestData =
-            try Data(
-                contentsOf:
-                    try visualResourceRoot()
-                    .appendingPathComponent(
-                        "manifest.json"
-                    )
-            )
-        let catalogData =
-            try encodedJSON(
-                BlueMinutesVisualFixtureCase
-                .all
-                .map(\.descriptor)
-                .sorted {
-                    $0.id < $1.id
-                }
-            )
-        let processEnvironment =
-            ProcessInfo.processInfo
-            .environment
         let runEvidence =
             BlueMinutesVisualCalibrationRunEvidence(
                 version: 1,
@@ -1241,17 +1360,11 @@ struct BlueMinutesVisualRegressionTests {
                 environment:
                     canonicalEnvironment,
                 sourceRevision:
-                    try sourceRevision(),
+                    sourceRevision,
                 manifestSHA256:
-                    BlueMinutesRuntimeCapture
-                    .sha256(
-                        manifestData
-                    ),
+                    manifestSHA256,
                 fixtureCatalogSHA256:
-                    BlueMinutesRuntimeCapture
-                    .sha256(
-                        catalogData
-                    ),
+                    fixtureCatalogSHA256,
                 githubRunID:
                     processEnvironment[
                         "GITHUB_RUN_ID"
@@ -1268,9 +1381,137 @@ struct BlueMinutesVisualRegressionTests {
                     outputRoot
                     .appendingPathComponent(
                         "calibration-\(processIndex).json"
+                ),
+                options: .atomic
+            )
+        guard !varianceDetected
+        else {
+            throw
+                BlueMinutesVisualHarnessError
+                .calibrationVariance(
+                    processIndex
+                )
+        }
+    }
+
+    private func calibrationReferenceHashes(
+        processIndex: Int,
+        outputRoot: URL,
+        sourceRevision: String,
+        manifestSHA256: String,
+        fixtureCatalogSHA256: String,
+        githubRunID: String?,
+        githubRunAttempt: String?
+    ) throws -> [String: String]? {
+        guard processIndex > 1
+        else { return nil }
+        let referenceData =
+            try Data(
+                contentsOf:
+                    outputRoot
+                    .appendingPathComponent(
+                        "calibration-1.json"
+                    )
+            )
+        let reference =
+            try JSONDecoder().decode(
+                BlueMinutesVisualCalibrationRunEvidence
+                    .self,
+                from: referenceData
+            )
+        let referenceIDs =
+            reference.cases.map(\.id)
+        guard reference.version == 1,
+              reference.processIndex == 1,
+              reference.environment
+                == canonicalEnvironment,
+              reference.sourceRevision
+                == sourceRevision,
+              reference.manifestSHA256
+                == manifestSHA256,
+              reference.fixtureCatalogSHA256
+                == fixtureCatalogSHA256,
+              reference.githubRunID
+                == githubRunID,
+              reference.githubRunAttempt
+                == githubRunAttempt,
+              reference.cases.count
+                == BlueMinutesVisualFixtureCase
+                .all.count,
+              Set(referenceIDs).count
+                == referenceIDs.count,
+              reference.cases.allSatisfy({
+                  evidence in
+                  evidence.captureCount == 5
+                      && evidence.pairCount == 10
+                      && evidence
+                      .capturePNGHashes
+                      .count == 5
+                      && Set(
+                          evidence
+                          .capturePNGHashes
+                      ).count == 1
+                      && evidence
+                      .maximumChannelDelta == 0
+                      && evidence
+                      .maximumChangedPixelRatio
+                      == 0
+                      && evidence
+                      .minimumLuminanceSSIM
+                      == 1
+              })
+        else {
+            throw
+                BlueMinutesVisualHarnessError
+                .executionEnvironmentMismatch
+        }
+        return Dictionary(
+            uniqueKeysWithValues:
+                reference.cases.map {
+                    evidence in
+                    (
+                        evidence.id,
+                        evidence
+                            .capturePNGHashes[0]
+                    )
+                }
+        )
+    }
+
+    private func writeCalibrationDiagnostics(
+        _ captures: [Data],
+        fixture:
+            BlueMinutesVisualFixtureCase,
+        processIndex: Int
+    ) throws {
+        let diagnosticRoot =
+            try artifactRoot()
+            .appendingPathComponent(
+                "CalibrationDiagnostics",
+                isDirectory: true
+            )
+            .appendingPathComponent(
+                "process-\(processIndex)",
+                isDirectory: true
+            )
+        try FileManager.default
+            .createDirectory(
+                at: diagnosticRoot,
+                withIntermediateDirectories:
+                    true
+            )
+        for (captureIndex, data)
+            in captures.enumerated()
+        {
+            try data.write(
+                to:
+                    diagnosticRoot
+                    .appendingPathComponent(
+                        "\(fixture.id)-capture-\(captureIndex + 1).png"
                     ),
                 options: .atomic
             )
+        }
     }
 
     @MainActor
@@ -1438,18 +1679,38 @@ struct BlueMinutesVisualRegressionTests {
         _ fixture:
             BlueMinutesVisualFixtureCase
     ) async throws -> Data {
+        guard let capture =
+            try await captureFrames(
+                fixture,
+                count: 1
+            )
+            .first
+        else {
+            throw BlueMinutesVisualHarnessError
+                .testPNGMalformed
+        }
+        return capture
+    }
+
+    @MainActor
+    private func captureFrames(
+        _ fixture:
+            BlueMinutesVisualFixtureCase,
+        count: Int
+    ) async throws -> [Data] {
         let content =
             try await
             BlueMinutesProductionVisualFixtureFactory
             .content(for: fixture)
         do {
-            let data =
+            let captures =
                 try await BlueMinutesRuntimeCapture
-                .captureComposited(
+                .captureCompositedFrames(
                     descriptor:
                         fixture.descriptor,
                     content:
                         content.view,
+                    count: count,
                     validating: {
                         data in
                         try validateCompositedStructure(
@@ -1459,7 +1720,7 @@ struct BlueMinutesVisualRegressionTests {
                     }
                 )
             await content.teardown()
-            return data
+            return captures
         } catch let failure
             as BlueMinutesCompositedCaptureValidationFailure
         {
@@ -2160,6 +2421,7 @@ private enum BlueMinutesVisualHarnessError:
     case missingGolden(String)
     case pixelMismatch(String)
     case goldenContractMismatch(String)
+    case calibrationVariance(Int)
     case compositorEdgesNotNormalized(
         String
     )
