@@ -236,6 +236,10 @@ enum BlueMinutesRuntimeCapture {
         false
     private static var didPrimeApplicationRunLoop =
         false
+    private static let applicationActivationTimeout:
+        TimeInterval = 2
+    private static let applicationActivationPollInterval:
+        TimeInterval = 0.05
 
     private static func prepareVisualWindow(
         descriptor:
@@ -388,23 +392,31 @@ enum BlueMinutesRuntimeCapture {
             }
             application.run()
         }
-        application.activate(
-            ignoringOtherApps: true
-        )
-        window.makeKeyAndOrderFront(nil)
-        RunLoop.main.run(
-            until:
-                Date(
-                    timeIntervalSinceNow:
-                        0.05
-                )
-        )
-        guard application.isActive,
-              window.isKeyWindow
-        else {
-            throw BlueMinutesRuntimeCaptureError
-                .applicationActivationFailed
-        }
+        let deadline =
+            ProcessInfo.processInfo
+            .systemUptime
+                + applicationActivationTimeout
+        repeat {
+            application.activate(
+                ignoringOtherApps: true
+            )
+            window.makeKeyAndOrderFront(nil)
+            RunLoop.main.run(
+                until:
+                    Date(
+                        timeIntervalSinceNow:
+                            applicationActivationPollInterval
+                    )
+            )
+            if application.isActive,
+               window.isKeyWindow
+            {
+                return
+            }
+        } while ProcessInfo.processInfo
+            .systemUptime < deadline
+        throw BlueMinutesRuntimeCaptureError
+            .applicationActivationFailed
     }
 
     static func capture(
