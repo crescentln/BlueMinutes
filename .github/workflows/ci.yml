@@ -113,7 +113,6 @@ jobs:
     timeout-minutes: 30
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-      MEETINGBUDDY_VISUAL_ARTIFACT_DIR: ${{ runner.temp }}/blueminutes-visual-failures
       MEETINGBUDDY_VISUAL_MODE: regression
     steps:
       - name: Check out source
@@ -122,6 +121,8 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Run pinned native visual regression
+        env:
+          MEETINGBUDDY_VISUAL_ARTIFACT_DIR: ${{ runner.temp }}/blueminutes-visual-failures
         run: ./script/run_visual_regression.sh
 
       - name: Upload visual evidence
@@ -152,7 +153,6 @@ jobs:
     timeout-minutes: 30
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-      MEETINGBUDDY_VISUAL_ARTIFACT_DIR: ${{ runner.temp }}/blueminutes-visual-evidence
       MEETINGBUDDY_VISUAL_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.visual_mode || github.event.label.name == 'visual-calibration' && 'calibration' || 'candidate' }}
     steps:
       - name: Check out exact evidence source
@@ -161,6 +161,8 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Generate pinned native visual evidence
+        env:
+          MEETINGBUDDY_VISUAL_ARTIFACT_DIR: ${{ runner.temp }}/blueminutes-visual-evidence
         run: ./script/run_visual_regression.sh
 
       - name: Upload visual evidence
