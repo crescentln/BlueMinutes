@@ -2439,8 +2439,6 @@ public final class MediaReviewStore {
         _ operation: () async throws -> Void
     ) async {
         guard !isWorking else {
-            storageFailureMessage =
-                "Wait for the current local operation to finish, then refresh the exact storage ledger."
             return
         }
         safeErrorMessage = nil
@@ -2454,6 +2452,7 @@ public final class MediaReviewStore {
         }
         do {
             try await operation()
+            storageFailureMessage = nil
         } catch {
             storageFailureMessage =
                 failureMessage
