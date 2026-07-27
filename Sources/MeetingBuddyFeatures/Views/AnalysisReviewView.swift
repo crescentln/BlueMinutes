@@ -3,6 +3,26 @@ import MeetingBuddyDomain
 import Observation
 import SwiftUI
 
+struct AnalysisReviewSectionState:
+    Equatable,
+    Sendable
+{
+    let showsDelegationPositionEmptyState:
+        Bool
+    let showsInterventionEmptyState:
+        Bool
+
+    init(
+        delegationPositionCount: Int,
+        interventionCount: Int
+    ) {
+        showsDelegationPositionEmptyState =
+            delegationPositionCount == 0
+        showsInterventionEmptyState =
+            interventionCount == 0
+    }
+}
+
 struct AnalysisReviewView: View {
     @Bindable var store: MediaReviewStore
     @Bindable var sceneState: MediaReviewSceneState
@@ -181,6 +201,17 @@ struct AnalysisReviewView: View {
                 for: $0.evidenceReference
             )
         }
+        let sectionState =
+            AnalysisReviewSectionState(
+                delegationPositionCount:
+                    review
+                    .delegationPositionCards
+                    .count,
+                interventionCount:
+                    review
+                    .interventionCards
+                    .count
+            )
 
         return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -193,11 +224,17 @@ struct AnalysisReviewView: View {
                 coverageHeader(review)
                 delegationCards(
                     review,
-                    presentation: presentation
+                    presentation: presentation,
+                    showsEmptyState:
+                        sectionState
+                        .showsDelegationPositionEmptyState
                 )
                 interventionCards(
                     review,
-                    presentation: presentation
+                    presentation: presentation,
+                    showsEmptyState:
+                        sectionState
+                        .showsInterventionEmptyState
                 )
                 positionEditor(
                     review,
@@ -297,10 +334,23 @@ struct AnalysisReviewView: View {
 
     private func delegationCards(
         _ review: AnalysisReviewBundle,
-        presentation: AnalysisReviewPresentation
+        presentation:
+            AnalysisReviewPresentation,
+        showsEmptyState: Bool
     ) -> some View {
         GroupBox("Delegation-position cards") {
             VStack(alignment: .leading, spacing: 16) {
+                if showsEmptyState {
+                    WorkflowStateView(
+                        title:
+                            "No delegation-position cards",
+                        detail:
+                            "This exact analysis ledger contains no delegation-by-issue synthesis cards.",
+                        systemImage:
+                            "rectangle.stack.badge.minus",
+                        tone: .neutral
+                    )
+                }
                 ForEach(review.delegationPositionCards, id: \.revision.revisionID) { card in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -368,10 +418,23 @@ struct AnalysisReviewView: View {
 
     private func interventionCards(
         _ review: AnalysisReviewBundle,
-        presentation: AnalysisReviewPresentation
+        presentation:
+            AnalysisReviewPresentation,
+        showsEmptyState: Bool
     ) -> some View {
         GroupBox("Intervention cards") {
             VStack(alignment: .leading, spacing: 14) {
+                if showsEmptyState {
+                    WorkflowStateView(
+                        title:
+                            "No intervention cards",
+                        detail:
+                            "This exact analysis ledger contains no published intervention summaries.",
+                        systemImage:
+                            "text.badge.minus",
+                        tone: .neutral
+                    )
+                }
                 ForEach(review.interventionCards, id: \.revision.revisionID) { card in
                     VStack(alignment: .leading, spacing: 7) {
                         HStack {

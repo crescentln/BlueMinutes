@@ -6,11 +6,36 @@ Scope: synthetic application-owned SwiftUI/AppKit content only
 ## Contract
 
 The harness runs inside `MeetingBuddyFeaturesTests`. Each case is hosted in a
-borderless `NSWindow` through `NSHostingView`, rendered at exactly one output
-pixel per point, and normalized into opaque 8-bit sRGB. The encoder removes
-timestamp, text, EXIF, path, and identifying chunks, embeds the canonical sRGB
-ICC profile, and rejects any PNG that is not color type 2 at the declared
-dimensions.
+borderless `NSWindow` through `NSHostingView`, allowed to settle for one
+second, and captured as the exact process-owned desktop-independent window by
+macOS 26 `SCScreenshotManager` in canonical SDR. This captures native
+compositor-owned Liquid Glass, inspector, list, and button layers that
+`NSView.cacheDisplay` does not contain. It includes no cursor, audio, desktop,
+or other application window. Shareable content is obtained through the
+current-process-only API, which exposes the process's own redacted window list
+without user consent through TCC. The harness never requests Screen Recording
+permission or changes TCC state; an exact runner that cannot capture the
+already-created test window fails closed. No application entitlement,
+permission prompt, or production capture path is added.
+
+The composed result is rendered at exactly one output pixel per point and
+normalized into opaque 8-bit sRGB. The outermost one-pixel WindowServer frame
+is outside the owned content surface, so its variable framing tint is replaced
+with the adjacent owned edge pixel before hashing. The full resulting image
+still participates in comparison. Representative sidebar, inspector, and
+native-action regions must each contain at least 32 distinct RGB colors, so a
+blank region fails before candidate, calibration, or regression evidence can
+pass. This is an explicit blank-region smoke gate, not proof that every
+control is correct; runtime AX contracts and human review of every candidate
+image remain independent gates. Content-specific runtime AX tests prove the
+exact Local Media and Recording buttons represented by the native-action
+regions, including unique AX identifiers, exact labels, native button roles,
+and button centers with at least half of each frame inside its shared pixel
+region contract. Inspector AX tests separately prove both inspector regions.
+The encoder removes timestamp, text, EXIF, path, and identifying chunks,
+embeds the canonical sRGB ICC profile, and rejects any PNG that is not color
+type 2 at the declared dimensions. The synchronous `NSView.cacheDisplay` path
+remains only for isolated PNG encoder and format-contract tests.
 
 `Tests/MeetingBuddyFeaturesTests/VisualRegression/manifest.json` binds every
 accepted golden to:

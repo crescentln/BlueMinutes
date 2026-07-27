@@ -366,6 +366,65 @@ struct AnalysisReviewPresentationTests {
     }
 
     @Test
+    func analysisSectionEmptyStatesTrackBothCardCollectionsIndependently() {
+        let empty =
+            AnalysisReviewSectionState(
+                delegationPositionCount: 0,
+                interventionCount: 0
+            )
+        #expect(
+            empty
+                .showsDelegationPositionEmptyState
+        )
+        #expect(
+            empty
+                .showsInterventionEmptyState
+        )
+
+        let populated =
+            AnalysisReviewSectionState(
+                delegationPositionCount: 1,
+                interventionCount: 1
+            )
+        #expect(
+            !populated
+                .showsDelegationPositionEmptyState
+        )
+        #expect(
+            !populated
+                .showsInterventionEmptyState
+        )
+
+        let interventionOnly =
+            AnalysisReviewSectionState(
+                delegationPositionCount: 0,
+                interventionCount: 1
+            )
+        #expect(
+            interventionOnly
+                .showsDelegationPositionEmptyState
+        )
+        #expect(
+            !interventionOnly
+                .showsInterventionEmptyState
+        )
+
+        let delegationOnly =
+            AnalysisReviewSectionState(
+                delegationPositionCount: 1,
+                interventionCount: 0
+            )
+        #expect(
+            !delegationOnly
+                .showsDelegationPositionEmptyState
+        )
+        #expect(
+            delegationOnly
+                .showsInterventionEmptyState
+        )
+    }
+
+    @Test
     func analysisInspectorUsesApplicationOwnedProjectionOnly()
         throws
     {
@@ -383,6 +442,26 @@ struct AnalysisReviewPresentationTests {
         )
 
         #expect(viewSource.contains(".inspector("))
+        #expect(
+            viewSource.contains(
+                "No delegation-position cards"
+            )
+        )
+        #expect(
+            viewSource.contains(
+                "No intervention cards"
+            )
+        )
+        #expect(
+            viewSource.contains(
+                "review.delegationPositionCards"
+            )
+        )
+        #expect(
+            viewSource.contains(
+                "review.interventionCards"
+            )
+        )
         #expect(
             viewSource.contains(
                 "@State private var inspectorIsPresented = false"

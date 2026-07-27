@@ -587,6 +587,165 @@ struct BlueMinutesSettingsTests {
     }
 
     @Test @MainActor
+    func visualLayerSmokeRegionsExposeTheirExactRuntimeControls()
+        async throws
+    {
+        let contractsByFixture =
+            Dictionary(
+                grouping:
+                    BlueMinutesVisualNativeActionContract
+                    .all,
+                by: \.fixtureID
+            )
+        for fixtureID in
+            contractsByFixture.keys.sorted()
+        {
+            let contracts =
+                try #require(
+                    contractsByFixture[
+                        fixtureID
+                    ]
+                )
+            let fixture =
+                try #require(
+                    BlueMinutesVisualFixtureCase
+                    .all.first {
+                        $0.id
+                            == fixtureID
+                    }
+                )
+            let content =
+                try await
+                BlueMinutesProductionVisualFixtureFactory
+                .content(
+                    for: fixture
+                )
+            let title =
+                "BlueMinutes Visual Controls "
+                    + fixtureID
+            let snapshots =
+                try withHostedWindow(
+                    title: title,
+                    size:
+                        CGSize(
+                            width:
+                                fixture
+                                .descriptor
+                                .viewport
+                                .width,
+                            height:
+                                fixture
+                                .descriptor
+                                .viewport
+                                .height
+                        ),
+                    content: {
+                        content.view.frame(
+                            maxWidth:
+                                .infinity,
+                            maxHeight:
+                                .infinity
+                        )
+                    },
+                    operation: { _ in
+                        try accessibilitySnapshots(
+                            windowTitle: title,
+                            identifiers:
+                                Set(
+                                    contracts.map(
+                                        \.accessibilityIdentifier
+                                    )
+                                )
+                        )
+                    }
+                )
+            await content.teardown()
+
+            for contract in contracts {
+                let snapshot =
+                    try #require(
+                        snapshots[
+                            contract
+                            .accessibilityIdentifier
+                        ]
+                    )
+                #expect(
+                    snapshots.occurrenceCount(
+                        contract
+                        .accessibilityIdentifier
+                    ) == 1
+                )
+                #expect(
+                    snapshot.role
+                        == kAXButtonRole
+                )
+                #expect(
+                    snapshot.label
+                        == contract
+                        .accessibilityLabel
+                )
+                let relativeFrame =
+                    CGRect(
+                        x:
+                            snapshot.frame.minX
+                                - snapshots
+                                .containingFrame
+                                .minX,
+                        y:
+                            snapshot.frame.minY
+                                - snapshots
+                                .containingFrame
+                                .minY,
+                        width:
+                            snapshot.frame.width,
+                        height:
+                            snapshot.frame.height
+                    )
+                let region =
+                    CGRect(
+                        x: contract.region.x,
+                        y: contract.region.y,
+                        width:
+                            contract.region.width,
+                        height:
+                            contract.region.height
+                    )
+                let center =
+                    CGPoint(
+                        x:
+                            relativeFrame.midX,
+                        y:
+                            relativeFrame.midY
+                    )
+                #expect(
+                    region.contains(center),
+                    "\(contract.accessibilityIdentifier) center \(center) is outside \(region)."
+                )
+                let intersection =
+                    relativeFrame
+                    .intersection(region)
+                let elementArea =
+                    relativeFrame.width
+                        * relativeFrame.height
+                let intersectionArea =
+                    intersection.isNull
+                    ? 0
+                    : intersection.width
+                        * intersection.height
+                #expect(
+                    elementArea > 0
+                )
+                #expect(
+                    intersectionArea
+                        / elementArea
+                        >= 0.5,
+                    "\(contract.accessibilityIdentifier) is not primarily inside \(region)."
+                )
+            }
+        }
+    }
+
+    @Test @MainActor
     func productionTranscriptInspectorOpenAndClosedStatesChangeNativeLayout()
         async throws
     {

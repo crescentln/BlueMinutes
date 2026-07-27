@@ -56,6 +56,9 @@ struct LocalMediaIntakeView: View {
                 .keyboardShortcut("i", modifiers: .command)
                 .buttonStyle(.borderedProminent)
                 .disabled(store.isWorking)
+                .accessibilityIdentifier(
+                    "BlueMinutes.LocalMedia.ChooseSource"
+                )
                 .accessibilityHint(
                     "Choose one local audio or video file for bounded inspection."
                 )
@@ -132,6 +135,9 @@ struct LocalMediaIntakeView: View {
                 .keyboardShortcut(.return, modifiers: .command)
                 .buttonStyle(.borderedProminent)
                 .disabled(importRequestIsDisabled)
+                .accessibilityIdentifier(
+                    "BlueMinutes.LocalMedia.ImportAndProcess"
+                )
                 .accessibilityHint(
                     importBlockedReason
                         ?? "Copy, hash, register, and process the selected source locally."
