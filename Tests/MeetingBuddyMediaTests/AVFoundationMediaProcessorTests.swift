@@ -86,6 +86,19 @@ struct AVFoundationMediaProcessorTests {
             formatID: kAudioFormatLinearPCM
         )
         let originalBytes = try Data(contentsOf: source)
+        for leasedOutput in [canonical, chunk] {
+            #expect(
+                FileManager.default.createFile(
+                    atPath: leasedOutput.path,
+                    contents: nil,
+                    attributes: [.posixPermissions: 0o600]
+                )
+            )
+            #expect(
+                try leasedOutput.resourceValues(forKeys: [.fileSizeKey])
+                    .fileSize == 0
+            )
+        }
 
         let processor = AVFoundationMediaProcessor()
         let inspection = try await processor.inspect(source)
@@ -125,6 +138,35 @@ struct AVFoundationMediaProcessorTests {
         #expect(chunkFile.fileFormat.sampleRate == 16_000)
         #expect(chunkFile.fileFormat.channelCount == 1)
         #expect(chunkFile.length == 8_000)
+    }
+
+    @Test
+    func canonicalTranscodeDoesNotOverwriteANonemptyDestination() async throws {
+        let directory = try fixtureDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("synthetic.wav")
+        let destination = directory.appendingPathComponent("canonical.caf")
+        try writeSyntheticAudio(
+            to: source,
+            fileType: kAudioFileWAVEType,
+            formatID: kAudioFormatLinearPCM
+        )
+        let sentinel = Data("existing-owned-output".utf8)
+        try sentinel.write(to: destination)
+
+        let processor = AVFoundationMediaProcessor()
+        let inspection = try await processor.inspect(source)
+        let selected = try inspection.requireTrack(nil)
+        await #expect(throws: MediaContractError.self) {
+            _ = try await processor.writeCanonicalAudio(
+                from: source,
+                selectedTrack: selected.trackIdentifier,
+                expectedTimelineFrameCount: inspection.durationFrameCount,
+                profile: .v1,
+                to: destination
+            )
+        }
+        #expect(try Data(contentsOf: destination) == sentinel)
     }
 
     private func fixtureDirectory() throws -> URL {

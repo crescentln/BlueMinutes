@@ -173,6 +173,7 @@ public final class AVFoundationMediaProcessor: NativeMediaProcessing, @unchecked
         }
         reader.add(output)
 
+        try prepareAVAssetWriterDestination(destinationURL)
         let writer = try AVAssetWriter(outputURL: destinationURL, fileType: .caf)
         let input = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
         input.expectsMediaDataInRealTime = false
@@ -263,6 +264,40 @@ public final class AVFoundationMediaProcessor: NativeMediaProcessing, @unchecked
             AVLinearPCMIsBigEndianKey: !profile.isLittleEndian,
             AVLinearPCMIsNonInterleaved: !profile.isInterleaved
         ]
+    }
+
+    private func prepareAVAssetWriterDestination(_ destinationURL: URL) throws {
+        let values: URLResourceValues
+        do {
+            values = try destinationURL.resourceValues(
+                forKeys: [
+                    .fileSizeKey,
+                    .isRegularFileKey,
+                    .isSymbolicLinkKey
+                ]
+            )
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return
+        } catch {
+            throw MediaContractError.processingFailed(
+                "The canonical audio destination could not be verified."
+            )
+        }
+        guard values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              values.fileSize == 0
+        else {
+            throw MediaContractError.processingFailed(
+                "The canonical audio destination is not an empty owned task file."
+            )
+        }
+        do {
+            try FileManager.default.removeItem(at: destinationURL)
+        } catch {
+            throw MediaContractError.processingFailed(
+                "The canonical audio destination could not be prepared."
+            )
+        }
     }
 
     private func frameCount(for time: CMTime) throws -> UInt64 {
