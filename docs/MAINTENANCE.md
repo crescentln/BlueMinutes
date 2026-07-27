@@ -107,7 +107,14 @@ command must already run in an earlier step of the same required job;
 exclusions are de-duplication, never coverage waivers. In the current workflow,
 `threeHourRetryAcrossManagerRestartPreservesExactCoverageAndTraceability` runs
 through `--filter TranscriptPipelineIntegrationTests` before the
-remaining-suite skip.
+remaining-suite skip. Tests that finish-launch `NSApplication` to inspect real
+native windows run one per process, and the visual regression contract suite
+runs in a separate process, before both groups are skipped by the remaining
+suite. This prevents the command-line test host's AppKit lifecycle from ending
+an unrelated in-flight test while preserving exact per-test coverage. Every
+isolated native-window invocation, the visual contract suite, and the
+remaining-suite step require a non-zero Swift Testing pass summary; a zero
+exit status without that summary fails CI.
 
 Also run every focused suite relevant to the change. At minimum:
 

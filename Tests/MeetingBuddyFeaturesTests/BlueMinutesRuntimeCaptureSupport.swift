@@ -378,7 +378,9 @@ enum BlueMinutesRuntimeCapture {
     static func captureComposited(
         descriptor:
             BlueMinutesVisualCaptureDescriptor,
-        content: AnyView
+        content: AnyView,
+        validating:
+            ((Data) throws -> Void)? = nil
     ) async throws -> Data {
         let prepared =
             try prepareVisualWindow(
@@ -398,12 +400,6 @@ enum BlueMinutesRuntimeCapture {
             throw BlueMinutesRuntimeCaptureError
                 .compositedCaptureRequiresMacOS26
         }
-
-        try await Task.sleep(
-            for: .seconds(1)
-        )
-        window.displayIfNeeded()
-        hostingView.layoutSubtreeIfNeeded()
 
         let windowNumber = window.windowNumber
         let shareableContent =
@@ -446,30 +442,59 @@ enum BlueMinutesRuntimeCapture {
         configuration.dynamicRange =
             .sdr
 
-        let output =
-            try await
-            SCScreenshotManager
-            .captureScreenshot(
-                contentFilter: filter,
-                configuration:
-                    configuration
+        let maximumAttempts =
+            validating == nil ? 1 : 3
+        var lastValidationError:
+            (any Error)?
+        for attempt in 1...maximumAttempts {
+            try await Task.sleep(
+                for:
+                    attempt == 1
+                        ? .seconds(1)
+                        : .milliseconds(500)
             )
-        guard let sourceImage =
-            output.sdrImage
-        else {
-            throw BlueMinutesRuntimeCaptureError
-                .imageCreationFailed
+            window.displayIfNeeded()
+            hostingView.layoutSubtreeIfNeeded()
+
+            let output =
+                try await
+                SCScreenshotManager
+                .captureScreenshot(
+                    contentFilter: filter,
+                    configuration:
+                        configuration
+                )
+            guard let sourceImage =
+                output.sdrImage
+            else {
+                throw BlueMinutesRuntimeCaptureError
+                    .imageCreationFailed
+            }
+            let normalized = try normalizedImage(
+                sourceImage,
+                width: viewport.width,
+                height: viewport.height,
+                appearance:
+                    descriptor.appearance,
+                normalizeCompositorEdges:
+                    true
+            )
+            let data = try encodePNG(
+                normalized
+            )
+            guard let validating
+            else { return data }
+            do {
+                try validating(data)
+                return data
+            } catch {
+                lastValidationError =
+                    error
+            }
         }
-        let normalized = try normalizedImage(
-            sourceImage,
-            width: viewport.width,
-            height: viewport.height,
-            appearance:
-                descriptor.appearance,
-            normalizeCompositorEdges:
-                true
-        )
-        return try encodePNG(normalized)
+        throw lastValidationError
+            ?? BlueMinutesRuntimeCaptureError
+            .imageCreationFailed
     }
 
     static func validatePNG(

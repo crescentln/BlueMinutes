@@ -1374,12 +1374,15 @@ struct BlueMinutesVisualRegressionTests {
                     descriptor:
                         fixture.descriptor,
                     content:
-                        content.view
+                        content.view,
+                    validating: {
+                        data in
+                        try validateCompositedStructure(
+                            data,
+                            fixture: fixture
+                        )
+                    }
                 )
-            try validateCompositedStructure(
-                data,
-                fixture: fixture
-            )
             await content.teardown()
             return data
         } catch {
