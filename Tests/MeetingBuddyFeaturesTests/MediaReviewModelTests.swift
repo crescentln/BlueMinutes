@@ -7397,17 +7397,6 @@ private func makeFeatureAnalysisReview(
             evidenceID,
             evidenceRevisionID
         )
-    let interventionReference =
-        try featureReference(
-            featureID(
-                815,
-                InterventionCardID.self
-            ),
-            featureID(
-                816,
-                RevisionID.self
-            )
-        )
     let analysisRequest = try ModelRouteRequest(
         capability: .analysis,
         dataClassification: .internal,
@@ -7422,16 +7411,7 @@ private func makeFeatureAnalysisReview(
             .evidenceIdentifiers
         ],
         visibleUserAuthorization: true,
-        localModelAvailable: !staleCard
-    )
-    let analysisProvider = try ProviderMetadata(
-        providerIdentifier:
-            "meetingbuddy-deterministic-analysis",
-        modelIdentifier:
-            "feature-analysis-fixture-v1",
-        modelVersion: "1",
-        clientVersion:
-            "feature-fixture-v1"
+        localModelAvailable: false
     )
     let ledger = try AnalysisCoverageLedger(
         ledgerID: featureID(800, AnalysisCoverageLedgerID.self),
@@ -7445,7 +7425,7 @@ private func makeFeatureAnalysisReview(
             frameworkIdentifier: "meetingbuddy.synthetic.analysis",
             adapterVersion: "feature-fixture-v1",
             localeIdentifier: "en",
-            modelAvailable: !staleCard,
+            modelAvailable: false,
             noOutboundMode: true
         ),
         promptModules: [
@@ -7460,32 +7440,14 @@ private func makeFeatureAnalysisReview(
         inputPackageDigest: try ContentDigest.sha256(
             ofUTF8Text: "feature-analysis-input"
         ),
-        status:
-            staleCard
-            ? .incomplete
-            : .published,
+        status: .incomplete,
         segments: [
-            staleCard
-                ? try AnalysisSegmentCoverage(
-                    segmentRevision:
-                        segmentReference,
-                    disposition: .missing,
-                    attemptCount: 0
-                )
-                : try AnalysisSegmentCoverage(
-                    segmentRevision:
-                        segmentReference,
-                    disposition:
-                        .substantive,
-                    attemptCount: 1,
-                    provider: analysisProvider,
-                    evidenceRevisions: [
-                        evidenceReference
-                    ],
-                    outputRevisions: [
-                        interventionReference
-                    ]
-                )
+            AnalysisSegmentCoverage(
+                segmentRevision:
+                    segmentReference,
+                disposition: .missing,
+                attemptCount: 0
+            )
         ],
         createdAt: featureInstant(1_950_000_000_200)
     )
