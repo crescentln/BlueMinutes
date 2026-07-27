@@ -175,6 +175,7 @@ enum BlueMinutesRuntimeCaptureError:
     case invalidTimeZone(String)
     case bitmapAllocationFailed
     case compositedCaptureRequiresMacOS26
+    case applicationActivationFailed
     case imageCreationFailed
     case shareableWindowNotFound(Int)
     case pngEncodingFailed
@@ -215,6 +216,27 @@ enum BlueMinutesRuntimeCapture {
         let window: NSWindow
     }
 
+    private final class VisualCaptureWindow:
+        NSWindow
+    {
+        override var canBecomeKey:
+            Bool
+        {
+            true
+        }
+
+        override var canBecomeMain:
+            Bool
+        {
+            true
+        }
+    }
+
+    private static var didFinishLaunching =
+        false
+    private static var didPrimeApplicationRunLoop =
+        false
+
     private static func prepareVisualWindow(
         descriptor:
             BlueMinutesVisualCaptureDescriptor,
@@ -244,8 +266,9 @@ enum BlueMinutesRuntimeCapture {
 
         let application =
             NSApplication.shared
-        if !application.isRunning {
+        if !didFinishLaunching {
             application.finishLaunching()
+            didFinishLaunching = true
         }
 
         let size = CGSize(
@@ -271,7 +294,7 @@ enum BlueMinutesRuntimeCapture {
         )
         hostingView.wantsLayer = true
 
-        let window = NSWindow(
+        let window = VisualCaptureWindow(
             contentRect: CGRect(
                 origin: .zero,
                 size: size
@@ -298,6 +321,10 @@ enum BlueMinutesRuntimeCapture {
             )
         window.contentView = hostingView
         window.makeKeyAndOrderFront(nil)
+        try activateCaptureApplication(
+            application,
+            window: window
+        )
         window.displayIfNeeded()
         hostingView.layoutSubtreeIfNeeded()
 
@@ -307,6 +334,77 @@ enum BlueMinutesRuntimeCapture {
             hostingView: hostingView,
             window: window
         )
+    }
+
+    private static func activateCaptureApplication(
+        _ application: NSApplication,
+        window: NSWindow
+    ) throws {
+        guard
+            application.activationPolicy()
+                == .regular
+                || application
+                .setActivationPolicy(
+                    .regular
+                )
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .applicationActivationFailed
+        }
+
+        application.activate(
+            ignoringOtherApps: true
+        )
+        if !didPrimeApplicationRunLoop {
+            didPrimeApplicationRunLoop =
+                true
+            _ = Timer.scheduledTimer(
+                withTimeInterval: 0.05,
+                repeats: false
+            ) {
+                _ in
+                MainActor.assumeIsolated {
+                    NSApp.stop(nil)
+                    if let event =
+                        NSEvent.otherEvent(
+                            with:
+                                .applicationDefined,
+                            location: .zero,
+                            modifierFlags: [],
+                            timestamp: 0,
+                            windowNumber: 0,
+                            context: nil,
+                            subtype: 0,
+                            data1: 0,
+                            data2: 0
+                        )
+                    {
+                        NSApp.postEvent(
+                            event,
+                            atStart: false
+                        )
+                    }
+                }
+            }
+            application.run()
+        }
+        application.activate(
+            ignoringOtherApps: true
+        )
+        window.makeKeyAndOrderFront(nil)
+        RunLoop.main.run(
+            until:
+                Date(
+                    timeIntervalSinceNow:
+                        0.05
+                )
+        )
+        guard application.isActive,
+              window.isKeyWindow
+        else {
+            throw BlueMinutesRuntimeCaptureError
+                .applicationActivationFailed
+        }
     }
 
     static func capture(
