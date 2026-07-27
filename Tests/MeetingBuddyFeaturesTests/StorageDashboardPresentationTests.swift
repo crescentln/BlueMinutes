@@ -7,6 +7,97 @@ import Testing
 @Suite
 struct StorageDashboardPresentationTests {
     @Test
+    func utcDateLabelUsesUTCIndependentlyOfTheProcessTimeZone()
+        throws
+    {
+        let instant = try UTCInstant(
+            millisecondsSinceUnixEpoch:
+                1_950_000_000_000
+        )
+
+        let label =
+            StorageDashboardPresentation
+            .utcDateLabel(
+                instant,
+                locale:
+                    Locale(
+                        identifier:
+                            "en_US_POSIX"
+                    ),
+                calendar:
+                    Calendar(
+                        identifier:
+                            .gregorian
+                    )
+            )
+
+        #expect(
+            label.contains(
+                "Oct 17, 2031"
+            )
+        )
+        #expect(
+            label.contains(
+                "10:40:00"
+            )
+        )
+        #expect(
+            label.hasSuffix(
+                "1950000000000 ms UTC"
+            )
+        )
+    }
+
+    @Test
+    func utcDateLabelPreservesTheRequestedUserLocale()
+        throws
+    {
+        let instant = try UTCInstant(
+            millisecondsSinceUnixEpoch:
+                1_950_000_000_000
+        )
+        let calendar =
+            Calendar(
+                identifier:
+                    .gregorian
+            )
+        let english =
+            StorageDashboardPresentation
+            .utcDateLabel(
+                instant,
+                locale:
+                    Locale(
+                        identifier:
+                            "en_US_POSIX"
+                    ),
+                calendar: calendar
+            )
+        let french =
+            StorageDashboardPresentation
+            .utcDateLabel(
+                instant,
+                locale:
+                    Locale(
+                        identifier:
+                            "fr_FR"
+                    ),
+                calendar: calendar
+            )
+
+        #expect(english != french)
+        #expect(
+            english.hasSuffix(
+                "1950000000000 ms UTC"
+            )
+        )
+        #expect(
+            french.hasSuffix(
+                "1950000000000 ms UTC"
+            )
+        )
+    }
+
+    @Test
     func initialLoadingReadyAndDegradedStatesStayDistinct()
         throws
     {

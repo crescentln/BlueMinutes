@@ -12,6 +12,50 @@ struct TranscriptReviewView: View {
     @State private var presentationCache:
         TranscriptReviewPresentationCache?
     @FocusState private var focusedEditor: TranscriptEditorFocus?
+    private let inspectorPresentationOverride:
+        Binding<Bool>?
+
+    init(
+        store: MediaReviewStore,
+        sceneState:
+            MediaReviewSceneState,
+        initialInspectorIsPresented:
+            Bool = false,
+        inspectorPresentationOverride:
+            Binding<Bool>? = nil
+    ) {
+        self.store = store
+        self.sceneState = sceneState
+        self.inspectorPresentationOverride =
+            inspectorPresentationOverride
+        _inspectorIsPresented =
+            State(
+                initialValue:
+                    initialInspectorIsPresented
+            )
+    }
+
+    private var inspectorPresentation:
+        Binding<Bool>
+    {
+        inspectorPresentationOverride
+            ?? $inspectorIsPresented
+    }
+
+    private var inspectorPresented: Bool {
+        inspectorPresentation
+            .wrappedValue
+    }
+
+    private func presentInspector() {
+        inspectorPresentation
+            .wrappedValue = true
+    }
+
+    private func toggleInspector() {
+        inspectorPresentation
+            .wrappedValue.toggle()
+    }
 
     var body: some View {
         Group {
@@ -379,7 +423,7 @@ struct TranscriptReviewView: View {
                     .frame(minWidth: 420)
             }
         }
-        .inspector(isPresented: $inspectorIsPresented) {
+        .inspector(isPresented: inspectorPresentation) {
             EvidenceInspectorPanel(
                 segment: selectedSegment,
                 coverage: selectedCoverage,
@@ -443,7 +487,7 @@ struct TranscriptReviewView: View {
                 }
                 Spacer()
                 Button {
-                    inspectorIsPresented.toggle()
+                    toggleInspector()
                 } label: {
                     Label(
                         "Evidence Inspector",
@@ -452,7 +496,7 @@ struct TranscriptReviewView: View {
                     )
                 }
                 .accessibilityValue(
-                    inspectorIsPresented
+                    inspectorPresented
                         ? "Open"
                         : "Closed"
                 )
@@ -841,7 +885,7 @@ struct TranscriptReviewView: View {
                         ) {
                             inspectorEvidenceRevisionID =
                                 item.revision.revisionID
-                            inspectorIsPresented = true
+                            presentInspector()
                         }
                     }
                 }
@@ -1079,7 +1123,7 @@ struct TranscriptReviewView: View {
                 saveFocusedDraft()
             },
             toggleInspector: {
-                inspectorIsPresented.toggle()
+                toggleInspector()
             }
         )
     }

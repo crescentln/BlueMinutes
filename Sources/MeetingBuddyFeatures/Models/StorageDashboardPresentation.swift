@@ -1,3 +1,4 @@
+import Foundation
 import MeetingBuddyApplication
 import MeetingBuddyDomain
 
@@ -79,6 +80,38 @@ enum StorageTrashMutationBlockReason:
 }
 
 enum StorageDashboardPresentation {
+    static func utcDateLabel(
+        _ instant: UTCInstant,
+        locale: Locale =
+            .autoupdatingCurrent,
+        calendar: Calendar =
+            .autoupdatingCurrent
+    ) -> String {
+        let value = Date(
+            timeIntervalSince1970:
+                Double(
+                    instant
+                        .millisecondsSinceUnixEpoch
+                ) / 1_000
+        )
+        var utcCalendar =
+            calendar
+        utcCalendar.locale =
+            locale
+        utcCalendar.timeZone =
+            .gmt
+        let style = Date.FormatStyle(
+            date: .abbreviated,
+            time: .standard,
+            locale: locale,
+            calendar:
+                utcCalendar,
+            timeZone: .gmt
+        )
+        return
+            "\(value.formatted(style)) · \(instant.millisecondsSinceUnixEpoch) ms UTC"
+    }
+
     static func state(
         report: WorkspaceStorageReport?,
         operation: StorageDashboardOperation?,

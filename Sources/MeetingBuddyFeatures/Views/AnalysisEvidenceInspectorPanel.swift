@@ -32,6 +32,16 @@ struct AnalysisEvidenceInspectorPanel: View {
         .accessibilityIdentifier(
             "BlueMinutes.Analysis.EvidenceInspector"
         )
+        .accessibilityLabel(
+            "Analysis evidence inspector"
+        )
+        .accessibilityValue(
+            selection == nil
+                ? "No evidence anchor selected"
+                : evidence == nil
+                    ? "Selected evidence revision is unresolved"
+                    : "Selected evidence revision resolved exactly"
+        )
     }
 
     private func claimSection(
