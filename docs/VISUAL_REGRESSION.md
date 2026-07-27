@@ -104,6 +104,15 @@ runner image/version, arm64, UTC, and POSIX English contract above are in
 force. A local Mac or a later rolling runner image is therefore expected to
 fail closed rather than produce an apparently comparable baseline.
 
+Every ephemeral GitHub-hosted macOS job first establishes the automated
+matrix's standard live accessibility state: Reduce Transparency,
+Differentiate Without Color, and Reduce Motion are written as disabled for the
+runner user, that runner user's preference daemon is restarted, and a separate
+AppKit probe must observe all three as disabled before tests or captures begin.
+This step is intentionally confined to the disposable hosted runner; the local
+entry point never changes a developer Mac. The three nonstandard descriptors
+remain manual-system cases and are not simulated by the automated harness.
+
 `calibration` takes five captures per case in each of three fresh test
 processes and writes one record per process.
 Identical encoded hashes prove every pair is exact without repeatedly decoding

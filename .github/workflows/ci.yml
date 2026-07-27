@@ -45,6 +45,14 @@ jobs:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Establish standard visual accessibility state
+        run: |
+          defaults write com.apple.universalaccess reduceTransparency -bool false
+          defaults write com.apple.universalaccess differentiateWithoutColor -bool false
+          defaults write com.apple.universalaccess reduceMotion -bool false
+          killall -u "$USER" cfprefsd || true
+          xcrun swift -e 'import AppKit; let workspace = NSWorkspace.shared; precondition(!workspace.accessibilityDisplayShouldReduceTransparency && !workspace.accessibilityDisplayShouldDifferentiateWithoutColor && !workspace.accessibilityDisplayShouldReduceMotion, "Visual runner accessibility state is not standard.")'
+
       - name: Verify toolchain
         run: |
           xcodebuild -version
@@ -120,6 +128,14 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
+      - name: Establish standard visual accessibility state
+        run: |
+          defaults write com.apple.universalaccess reduceTransparency -bool false
+          defaults write com.apple.universalaccess differentiateWithoutColor -bool false
+          defaults write com.apple.universalaccess reduceMotion -bool false
+          killall -u "$USER" cfprefsd || true
+          xcrun swift -e 'import AppKit; let workspace = NSWorkspace.shared; precondition(!workspace.accessibilityDisplayShouldReduceTransparency && !workspace.accessibilityDisplayShouldDifferentiateWithoutColor && !workspace.accessibilityDisplayShouldReduceMotion, "Visual runner accessibility state is not standard.")'
+
       - name: Run pinned native visual regression
         env:
           MEETINGBUDDY_VISUAL_ARTIFACT_DIR: ${{ runner.temp }}/blueminutes-visual-failures
@@ -159,6 +175,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Establish standard visual accessibility state
+        run: |
+          defaults write com.apple.universalaccess reduceTransparency -bool false
+          defaults write com.apple.universalaccess differentiateWithoutColor -bool false
+          defaults write com.apple.universalaccess reduceMotion -bool false
+          killall -u "$USER" cfprefsd || true
+          xcrun swift -e 'import AppKit; let workspace = NSWorkspace.shared; precondition(!workspace.accessibilityDisplayShouldReduceTransparency && !workspace.accessibilityDisplayShouldDifferentiateWithoutColor && !workspace.accessibilityDisplayShouldReduceMotion, "Visual runner accessibility state is not standard.")'
 
       - name: Generate pinned native visual evidence
         env:
