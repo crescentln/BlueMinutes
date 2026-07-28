@@ -5,14 +5,29 @@ project: BlueMinutes
 internal_compatibility_name: MeetingBuddy
 controller_version: "1.1"
 master_spec_version: "1.1"
-current_task: "011"
-current_status: accepted
+current_task: "v4-prebeta"
+current_status: in_progress
+active_v4_prebeta_work:
+  title: "BlueMinutes v4 public-Beta functional readiness"
+  authorization_date: "2026-07-28"
+  tracking_issue: "Issue #60 at https://github.com/crescentln/BlueMinutes/issues/60"
+  rollback_anchor: "b41ae589e40ce9811a64c389899bc9639f8188d2"
+  local_branch: "codex/60-v4-foundation"
+  execution_baseline: "maintainer-supplied BlueMinutes_Codex_Final_PreBeta_Review_Implementation_Brief_CN_v4.md reviewed locally and intentionally not tracked"
+  scope: "preserve the existing UI visual language while completing bounded P0/P1 functional readiness: supplied brand replacement, capability-based provider and Task Routing, Codex subscription text intelligence, independent STT/BYOK, deterministic Sensitive Meeting behavior, background/core workflow reliability, disabled release-service guards, audit documents, and test closure"
+  ui_boundary: "current pages, components, colors, typography, layout language, accessibility and visual regression are reused; full visual makeover and design-system restyling remain U1 and require separate user approval"
+  website_boundary: "the separately developed site remains disconnected; the app exposes only a default-disabled typed handoff with no live endpoint"
+  commercial_boundary: "BillingMode.disabled for Beta/1.0; no production Stripe/licensing, trial, paywall, device limit, checkout, or licensing network dependency"
+  distribution_boundary: "no bundled Codex runtime, Developer ID signing, notarization, public binary upload, website deployment, update-feed deployment, or production release"
+  architecture_decision: "docs/adr/ADR-0019-v4-provider-routing-codex-and-release-gates.md"
+  audit_directory: "docs/prebeta-audit"
+  foundation_status: "in progress on the branch named above; exact completion, commit, PR, CI, review, and merge evidence must replace this statement before the foundation slice is accepted"
 authorized_post_mvp_work:
   task: "public GitHub source publication and long-term maintenance foundation"
-  status: "v0.3.0_published_exact_tag_local_development_package_verified_post_release_ledger_pr_59_carrier"
+  status: "v0.3.0_published_exact_tag_local_development_package_verified_post_release_ledger_pr_59_merged"
   rollback_anchor: "94b5ba6d83aaac099fef72b0186def2c36dafbc0"
   implementation_baseline: "protected release baseline 94b5ba6d83aaac099fef72b0186def2c36dafbc0 after release-preparation PR #55 and publication-date PR #57"
-  ledger_carrier: "the commit containing this field is the self-relative post-release Issue #58 and PR #59 ledger carrier based on exact v0.3.0 release baseline 94b5ba6d83aaac099fef72b0186def2c36dafbc0; it records already-complete remote publication and local package evidence without claiming its own future protected-main merge"
+  ledger_carrier: "post-release Issue #58 is closed and PR #59 was rebase-merged at 2026-07-28T13:09:16Z as protected main b41ae589e40ce9811a64c389899bc9639f8188d2"
   public_name_status: "BlueMinutes selected by the maintainer; preliminary exact-name and affiliation-risk screen passed with normal trademark limitations"
   remote_publication_status: "https://github.com/crescentln/BlueMinutes is PUBLIC; the BlueMinutes-first README and v0.1.0 source-release material from Issue #8 and PR #9 were rebased into main at b45b38a, and the exact release baseline is verified by protected-main CI, signed-out HTTP, GitHub API, and anonymous Git access"
   public_conversion_status: "visibility conversion completed under explicit maintainer authorization at e6215373fbefa61f911ca4ee65c33852fd2dea76; main requires Pull Requests, strict Swift build and test status, linear history, conversation resolution, and administrator enforcement, while force-push and branch deletion are disabled"
@@ -31,13 +46,13 @@ authorized_post_mvp_work:
     release_baseline: "94b5ba6d83aaac099fef72b0186def2c36dafbc0"
     release_tag_object: "4a85d60360ec95834e9bf13af7e30113749d7167"
     post_release_issue: "Issue #58 at https://github.com/crescentln/BlueMinutes/issues/58"
-    post_release_pull_request: "PR #59 at https://github.com/crescentln/BlueMinutes/pull/59 is the self-relative two-path execution-ledger and regression-binding carrier"
+    post_release_pull_request: "PR #59 at https://github.com/crescentln/BlueMinutes/pull/59 was rebase-merged at protected main b41ae589e40ce9811a64c389899bc9639f8188d2"
     authorization_scope: "promote the bundle to 0.3.0 build 3, prepare and verify one ignored local ad-hoc development package, update release-facing documentation and tests, rebase-merge PR #55 after exact-head gates, then create an unsigned annotated v0.3.0 tag and regular source-only GitHub Release with zero uploaded assets after exact-new-main gates; Developer ID and Team ID signing, notarization, installation, updater, public binary upload or distribution, deployment, schema, dependency, provider, and network expansion remain excluded"
     merge_authority_status: "the maintainer explicitly authorized the guarded PR #55 and PR #57 rebase merges, v0.3.0 source Release, final exact-tag local package, and this post-release ledger closure within the bounded goal; all completed mutations are recorded only after their live gates passed"
     bundle_version_status: "exact release baseline Configuration/MeetingBuddy-Info.plist is public version 0.3.0 build 3; BlueMinutes.app remains backed by compatibility executable MeetingBuddyApp and bundle identifier com.meetingbuddy.desktop"
     local_package_status: "the ignored BlueMinutes-0.3.0-development release set was rebuilt from clean exact annotated tag v0.3.0 at 94b5ba6d83aaac099fef72b0186def2c36dafbc0 and passes direct-app, coherent-set, fresh-ZIP-extraction, exact-source, signature, launch, and negative distribution verification; it is ad-hoc, not notarized, not installed, not uploaded, and not authorized for distribution"
     local_package_manifest: "schema 2 DEVELOPMENT; distribution_authorized false; 394 tracked files; source tree 4566a3afe5f66ea54b03cea3a13729aecfbdf837; executable sha256 3204c54bdc5e1f1456e5fc247c05d7a64b4dc909358c55edb8d66ed93ab1e212; app-bundle sha256 2452d22ba099c167635b33c518fa759587c79ba9c75fd68cca3ed71e6b370eb0; archive sha256 8e6738aa1d0c2089e0214dcfb3210f9d5fa41dbdd4ccb74b15b2bb213ce97e63; source-inventory sha256 b13bd2fd5ffd6aa233fd9fae9653645ff6ea12604b57998f88bba1484f88b0e4; Package.resolved sha256 a14ed642cc66bd9ebdfcbfc4f23886a78afa0663d97e5243848bf77fbb688e26"
-    next_gate: "complete the self-relative Issue #58 and PR #59 two-path ledger and regression-binding carrier through exact-head review, CI, CodeQL, conversation, guarded rebase merge, and exact-new-main gates; then the authorized v0.3.0 UI Foundation and release goal is closed"
+    next_gate: "none for v0.3.0: Issue #58 is closed and PR #59 is merged; later v4 pre-Beta work is governed independently by active_v4_prebeta_work"
   previous_source_release:
     version: "v0.2.0"
     release_url: "https://github.com/crescentln/BlueMinutes/releases/tag/v0.2.0"
@@ -259,7 +274,7 @@ post_mvp_initiatives:
           result: "a fresh exact-path synthetic WAV import with unknown provenance completed copied/hash-verified local intake and canonical audio as Succeeded, 3 of 3, chunk-0, and local_only; workspace database, sidecars, logs, managed WAV, and canonical CAF were mode 0600"
           manual_boundary: "current-head Transcript transition automation bridge terminated without harming the app; the earlier unchanged-path Transcript hands-on sequence remains bounded evidence, while VoiceOver spoken wording and live toggle-and-restore checks for Reduce Transparency, Differentiate Without Color, and Reduce Motion remain honestly unverified system-integration observations"
         state: completed
-    next_gate: "the final UI Foundation ledger remains complete on protected main a9c1ad72d645219399d095fe9cb6c9ff7657666c; v0.3.0 is now published from exact release baseline 94b5ba6d83aaac099fef72b0186def2c36dafbc0 with the final exact-tag local development package verified, leaving only the Issue #58 two-path post-release ledger and regression-binding carrier gate"
+    next_gate: "none for UI Foundation or v0.3.0: Issue #58 is closed and PR #59 merged as protected main b41ae589e40ce9811a64c389899bc9639f8188d2; v4 pre-Beta is a separate active initiative"
 accepted_tasks:
   - "001"
   - "002"
@@ -280,9 +295,11 @@ accepted_tasks:
   - "011"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "the commit containing this field is the self-relative Issue #58 and PR #59 post-release ledger carrier based directly on exact v0.3.0 release baseline 94b5ba6d83aaac099fef72b0186def2c36dafbc0; a protected rebase merge may rewrite this carrier identity without changing its reviewed two-path tree delta"
-working_tree_status_summary: "at this ledger-bearing post-commit state, the tracked worktree is clean and the cumulative Issue #58 diff changes exactly two Issue #58 paths: docs/CODEX_EXECUTION_STATE.md plus Tests/MeetingBuddyFeaturesTests/PublicBrandPresentationTests.swift for the required post-release ledger regression binding. The final ignored dist/BlueMinutes-0.3.0-development package remains local-only and untracked. Schema v10, Package.swift, Package.resolved, GRDB 7.11.1, application code, bundle metadata, entitlements, providers, network routes, user workspaces, Developer ID signing, notarization, installation, updater, public binary upload, deployment, and application distribution are unchanged"
+last_known_git_head: "the commit containing this field is the self-relative Issue #60 v4 foundation carrier based directly on protected main b41ae589e40ce9811a64c389899bc9639f8188d2; review or protected rebase merge may rewrite the carrier identity without changing its reviewed tree delta"
+working_tree_status_summary: "the self-relative Issue #60 foundation carrier introduces the supplied reviewed brand assets, capability/routing and disabled release-service application contracts, focused tests, ADR-0019, and docs/prebeta-audit evidence. It preserves schema v10, Package.swift, Package.resolved, GRDB 7.11.1, compatibility identifiers, existing production pipeline wiring, user workspaces, Developer ID signing, notarization, installation, live updater, production billing, website deployment, and public binary distribution"
 last_verification_commands:
+  - "v4 rollback-anchor baseline on exact b41ae589e40ce9811a64c389899bc9639f8188d2: one new isolated mktemp scratch directory outside the repository for swift package dump-package, Debug and Release swift build -Xswiftc -warnings-as-errors, and full swift test -Xswiftc -warnings-as-errors; scratch was not reused as current-tree evidence"
+  - "v4 foundation focused current-tree gates: ./script/generate_brand_assets.sh with fixed source/master/ICNS hashes and temporary-first per-file atomic replacement; swift test --filter ProviderRoutingContractTests -Xswiftc -warnings-as-errors; swift test --filter PublicBrandPresentationTests -Xswiftc -warnings-as-errors"
   - "Issue #58 live post-release gate: compare protected origin/main, merged PR #55/#57 commits, closed Issue #54/#56 and open Issue #58, exact release-main CI/CodeQL runs and analysis results, annotated remote tag object/peel, latest regular Release state and zero assets, signed-out HTTP and tagged README, and final exact-tag local package manifest"
   - "Issue #58 ledger and regression-binding gate: parse the single fenced YAML document with Psych and recursively reject duplicate keys; assert required release fields, frozen accepted Tasks 001-011, exact v0.3.0 release baseline/tag/package evidence, self-relative carrier and future boundary; run PublicBrandPresentationTests with warnings as errors; check one H1, two fences, exact two-path scope, branch point, whitespace, stale-state text, local links, and bounded added-line sensitive-content patterns"
   - "Issue #54 release-preparation gate: plist and shell syntax checks; Package.swift and Package.resolved hash stability; warning-as-error release build; focused public-brand tests; isolated historical-scale, native-window, and visual contracts; remaining synthetic-safe suite; local Markdown links; exact path, whitespace, and bounded sensitive-pattern checks"
@@ -338,6 +355,9 @@ last_verification_commands:
   - "Issue #52 post-Slice-I live closure gate: verify protected origin/main 83f720675ea3b7718a88089248bc4cfe2b95dd5e; merged PR #46 through PR #51 and closed Issue #37, #39, #40, #41, #44, and #45; PR #51 head/new-main tree equivalence; terminal-success exact-new-main CI and CodeQL analyses; zero open code-scanning alerts; and zero unresolved review threads including outdated threads"
   - "Issue #52 docs-only ledger gate: parse the single fenced YAML document with Psych and recursive duplicate-key rejection; assert required fields, frozen accepted Tasks 001-011, exact protected-main progression through PR #51, completed Slices F through I, exact final implementation baseline, historical UI-migration-plan authorization note, self-relative ledger carrier, Markdown structure and local links, exact one-file scope and branch point, git diff --check, and bounded added-line sensitive-content checks"
 last_verification_results:
+  - "v4 rollback-anchor baseline on b41ae589 passes: package dump succeeds, warning-as-error Debug build passes in 34.31 seconds, warning-as-error Release build passes in 92.98 seconds, and full warning-as-error tests exit 0 with Swift Testing suites inspected rather than the XCTest zero-test wrapper"
+  - "v4 foundation current-tree local gate at 2026-07-28T15:43:12Z: a new isolated scratch root passes package dump, warning-as-error Debug build in 31.91 seconds, and warning-as-error Release build in 79.97 seconds; 12 ProviderRoutingContractTests and 4 PublicBrandPresentationTests pass, the 10,000-position historical scale shard passes with 9.77-second rebuild and 0.34-second first page, the 444-test/58-suite remaining shard passes, 12 isolated native-window tests pass, the 11-test visual-contract shard passes with its exact-runner harness explicitly skipped, and the isolated three-hour retry simulation passes. These CI-shaped shards cover 469 discovered tests with three installed Apple-model checks plus the exact-runner visual harness explicitly environment-gated; a monolithic invocation that returned zero without a Swift Testing aggregate was rejected as evidence"
+  - "v4 foundation brand gate at 2026-07-28T15:43:12Z: the temporary-first deterministic generator passes, and the generated 1024 PNG, ICNS, and public logo match reviewed SHA-256 values 6bb1f6f61ea536e83433fe979eb8749b4b3745270ba7b1da6bb08e893bee289a, 87459e6a19758af87eb34884b2f06066413000298c7ec6468f6eb0046aa06bca, and d0f0e05164a84b14533e2a3f2f83486baab544f2c6029a14911c5a4ba95fcd39; the pinned native visual harness remains a PR CI gate because local macOS 26.5.2 intentionally does not impersonate its exact macOS 26.4 runner"
   - "Issue #58 local ledger and regression-binding gate passes on codex/58-v0.3.0-post-release-ledger: the single YAML document parses with recursive duplicate-key rejection; required release fields, all 17 frozen accepted Task IDs, exact release baseline/tag/package evidence, self-relative carrier, and future testing/debugging plus Developer ID boundary are internally consistent; three focused PublicBrandPresentationTests pass with warnings as errors, and the single H1, two fences, exact two-path allowlist, branch point, whitespace, stale-state, local-link, and bounded sensitive-content checks pass"
   - "PR #59 initial exact head 2ab95efd4931aba33e6b241be6a433259d81184a CI run 30358603615 exposed two stale PublicBrandPresentationTests assertions that still required PR #55 preparation wording and its eleven-path scope; the two-path remediation updates only those public ledger bindings and does not change application behavior"
   - "Issue #58 live post-release refresh confirms protected origin/main 94b5ba6d83aaac099fef72b0186def2c36dafbc0, merged PR #55/#57 and closed Issue #54/#56, successful exact release-main CI run 30330228352 and CodeQL run 30330228231 with zero results/errors and alerts, annotated remote tag object 4a85d60360ec95834e9bf13af7e30113749d7167 peeling to that baseline, latest regular public v0.3.0 Release with zero uploaded assets, and final local manifest bound to the same exact tag and baseline"
@@ -405,8 +425,12 @@ last_verification_results:
   - "the v0.2.0 release copy describes only a source-tree compatibility and safety foundation: all four Research integration capabilities remain disabled, schema v10 and GRDB 7.11.1 are unchanged, and no Research UI, provider, connector, credential, persistence, migration, executor, CLI/MCP surface, network destination, file-layout change, or user-data behavior is claimed"
   - "v0.2.0 is a regular, latest, non-draft, non-prerelease source Release whose unsigned annotated tag peels to exact protected-main commit f7a25572bc6c2940b99d9064f53ecdc7aaad352d; exact-main CI and CodeQL pass, signed-out HTTP returns 200, and the Release has zero uploaded assets"
   - "the development bundle remains version 0.1.0 internal alpha and was not promoted, packaged, Developer ID-signed, notarized, uploaded, installed, or distributed; merged PR #20 added only the maintainer-approved audience line, two verified public-safe synthetic screenshots, presentation tests, ROADMAP truth, and the post-release execution-ledger reconciliation recorded at d786b3302a250a588e1c98e22a1b23ea3c37fd19"
-open_P0_decisions: []
-open_P1_decisions: []
+open_P0_decisions:
+  - "Local STT support policy: preserve macOS 15 with a separately approved signed local backend, or explicitly raise the minimum OS after compatibility review; the current Apple Speech production route is available on macOS 26+"
+  - "Active meeting lifecycle details for close-window, true Quit, sleep/wake, source loss, and menu-bar recovery require implementation proof, while v4 already fixes the product outcome that closing a window must not silently discard an active meeting"
+open_P1_decisions:
+  - "A real remote STT provider/endpoint/retention/API-cost route is optional and remains separately gated; record-only and local STT must work without it"
+  - "Sparkle versus another signed distribution update mechanism remains gated on Developer ID, notarization, appcast ownership, clean-machine and rollback proof"
 known_out_of_scope_findings:
   - "the final Slice I current-head actual-app import path is proven with synthetic local media, but the Transcript transition automation bridge terminated before producing current-head transition evidence; an earlier unchanged-path Transcript hands-on sequence remains bounded evidence, and current-head VoiceOver spoken wording plus live Reduce Transparency, Differentiate Without Color, and Reduce Motion toggle-and-restore observations remain unverified"
   - "the v0.3.0 candidate produces only an ignored local ad-hoc development package and is intended for a source-only GitHub Release with zero uploaded assets after all gates pass; Developer ID and Team ID signing, notarization and stapling, public binary upload or distribution, installation, automatic update, deployment, schema or dependency changes, and provider or network expansion remain separate future gates"
@@ -434,6 +458,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this local-development and source-release acceptance"
-next_eligible_task: "there is no next numbered MVP task; complete only the self-relative Issue #58 and PR #59 two-path post-release ledger and regression-binding carrier through exact-head review/CI/CodeQL/conversation, guarded rebase merge, and exact-new-main gates. After that closure, future software testing and functional debugging may build on v0.3.0 under a new bounded command; Developer ID, Team ID, notarization, public binary upload or distribution, installation, updater, deployment, and unrelated product initiatives remain excluded"
-last_updated_at: "2026-07-28T12:27:09Z"
+next_eligible_task: "continue the user-authorized Issue #60 v4 pre-Beta short-slice sequence; first close the foundation branch through focused/full tests and protected PR gates, then implement the Codex app-server text vertical slice. Do not start U1, production billing, website deployment, bundled runtime, Developer ID/notarization, or public binary distribution"
+last_updated_at: "2026-07-28T15:43:12Z"
 ```

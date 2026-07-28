@@ -9,16 +9,23 @@ authority and data compatibility.
 
 ## Assets
 
-- `docs/assets/BlueMinutes-logo.jpg` is the maintainer-supplied and
-  maintainer-approved horizontal brand lockup.
-- `Configuration/Branding/BlueMinutes-AppIcon-1024.png` is the reviewed,
-  text-free application-icon master derived from the lockup's left-hand symbol.
+- `Configuration/Branding/Sources/BlueMinutes-Logo-Source.png` and
+  `Configuration/Branding/Sources/BlueMinutes-AppIcon-Source.png` preserve the
+  exact maintainer-supplied source files and their reviewed SHA-256 identities.
+- `docs/assets/BlueMinutes-logo.png` is the lossless public horizontal lockup
+  copied from the reviewed source.
+- `Configuration/Branding/BlueMinutes-AppIcon-1024.png` is the deterministic
+  sRGB 1024-pixel application-icon master generated from the reviewed square
+  source.
 - `Configuration/Branding/BlueMinutes.icns` is the generated macOS icon resource
   installed in local application bundles.
+- `script/generate_brand_assets.sh` verifies the two source hashes before
+  regenerating every derived asset with the macOS system image tools.
 
-The application icon retains the three-person, document, conversation, and
-checkmark composition. It intentionally contains no words, map, globe, olive
-branches, wreath, flag, seal, institutional crest, or United Nations emblem.
+The application icon uses the approved blue rounded square with the white
+BlueMinutes “B”, conversation bubble, and minute lines. It intentionally
+contains no words, map, globe, olive branches, wreath, flag, seal,
+institutional crest, or United Nations emblem.
 
 ## Independence and use boundary
 

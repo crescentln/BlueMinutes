@@ -1,7 +1,7 @@
 # BlueMinutes
 
 <p align="center">
-  <img src="docs/assets/BlueMinutes-logo.jpg" alt="BlueMinutes — Multilateral Meeting Briefing and Documentation Tool" width="880">
+  <img src="docs/assets/BlueMinutes-logo.png" alt="BlueMinutes — Multilateral Meeting Briefing and Documentation Tool" width="880">
 </p>
 
 <p align="center">

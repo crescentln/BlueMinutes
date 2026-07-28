@@ -37,6 +37,7 @@ task authorization.
 | [ADR-0016](ADR-0016-task-010-historical-review-and-preferences.md) | Accepted | Deterministic local history, evidence-qualified comparison, explicit user confirmation, and visible presentation-only preferences |
 | [ADR-0017](ADR-0017-evidence-integrity-publication-boundaries.md) | Accepted | Application-owned omission verification and exact human-confirmation gates for consequential analysis and briefing publication |
 | [ADR-0018](ADR-0018-blue-minutes-meeting-research-integration.md) | Accepted | Compatibility-first Blue Minutes Meeting / Research boundary: distinct logical workspace types, exact revision adapters, schema v10, and default-off capabilities |
+| [ADR-0019](ADR-0019-v4-provider-routing-codex-and-release-gates.md) | Accepted | v4 capability routing, Codex text-only boundary, independent STT, Sensitive Meeting, and disabled release-service gates |
 
 ## Open decisions by blocking task
 
@@ -103,3 +104,11 @@ user-data change.
 Some individual ADR headers retain their original in-task acceptance wording
 as historical context. This index and `../CODEX_EXECUTION_STATE.md` report the
 current binding/accepted state; neither document authorizes a new task.
+
+The user's 2026-07-28 v4 pre-Beta authorization adds ADR-0019 and GitHub Issue
+#60. It supersedes ADR-0018's no-outbound-provider limitation only for a
+bounded, user-authorized Codex subscription text route and narrowly supersedes
+ADR-0002 only for a system-installed official Codex app-server under ADR-0019's
+fail-closed process constraints. It does not enable
+remote STT, production billing, an updater, website integration, distribution,
+or U1 visual redesign.
