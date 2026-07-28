@@ -2,10 +2,207 @@ import Foundation
 import MeetingBuddyApplication
 import MeetingBuddyDomain
 
+/// Re-mints non-persistable authority from current application state for one
+/// exact remote transcript attempt. A durable job plan is audit evidence, not
+/// permission to upload audio after restart, retry, or policy change.
+public protocol ExternalTranscriptionExecutionAuthorizing:
+    Sendable
+{
+    func authorize(
+        plan: TranscriptPipelineJobPlan,
+        job: JobRecord
+    ) async throws
+        -> ExternalModelExecutionAuthorization
+
+    func finish(jobID: JobID) async
+}
+
+/// In-memory, single-attempt authority for remote transcription.
+///
+/// The broker intentionally cannot be encoded. A new process, retry, different
+/// job/plan, expired start window, or explicit finish has no authority. The
+/// injected current-state authorizer is invoked on every request so policy and
+/// provider revocation take effect before each audio chunk.
+public actor EphemeralExternalTranscriptionAuthorizationBroker:
+    ExternalTranscriptionExecutionAuthorizing
+{
+    public typealias CurrentStateAuthorizer =
+        @Sendable (
+            TranscriptPipelineJobPlan
+        ) async throws
+            -> ExternalModelExecutionAuthorization
+    public typealias MillisecondClock =
+        @Sendable () throws -> Int64
+
+    private struct Permit {
+        let plan: TranscriptPipelineJobPlan
+        let expiresAtMilliseconds:
+            Int64
+        var attemptStarted: Bool
+    }
+
+    public static let
+        defaultStartWindowMilliseconds:
+        Int64 = 5 * 60 * 1_000
+
+    private let startWindowMilliseconds:
+        Int64
+    private let nowMilliseconds:
+        MillisecondClock
+    private let currentStateAuthorizer:
+        CurrentStateAuthorizer
+    private var permits: [JobID: Permit] = [:]
+
+    public init(
+        currentStateAuthorizer:
+            @escaping CurrentStateAuthorizer
+    ) {
+        startWindowMilliseconds =
+            Self.defaultStartWindowMilliseconds
+        nowMilliseconds = {
+            try Self.systemMilliseconds()
+        }
+        self.currentStateAuthorizer =
+            currentStateAuthorizer
+    }
+
+    public init(
+        startWindowMilliseconds:
+            Int64,
+        nowMilliseconds:
+            @escaping MillisecondClock,
+        currentStateAuthorizer:
+            @escaping CurrentStateAuthorizer
+    ) {
+        precondition(
+            startWindowMilliseconds > 0,
+            "The remote authorization start window must be positive."
+        )
+        self.startWindowMilliseconds =
+            startWindowMilliseconds
+        self.nowMilliseconds =
+            nowMilliseconds
+        self.currentStateAuthorizer =
+            currentStateAuthorizer
+    }
+
+    public func register(
+        jobID: JobID,
+        plan: TranscriptPipelineJobPlan
+    ) throws {
+        guard plan.remoteProviderConfiguration
+                != nil,
+              plan.transcriptionRoute.route
+                == .approvedExternal,
+              plan.transcriptionRoute.request
+                .visibleUserAuthorization,
+              permits[jobID] == nil
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "Remote transcription requires one new visible execution authorization."
+                )
+        }
+        let now = try nowMilliseconds()
+        let (expiry, overflow) =
+            now.addingReportingOverflow(
+                startWindowMilliseconds
+            )
+        guard now >= 0,
+              !overflow
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "Remote transcription authorization could not be bounded."
+                )
+        }
+        permits[jobID] = Permit(
+            plan: plan,
+            expiresAtMilliseconds: expiry,
+            attemptStarted: false
+        )
+    }
+
+    public func authorize(
+        plan: TranscriptPipelineJobPlan,
+        job: JobRecord
+    ) async throws
+        -> ExternalModelExecutionAuthorization
+    {
+        guard var permit =
+                permits[job.jobID],
+              permit.plan == plan,
+              job.jobType
+                == TranscriptJobTypes.pipeline,
+              job.meetingID == plan.meetingID,
+              job.state == .running,
+              job.retryCount == 0,
+              job.privacyRoute
+                == .approvedCloud
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "Remote transcription authority is absent, stale, or belongs to another attempt."
+                )
+        }
+        if !permit.attemptStarted {
+            guard try nowMilliseconds()
+                    <= permit
+                    .expiresAtMilliseconds
+            else {
+                permits.removeValue(
+                    forKey: job.jobID
+                )
+                throw AIProviderContractError
+                    .routeDenied(
+                        "Remote transcription authorization expired before audio processing began."
+                    )
+            }
+        }
+        let authorization =
+            try await currentStateAuthorizer(
+                plan
+            )
+        permit.attemptStarted = true
+        permits[job.jobID] = permit
+        return authorization
+    }
+
+    public func finish(jobID: JobID) {
+        permits.removeValue(forKey: jobID)
+    }
+
+    private static func systemMilliseconds()
+        throws -> Int64
+    {
+        let value =
+            (
+                Date()
+                    .timeIntervalSince1970
+                    * 1_000
+            ).rounded(.down)
+        guard value.isFinite,
+              value >= 0,
+              let exact =
+                Int64(exactly: value)
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "Remote transcription authorization time is unavailable."
+                )
+        }
+        return exact
+    }
+}
+
 public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Sendable {
     public let jobType = TranscriptJobTypes.pipeline
 
     private let transcriptionProvider: any TranscriptionProvider
+    private let externalProviderBuilder:
+        (any ExternalTranscriptionProviderBuilding)?
+    private let externalExecutionAuthorizer:
+        (any ExternalTranscriptionExecutionAuthorizing)?
     private let translationProvider: (any TranslationProvider)?
     private let processor: any NativeMediaProcessing
     private let catalog: any MediaAssetCatalog
@@ -20,9 +217,17 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
         catalog: any MediaAssetCatalog,
         fileAccess: any ManagedMediaFileAccess,
         repository: any TranscriptReviewRepository,
-        noSpeechVerifier: any TranscriptNoSpeechVerifying = DigitalSilenceNoSpeechVerifier()
+        noSpeechVerifier: any TranscriptNoSpeechVerifying = DigitalSilenceNoSpeechVerifier(),
+        externalProviderBuilder:
+            (any ExternalTranscriptionProviderBuilding)? = nil,
+        externalExecutionAuthorizer:
+            (any ExternalTranscriptionExecutionAuthorizing)? = nil
     ) {
         self.transcriptionProvider = transcriptionProvider
+        self.externalProviderBuilder =
+            externalProviderBuilder
+        self.externalExecutionAuthorizer =
+            externalExecutionAuthorizer
         self.translationProvider = translationProvider
         self.processor = processor
         self.catalog = catalog
@@ -33,12 +238,26 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
 
     public func execute(_ context: JobExecutionContext) async throws -> JobExecutionResult {
         do {
-            return try await executePipeline(context)
+            let result =
+                try await executePipeline(context)
+            await finishExternalAuthorityIfNeeded(
+                context.job
+            )
+            return result
         } catch is CancellationError {
+            await finishExternalAuthorityIfNeeded(
+                context.job
+            )
             throw CancellationError()
         } catch let failure as JobExecutionFailure {
+            await finishExternalAuthorityIfNeeded(
+                context.job
+            )
             throw failure
         } catch let error as JobContractError {
+            await finishExternalAuthorityIfNeeded(
+                context.job
+            )
             throw try JobExecutionFailure(
                 code: "stale_input",
                 safeSummary: "The canonical source changed before transcript publication. Nothing was published.",
@@ -46,6 +265,9 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                 privateDiagnostic: String(describing: error)
             )
         } catch let error as AIProviderContractError {
+            await finishExternalAuthorityIfNeeded(
+                context.job
+            )
             throw try JobExecutionFailure(
                 code: failureCode(error),
                 safeSummary: safeSummary(error),
@@ -53,9 +275,12 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                 privateDiagnostic: String(describing: error)
             )
         } catch {
+            await finishExternalAuthorityIfNeeded(
+                context.job
+            )
             throw try JobExecutionFailure(
                 code: "transcript_pipeline_failed",
-                safeSummary: "Local transcript processing failed without publishing partial output.",
+                safeSummary: "Transcript processing failed without publishing partial output.",
                 retryable: true,
                 privateDiagnostic: String(describing: error)
             )
@@ -64,13 +289,25 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
 
     private func executePipeline(_ context: JobExecutionContext) async throws -> JobExecutionResult {
         let plan = try TranscriptPipelineJobPlan.decode(from: context.job.inputPayload)
+        let transcriptionProvider =
+            try await provider(
+                for: plan,
+                job: context.job
+            )
         guard context.job.meetingID == plan.meetingID,
               context.job.inputRevisionIDs == [plan.canonicalSourceRevision],
-              context.job.privacyRoute == .localOnly,
+              context.job.privacyRoute
+                == plan.transcriptionRoute.route
+                .privacyRoute,
               context.job.dataClassification == plan.dataClassification,
               transcriptionProvider.route == plan.transcriptionRoute.route,
               transcriptionProvider.metadata.providerIdentifier
                 == plan.transcriptionRoute.providerIdentifier,
+              plan.remoteProviderConfiguration == nil
+                || transcriptionProvider.metadata
+                    .modelIdentifier
+                    == plan.transcriptionSelection
+                    .modelIdentifier,
               plan.targetLanguage == nil || translationProvider != nil,
               plan.translationRoute.map({ decision in
                   translationProvider.map({
@@ -119,6 +356,17 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
 
         for chunk in chunkPlan where outputs[chunk.index] == nil {
             try Task.checkCancellation()
+            let currentTranscriptionProvider =
+                if plan.remoteProviderConfiguration
+                    != nil
+                {
+                    try await provider(
+                        for: plan,
+                        job: context.job
+                    )
+                } else {
+                    transcriptionProvider
+                }
             let output: TranscriptPipelineChunkOutput
             do {
                 output = try await process(
@@ -126,7 +374,9 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                     canonicalURL: canonicalURL,
                     plan: plan,
                     attemptCount: context.job.retryCount + 1,
-                    context: context
+                    context: context,
+                    transcriptionProvider:
+                        currentTranscriptionProvider
                 )
             } catch is CancellationError {
                 throw CancellationError()
@@ -140,7 +390,10 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                         outputs: outputs,
                         failedIndex: chunk.index,
                         failureCode: code,
-                        attemptCount: context.job.retryCount + 1
+                        attemptCount: context.job.retryCount + 1,
+                        provider:
+                            currentTranscriptionProvider
+                            .metadata
                     )
                 )
                 throw error
@@ -160,7 +413,14 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
             )
         }
 
-        let publication = try publication(plan: plan, chunkPlan: chunkPlan, outputs: outputs)
+        let publication = try publication(
+            plan: plan,
+            chunkPlan: chunkPlan,
+            outputs: outputs,
+            provider:
+                transcriptionProvider.metadata
+        )
+        try Task.checkCancellation()
         try repository.publishTranscript(
             publication,
             validatingInputRevisions: context.job.inputRevisionIDs
@@ -187,15 +447,72 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
         return try JobExecutionResult(outputRevisionIDs: outputReferences, providerUsage: usage)
     }
 
+    private func provider(
+        for plan: TranscriptPipelineJobPlan,
+        job: JobRecord
+    ) async throws -> any TranscriptionProvider {
+        guard let configuration =
+                plan.remoteProviderConfiguration
+        else {
+            return transcriptionProvider
+        }
+        guard let externalProviderBuilder else {
+            throw AIProviderContractError
+                .modelUnavailable(
+                    "The approved remote transcription adapter is unavailable."
+                )
+        }
+        guard let externalExecutionAuthorizer
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "Remote transcription requires fresh application-owned execution authority."
+                )
+        }
+        let authorization =
+            try await externalExecutionAuthorizer
+            .authorize(
+                plan: plan,
+                job: job
+            )
+        return try externalProviderBuilder
+            .makeProvider(
+                configuration: configuration,
+                authorization: authorization
+            )
+    }
+
+    private func finishExternalAuthorityIfNeeded(
+        _ job: JobRecord
+    ) async {
+        guard job.privacyRoute
+                == .approvedCloud
+        else { return }
+        await externalExecutionAuthorizer?
+            .finish(jobID: job.jobID)
+    }
+
     private func process(
         chunk: MediaChunkPlanEntry,
         canonicalURL: URL,
         plan: TranscriptPipelineJobPlan,
         attemptCount: UInt32,
-        context: JobExecutionContext
+        context: JobExecutionContext,
+        transcriptionProvider:
+            any TranscriptionProvider
     ) async throws -> TranscriptPipelineChunkOutput {
+        let audioExtension =
+            transcriptionProvider.route
+                == .approvedExternal
+            ? "wav"
+            : "caf"
         let audioPath = try WorkspaceRelativePath(
-            String(format: "transcript-audio/chunk-%06u.caf", chunk.index)
+            String(
+                format:
+                    "transcript-audio/chunk-%06u.%@",
+                chunk.index,
+                audioExtension
+            )
         )
         try? await context.discardTemporaryFile(at: audioPath)
         let writable = try await context.prepareWritableFile(at: audioPath)
@@ -212,7 +529,6 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
             try? await context.discardWritableFile(writable)
             throw error
         }
-        defer { Task { try? await context.discardTemporaryFile(at: audioPath) } }
         let audioURL = try await context.verifiedTemporaryFileURL(for: descriptor)
         let taskAudio = try TaskOwnedAudioChunk(fileURL: audioURL, plan: chunk)
         let request = try TranscriptionRequest(
@@ -221,47 +537,102 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
             language: plan.sourceLanguage,
             dataClassification: plan.dataClassification
         )
-        let providerResult = try await transcriptionProvider.transcribe(request)
-        let owned = try ownedSpeech(from: providerResult, chunk: chunk)
-        guard let owned else {
-            guard let confirmation = await noSpeechVerifier.confirmation(for: taskAudio),
-                  confirmation.verifiedCoreRange == chunk.coreRange
-            else {
-                throw AIProviderContractError.invalidResponse(
-                    "Provider-only no-speech cannot omit an unverified source range."
-                )
+        let output:
+            TranscriptPipelineChunkOutput
+        do {
+            let providerResult =
+                try await transcriptionProvider
+                .transcribe(request)
+            let owned = try ownedSpeech(
+                from: providerResult,
+                chunk: chunk
+            )
+            if let owned {
+                let translation:
+                    TranslationResponse?
+                if let target = plan.targetLanguage,
+                   let translationProvider
+                {
+                    translation =
+                        try await translationProvider
+                        .translate(
+                            TranslationRequest(
+                                sourceText:
+                                    owned.text,
+                                sourceLanguage:
+                                    plan.sourceLanguage,
+                                targetLanguage:
+                                    target,
+                                dataClassification:
+                                    plan.dataClassification
+                            )
+                        )
+                } else {
+                    translation = nil
+                }
+                output =
+                    try TranscriptPipelineChunkOutput(
+                        index: chunk.index,
+                        disposition: .transcribed,
+                        text: owned.text,
+                        confidence:
+                            owned.confidence,
+                        translation: translation,
+                        attemptCount:
+                            attemptCount
+                    )
+            } else {
+                guard let confirmation =
+                        await noSpeechVerifier
+                        .confirmation(for: taskAudio),
+                      confirmation
+                        .verifiedCoreRange
+                        == chunk.coreRange
+                else {
+                    throw AIProviderContractError
+                        .invalidResponse(
+                            "Provider-only no-speech cannot omit an unverified source range."
+                        )
+                }
+                output =
+                    try TranscriptPipelineChunkOutput(
+                        index: chunk.index,
+                        disposition: .noSpeech,
+                        text: nil,
+                        confidence: nil,
+                        translation: nil,
+                        attemptCount:
+                            attemptCount,
+                        noSpeechConfirmation:
+                            confirmation
+                    )
             }
-            return try TranscriptPipelineChunkOutput(
-                index: chunk.index,
-                disposition: .noSpeech,
-                text: nil,
-                confidence: nil,
-                translation: nil,
-                attemptCount: attemptCount,
-                noSpeechConfirmation: confirmation
-            )
+        } catch {
+            do {
+                try await context
+                    .discardTemporaryFile(
+                        at: audioPath
+                    )
+            } catch {
+                throw AIProviderContractError
+                    .invalidRequest(
+                        "Task-owned transcript audio could not be removed after provider failure."
+                    )
+            }
+            throw error
         }
-        let translation: TranslationResponse?
-        if let target = plan.targetLanguage, let translationProvider {
-            translation = try await translationProvider.translate(
-                TranslationRequest(
-                    sourceText: owned.text,
-                    sourceLanguage: plan.sourceLanguage,
-                    targetLanguage: target,
-                    dataClassification: plan.dataClassification
+        do {
+            try await context
+                .discardTemporaryFile(
+                    at: audioPath
                 )
-            )
-        } else {
-            translation = nil
+        } catch {
+            throw AIProviderContractError
+                .invalidRequest(
+                    "Task-owned transcript audio could not be removed after provider use."
+                )
         }
-        return try TranscriptPipelineChunkOutput(
-            index: chunk.index,
-            disposition: .transcribed,
-            text: owned.text,
-            confidence: owned.confidence,
-            translation: translation,
-            attemptCount: attemptCount
-        )
+        return output
     }
 
     private func ownedSpeech(
@@ -336,7 +707,8 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
     private func publication(
         plan: TranscriptPipelineJobPlan,
         chunkPlan: [MediaChunkPlanEntry],
-        outputs: [UInt32: TranscriptPipelineChunkOutput]
+        outputs: [UInt32: TranscriptPipelineChunkOutput],
+        provider: ProviderMetadata
     ) throws -> TranscriptPublication {
         let identities = Dictionary(uniqueKeysWithValues: plan.chunkIdentities.map { ($0.index, $0) })
         var transcripts: [TranscriptSegmentV1] = []
@@ -355,7 +727,7 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                         physicalRange: chunk.physicalRange,
                         disposition: .noSpeech,
                         attemptCount: output.attemptCount,
-                        provider: transcriptionProvider.metadata,
+                        provider: provider,
                         noSpeechConfirmation: output.noSpeechConfirmation
                     )
                 )
@@ -373,7 +745,10 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                     language: plan.sourceLanguage,
                     text: text,
                     confidence: confidence,
-                    provider: transcriptionProvider.metadata,
+                    provider: provider,
+                    privacyRoute:
+                        plan.transcriptionRoute.route
+                        .privacyRoute,
                     createdAt: plan.createdAt,
                     classification: plan.dataClassification
                 )
@@ -386,6 +761,7 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                 if let translated = output.translation,
                    let target = plan.targetLanguage,
                    let translationProvider,
+                   let translationRoute = plan.translationRoute,
                    let translationID = identity.translationID,
                    let translationRevisionID = identity.translationRevisionID
                 {
@@ -399,6 +775,9 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                         translatedText: translated.translatedText,
                         confidence: translated.confidence,
                         provider: translationProvider.metadata,
+                        privacyRoute:
+                            translationRoute.route
+                            .privacyRoute,
                         createdAt: plan.createdAt,
                         classification: plan.dataClassification
                     )
@@ -417,7 +796,7 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                         physicalRange: chunk.physicalRange,
                         disposition: .transcribed,
                         attemptCount: output.attemptCount,
-                        provider: transcriptionProvider.metadata,
+                        provider: provider,
                         machineSegmentRevision: transcriptReference,
                         reviewedSegmentRevision: transcriptReference,
                         translationRevision: translationReference
@@ -452,7 +831,8 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
         outputs: [UInt32: TranscriptPipelineChunkOutput],
         failedIndex: UInt32,
         failureCode: String,
-        attemptCount: UInt32
+        attemptCount: UInt32,
+        provider: ProviderMetadata
     ) throws -> TranscriptCoverageManifest {
         let identities = Dictionary(uniqueKeysWithValues: plan.chunkIdentities.map { ($0.index, $0) })
         let coverage = try chunkPlan.map { chunk -> TranscriptChunkCoverage in
@@ -464,7 +844,7 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                         physicalRange: chunk.physicalRange,
                         disposition: .noSpeech,
                         attemptCount: output.attemptCount,
-                        provider: transcriptionProvider.metadata,
+                        provider: provider,
                         noSpeechConfirmation: output.noSpeechConfirmation
                     )
                 }
@@ -491,7 +871,7 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                     physicalRange: chunk.physicalRange,
                     disposition: .transcribed,
                     attemptCount: output.attemptCount,
-                    provider: transcriptionProvider.metadata,
+                    provider: provider,
                     machineSegmentRevision: transcriptReference,
                     reviewedSegmentRevision: transcriptReference,
                     translationRevision: translationReference
@@ -504,7 +884,7 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
                     physicalRange: chunk.physicalRange,
                     disposition: .failed,
                     attemptCount: attemptCount,
-                    provider: transcriptionProvider.metadata,
+                    provider: provider,
                     safeFailureCode: failureCode
                 )
             }
@@ -535,19 +915,21 @@ public final class TranscriptPipelineJobExecutor: TaskJobExecutor, @unchecked Se
     private func safeSummary(_ error: AIProviderContractError) -> String {
         switch error {
         case .modelUnavailable:
-            "The approved on-device model is unavailable. Use the manual local fallback or install it in system settings."
+            "The approved transcription model is unavailable. The recording remains local and unchanged."
         case .routeDenied:
             "The requested processing route is not authorized. No meeting content was sent."
         case .invalidResponse:
-            "An on-device provider returned invalid structured output. Nothing was published."
-        case .invalidRequest, .secretUnavailable:
-            "The local transcript request failed validation. Nothing was published."
+            "The selected transcription provider returned invalid structured output. Nothing was published."
+        case .invalidRequest:
+            "The transcript request failed validation. Nothing was published."
+        case .secretUnavailable:
+            "The selected provider credential is unavailable. The recording remains local and unchanged."
         }
     }
 
     private func failureCode(_ error: AIProviderContractError) -> String {
         switch error {
-        case .modelUnavailable: "on_device_model_unavailable"
+        case .modelUnavailable: "transcription_model_unavailable"
         case .routeDenied: "model_route_denied"
         case .invalidResponse: "provider_output_invalid"
         case .invalidRequest: "transcript_request_invalid"

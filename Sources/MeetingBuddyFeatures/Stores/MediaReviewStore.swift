@@ -9,6 +9,8 @@ public final class MediaReviewStore {
     public private(set) var workspace: WorkspaceReview?
     public private(set) var pendingMedia: PendingMediaReview?
     public private(set) var importedSource: ImportedSourceReview?
+    public private(set) var sourceReselectionJob:
+        MediaJobReview?
     public private(set) var job: MediaJobReview?
     public private(set) var transcriptJob: MediaJobReview?
     public private(set) var routeReview: TranscriptRouteReview?
@@ -43,6 +45,10 @@ public final class MediaReviewStore {
         String?
     public private(set) var recordingSetup: RecordingSetupReview?
     public private(set) var recordingSession: RecordingSessionReview?
+    public internal(set) var selectedCompletedRecordingTrackID:
+        RecordingTrackID?
+    public private(set) var processedCompletedRecordingSessionID:
+        RecordingSessionID?
     public private(set) var webMetadataCandidate: UNWebTVMetadataCandidate?
     public private(set) var isWorking = false
     public private(set) var isStoppingRecording = false
@@ -53,6 +59,31 @@ public final class MediaReviewStore {
 
     @ObservationIgnored
     private let workflow: any MediaReviewWorkflow
+    @ObservationIgnored
+    private let importDiagnostics =
+        BlueMinutesUnifiedDiagnosticLogger(
+            category: .importFlow
+        )
+    @ObservationIgnored
+    private let audioDiagnostics =
+        BlueMinutesUnifiedDiagnosticLogger(
+            category: .audioCapture
+        )
+    @ObservationIgnored
+    private let speechToTextDiagnostics =
+        BlueMinutesUnifiedDiagnosticLogger(
+            category: .speechToText
+        )
+    @ObservationIgnored
+    private let aiProviderDiagnostics =
+        BlueMinutesUnifiedDiagnosticLogger(
+            category: .aiProvider
+        )
+    @ObservationIgnored
+    private let storageDiagnostics =
+        BlueMinutesUnifiedDiagnosticLogger(
+            category: .storage
+        )
     @ObservationIgnored
     private var pollingTask: Task<Void, Never>?
     @ObservationIgnored
@@ -116,6 +147,8 @@ public final class MediaReviewStore {
 
     public var blocksWorkspaceSwitch: Bool {
         recordingSession?.blocksWorkspaceSwitch == true
+            || blocksMediaReplacement
+            || historicalIndexJob?.state.isTerminal == false
     }
 
     public var recordingIndicatorIsVisible: Bool {
@@ -154,13 +187,30 @@ public final class MediaReviewStore {
             if let restoredWorkspace {
                 let setup = try await workflow.recordingSetup()
                 try Task.checkCancellation()
+                let restoredMedia =
+                    try await workflow.restoredMediaReview()
+                try Task.checkCancellation()
+                let restoredSpeech =
+                    try restoredMedia?
+                    .speechToTextRoute
+                    .map(
+                        restoredSpeechRoutePresentation
+                    )
                 advanceWorkspaceSession()
                 workspace = restoredWorkspace
                 resetMediaState()
                 sceneState.resetForWorkspaceChange()
                 recordingSetup = setup
                 recordingSession = setup.recoverableSession
+                reconcileCompletedRecordingTrackSelection()
                 sceneState.selectedMicrophoneDeviceID = setup.microphones.first?.id
+                if let restoredMedia {
+                    try applyRestoredMediaReview(
+                        restoredMedia,
+                        speechRoute: restoredSpeech,
+                        using: sceneState
+                    )
+                }
                 workspaceReadySession =
                     workspaceSession
                 if let session = setup.recoverableSession, !session.state.isTerminal {
@@ -178,7 +228,8 @@ public final class MediaReviewStore {
         using sceneState: MediaReviewSceneState
     ) async {
         guard !blocksWorkspaceSwitch else {
-            safeErrorMessage = "Finish or retain the current recording before switching workspaces."
+            safeErrorMessage =
+                "Finish, cancel, or retain the current background work before switching workspaces."
             return
         }
         await perform {
@@ -190,6 +241,7 @@ public final class MediaReviewStore {
             let setup = try await workflow.recordingSetup()
             recordingSetup = setup
             recordingSession = setup.recoverableSession
+            reconcileCompletedRecordingTrackSelection()
             sceneState.selectedMicrophoneDeviceID = setup.microphones.first?.id
             workspaceReadySession =
                 workspaceSession
@@ -233,6 +285,16 @@ public final class MediaReviewStore {
             safeErrorMessage = "Enter a meeting title before importing media."
             return
         }
+        guard !sceneState.codexTextProcessingAllowed
+            || sceneState.dataClassification.restrictionRank
+                < DataClassification.sensitive.restrictionRank
+        else {
+            safeErrorMessage = "Sensitive and Restricted meetings keep text processing on this Mac."
+            return
+        }
+        guard validateSpeechToTextMeetingPolicy(
+            using: sceneState
+        ) else { return }
         guard let pendingMedia else {
             safeErrorMessage = "Choose a supported local audio or video file first."
             return
@@ -255,17 +317,46 @@ public final class MediaReviewStore {
                 return
             }
         }
+        importDiagnostics.record(
+            .mediaImportRequested
+        )
         await perform {
+            let approvedRemoteProvider =
+                sceneState.remoteSpeechToTextAllowed
+                && sceneState
+                    .transcriptionSelection?
+                    .providerIdentifier
+                    != "apple-speech"
+                ? sceneState
+                    .transcriptionSelection?
+                    .providerIdentifier
+                : nil
             let result = try await workflow.importAndProcess(
                 MediaImportSubmission(
                     meetingTitle: title,
                     dataClassification: sceneState.dataClassification,
                     selectedTrack: sceneState.selectedTrack,
                     speechSourceKind: sceneState.speechSourceKind,
-                    language: language
+                    language: language,
+                    codexTextProcessingAllowed:
+                        sceneState.codexTextProcessingAllowed,
+                    transcriptionSelection:
+                        sceneState
+                        .transcriptionSelection,
+                    remoteSpeechToTextAllowed:
+                        sceneState
+                        .remoteSpeechToTextAllowed
                 )
             )
             resetAcceptedMediaReviewState(using: sceneState)
+            recordingSession = nil
+            selectedCompletedRecordingTrackID =
+                nil
+            processedCompletedRecordingSessionID =
+                nil
+            sceneState
+                .approvedRemoteSTTProviderIdentifier =
+                approvedRemoteProvider
             importedSource = result.0
             job = result.1
             self.pendingMedia = nil
@@ -295,6 +386,7 @@ public final class MediaReviewStore {
             recordingSetup = setup
             if let recoverable = setup.recoverableSession {
                 recordingSession = recoverable
+                reconcileCompletedRecordingTrackSelection()
                 if !recoverable.state.isTerminal {
                     beginRecordingPolling(jobID: recoverable.jobID)
                 }
@@ -306,6 +398,23 @@ public final class MediaReviewStore {
     }
 
     public func startRecording(using sceneState: MediaReviewSceneState) async {
+        guard !sceneState.isInteractionLocked else {
+            safeErrorMessage =
+                "Wait for the current editor or workspace operation to finish."
+            return
+        }
+        guard !sceneState
+                .hasUnsavedEditorChanges
+        else {
+            safeErrorMessage =
+                "Save or discard every unpublished editor draft before starting a new recording."
+            return
+        }
+        guard !blocksMediaReplacement else {
+            safeErrorMessage =
+                "Wait for the current media workflow to finish before starting a new recording."
+            return
+        }
         let title = sceneState.meetingTitle.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -313,6 +422,16 @@ public final class MediaReviewStore {
             safeErrorMessage = "Enter a meeting title before recording."
             return
         }
+        guard !sceneState.codexTextProcessingAllowed
+            || sceneState.dataClassification.restrictionRank
+                < DataClassification.sensitive.restrictionRank
+        else {
+            safeErrorMessage = "Sensitive and Restricted meetings keep text processing on this Mac."
+            return
+        }
+        guard validateSpeechToTextMeetingPolicy(
+            using: sceneState
+        ) else { return }
         guard sceneState.recordingAcknowledged else {
             safeErrorMessage = "A visible recording requires the participant, policy, and legal-responsibility acknowledgement."
             return
@@ -343,8 +462,22 @@ public final class MediaReviewStore {
             safeErrorMessage = "Select one microphone for this recording session."
             return
         }
+        audioDiagnostics.record(
+            .recordingStartRequested
+        )
         await perform {
-            recordingSession = try await workflow.startRecording(
+            let approvedRemoteProvider =
+                sceneState.remoteSpeechToTextAllowed
+                && sceneState
+                    .transcriptionSelection?
+                    .providerIdentifier
+                    != "apple-speech"
+                ? sceneState
+                    .transcriptionSelection?
+                    .providerIdentifier
+                : nil
+            let startedRecording =
+                try await workflow.startRecording(
                 RecordingStartSubmission(
                     meetingTitle: title,
                     dataClassification: sceneState.dataClassification,
@@ -353,10 +486,32 @@ public final class MediaReviewStore {
                     microphoneSpeechSourceKind: sceneState.microphoneSpeechSourceKind,
                     applicationSpeechSourceKind: sceneState.applicationSpeechSourceKind,
                     language: language,
-                    directUserAcknowledgement: true
+                    directUserAcknowledgement: true,
+                    codexTextProcessingAllowed:
+                        sceneState.codexTextProcessingAllowed,
+                    transcriptionSelection:
+                        sceneState
+                        .transcriptionSelection,
+                    remoteSpeechToTextAllowed:
+                        sceneState
+                        .remoteSpeechToTextAllowed
                 )
             )
+            resetAcceptedMediaReviewState(
+                using: sceneState
+            )
+            recordingSession =
+                startedRecording
+            sceneState.selectedSection =
+                .recording
+            sceneState
+                .approvedRemoteSTTProviderIdentifier =
+                approvedRemoteProvider
             sceneState.recordingAcknowledged = false
+            selectedCompletedRecordingTrackID =
+                nil
+            processedCompletedRecordingSessionID =
+                nil
             if let recordingSession {
                 beginRecordingPolling(jobID: recordingSession.jobID)
             }
@@ -366,6 +521,9 @@ public final class MediaReviewStore {
     public func stopRecording() async {
         guard let recordingSession, recordingSession.canStop else { return }
         guard !isStoppingRecording else { return }
+        audioDiagnostics.record(
+            .recordingStopRequested
+        )
         safeErrorMessage = nil
         isStoppingRecording = true
         defer { isStoppingRecording = false }
@@ -373,6 +531,7 @@ public final class MediaReviewStore {
             self.recordingSession = try await workflow.stopRecording(
                 jobID: recordingSession.jobID
             )
+            reconcileCompletedRecordingTrackSelection()
             recordingPollingTask?.cancel()
         } catch let error as LocalizedError {
             safeErrorMessage = error.errorDescription
@@ -396,6 +555,9 @@ public final class MediaReviewStore {
             safeErrorMessage = "Select one microphone before resuming this recording."
             return
         }
+        audioDiagnostics.record(
+            .recordingResumeRequested
+        )
         await perform {
             self.recordingSession = try await workflow.resumeRecording(
                 jobID: recordingSession.jobID,
@@ -405,7 +567,68 @@ public final class MediaReviewStore {
                 )
             )
             sceneState.recordingAcknowledged = false
+            selectedCompletedRecordingTrackID =
+                nil
+            processedCompletedRecordingSessionID =
+                nil
             beginRecordingPolling(jobID: recordingSession.jobID)
+        }
+    }
+
+    public func processCompletedRecording(
+        using sceneState: MediaReviewSceneState
+    ) async {
+        guard !sceneState.isInteractionLocked else {
+            safeErrorMessage =
+                "Wait for the current editor or workspace operation to finish."
+            return
+        }
+        guard !sceneState
+                .hasUnsavedEditorChanges
+        else {
+            safeErrorMessage =
+                "Save or discard every unpublished editor draft before opening this recorded-audio workflow."
+            return
+        }
+        guard !blocksMediaReplacement else {
+            safeErrorMessage =
+                "Wait for the current media workflow to finish before preparing recorded audio."
+            return
+        }
+        guard let recordingSession,
+              recordingSession.state
+                == .completed,
+              let trackID =
+                selectedCompletedRecordingTrackID,
+              recordingSession
+                .completedTracks
+                .contains(where: {
+                    $0.trackID == trackID
+                })
+        else {
+            safeErrorMessage =
+                "Select one verified completed recording track before preparing it for transcript review."
+            return
+        }
+        await perform {
+            let record =
+                try await workflow
+                .processCompletedRecording(
+                    jobID:
+                        recordingSession
+                        .jobID,
+                    trackID: trackID
+                )
+            resetAcceptedMediaReviewState(
+                using: sceneState
+            )
+            job = record
+            processedCompletedRecordingSessionID =
+                recordingSession
+                .sessionID
+            beginPolling(
+                jobID: record.jobID
+            )
         }
     }
 
@@ -450,10 +673,36 @@ public final class MediaReviewStore {
             return
         }
         guard let submission = transcriptSubmission(using: sceneState) else { return }
+        speechToTextDiagnostics.record(
+            .speechToTextStartRequested
+        )
         await perform {
             routeReview = try await workflow.transcriptRoute(
                 canonicalJobID: job.jobID,
                 submission: submission
+            )
+        }
+    }
+
+    public func restoreMeetingSpeechToTextRoute(
+        using sceneState: MediaReviewSceneState
+    ) async {
+        guard let job, job.state == .succeeded
+        else { return }
+        await perform {
+            guard let saved =
+                    try await workflow
+                    .meetingSpeechToTextRoute(
+                        canonicalJobID: job.jobID
+                    )
+            else {
+                return
+            }
+            apply(
+                try restoredSpeechRoutePresentation(
+                    saved
+                ),
+                using: sceneState
             )
         }
     }
@@ -470,14 +719,22 @@ public final class MediaReviewStore {
                 submission: submission
             )
             routeReview = route
-            guard route.isOnDeviceReady else {
-                safeErrorMessage = "The selected installed models are unavailable. Use the manual local fallback."
+            guard route.isReady else {
+                safeErrorMessage =
+                    route.selection == nil
+                    ? "STT is not configured. Keep the recording or import a transcript."
+                    : "The selected STT route is not ready. No provider fallback was attempted."
                 return
             }
             transcriptJob = try await workflow.startTranscript(
                 canonicalJobID: job.jobID,
                 submission: submission
             )
+            if route.sendsAudioOffDevice {
+                sceneState
+                    .remoteAudioUploadAcknowledged =
+                    false
+            }
             if let transcriptJob { beginTranscriptPolling(jobID: transcriptJob.jobID) }
         }
     }
@@ -529,6 +786,40 @@ public final class MediaReviewStore {
         await perform {
             transcriptReview = try await workflow.transcriptReview(canonicalJobID: job.jobID)
         }
+    }
+
+    public func codexTurnRequest(
+        selectedSegmentIDs: [TranscriptSegmentID],
+        prompt: String,
+        visibleUserAuthorization: Bool
+    ) async -> CodexMeetingTurnRequest? {
+        guard let job, job.state == .succeeded,
+              transcriptReview != nil
+        else {
+            safeErrorMessage =
+                "Finish and load a published transcript before using Codex."
+            return nil
+        }
+        safeErrorMessage = nil
+        do {
+            aiProviderDiagnostics.record(
+                .codexTurnRequested
+            )
+            return try await workflow.codexTurnRequest(
+                canonicalJobID: job.jobID,
+                selectedSegmentIDs: selectedSegmentIDs,
+                prompt: prompt,
+                visibleUserAuthorization:
+                    visibleUserAuthorization
+            )
+        } catch let error as LocalizedError {
+            safeErrorMessage = error.errorDescription
+                ?? "The selected transcript context is not authorized for Codex."
+        } catch {
+            safeErrorMessage =
+                "The selected transcript context is not authorized for Codex."
+        }
+        return nil
     }
 
     @discardableResult
@@ -847,6 +1138,9 @@ public final class MediaReviewStore {
 
     public func loadStorageReport() async {
         guard workspace != nil else { return }
+        storageDiagnostics.record(
+            .storageReportRequested
+        )
         await performStorageOperation(
             .refreshing,
             failureMessage:
@@ -1829,6 +2123,7 @@ public final class MediaReviewStore {
         workflow.discardPendingMedia()
         pendingMedia = nil
         importedSource = nil
+        sourceReselectionJob = nil
         job = nil
         transcriptJob = nil
         routeReview = nil
@@ -1859,9 +2154,194 @@ public final class MediaReviewStore {
         storageFailureMessage = nil
         recordingSetup = nil
         recordingSession = nil
+        selectedCompletedRecordingTrackID =
+            nil
+        processedCompletedRecordingSessionID =
+            nil
         isStoppingRecording = false
         webMetadataCandidate = nil
         safeErrorMessage = nil
+    }
+
+    private struct RestoredSpeechRoutePresentation {
+        let selection:
+            ProviderModelSelectionRecord?
+        let approvedRemoteProviderIdentifier:
+            String?
+        let remoteSpeechToTextAllowed: Bool
+    }
+
+    private func restoredSpeechRoutePresentation(
+        _ route: MeetingSpeechToTextRouteV1
+    ) throws -> RestoredSpeechRoutePresentation {
+        switch route.kind {
+        case .recordOnly:
+            return RestoredSpeechRoutePresentation(
+                selection: nil,
+                approvedRemoteProviderIdentifier:
+                    nil,
+                remoteSpeechToTextAllowed: false
+            )
+        case .local:
+            guard let provider =
+                    route.providerIdentifier,
+                  let model =
+                    route.modelIdentifier
+            else {
+                throw TranscriptWorkflowError
+                    .unavailable
+            }
+            return RestoredSpeechRoutePresentation(
+                selection:
+                    ProviderModelSelectionRecord(
+                        providerIdentifier: provider,
+                        modelIdentifier: model
+                    ),
+                approvedRemoteProviderIdentifier:
+                    nil,
+                remoteSpeechToTextAllowed: false
+            )
+        case .approvedRemote:
+            guard let provider =
+                    route.providerIdentifier,
+                  let model =
+                    route.modelIdentifier
+            else {
+                throw TranscriptWorkflowError
+                    .unavailable
+            }
+            return RestoredSpeechRoutePresentation(
+                selection:
+                    ProviderModelSelectionRecord(
+                        providerIdentifier: provider,
+                        modelIdentifier: model
+                    ),
+                approvedRemoteProviderIdentifier:
+                    provider,
+                remoteSpeechToTextAllowed: true
+            )
+        }
+    }
+
+    private func apply(
+        _ route:
+            RestoredSpeechRoutePresentation,
+        using sceneState: MediaReviewSceneState
+    ) {
+        sceneState.transcriptionSelection =
+            route.selection
+        sceneState
+            .approvedRemoteSTTProviderIdentifier =
+            route
+            .approvedRemoteProviderIdentifier
+        sceneState.remoteSpeechToTextAllowed =
+            route.remoteSpeechToTextAllowed
+        sceneState.remoteAudioUploadAcknowledged =
+            false
+    }
+
+    private func applyRestoredMediaReview(
+        _ restored: RestoredMediaWorkflowReview,
+        speechRoute:
+            RestoredSpeechRoutePresentation?,
+        using sceneState: MediaReviewSceneState
+    ) throws {
+        let title = restored.meetingTitle
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+        let activeJobs = [
+            restored.sourceReselectionJob,
+            restored.canonicalJob,
+            restored.transcriptJob,
+            restored.analysisJob,
+            restored.briefingJob,
+        ]
+            .compactMap { $0 }
+            .filter { !$0.state.isTerminal }
+        guard title == restored.meetingTitle,
+              !title.isEmpty,
+              title.utf8.count <= 2_048,
+              restored.dataClassification.isKnown,
+              activeJobs.count <= 1,
+              restored.canonicalJob != nil
+                || (
+                    restored.sourceReselectionJob != nil
+                        && restored.importedSource == nil
+                        && restored.transcriptJob == nil
+                        && restored.transcriptReview == nil
+                        && restored.analysisJob == nil
+                        && restored.analysisReview == nil
+                        && restored.briefingJob == nil
+                        && restored.briefingReview == nil
+                )
+        else {
+            throw TranscriptWorkflowError
+                .unavailable
+        }
+
+        importedSource = restored.importedSource
+        sourceReselectionJob =
+            restored.sourceReselectionJob
+        job = restored.canonicalJob
+        transcriptJob = restored.transcriptJob
+        transcriptReview = restored.transcriptReview
+        analysisJob = restored.analysisJob
+        analysisReview = restored.analysisReview
+        briefingJob = restored.briefingJob
+        briefingReview = restored.briefingReview
+        sceneState.meetingTitle =
+            restored.meetingTitle
+        sceneState.dataClassification =
+            restored.dataClassification
+        sceneState.languageTag =
+            restored.sourceLanguage?.value ?? ""
+        sceneState.codexTextProcessingAllowed =
+            restored.codexTextProcessingAllowed
+        sceneState.selectedTrack =
+            restored.importedSource?.selectedTrack
+        sceneState.speechSourceKind =
+            restored.importedSource?
+            .speechSourceKind ?? .unknown
+        if let speechRoute {
+            apply(
+                speechRoute,
+                using: sceneState
+            )
+        } else {
+            sceneState
+                .remoteAudioUploadAcknowledged =
+                false
+        }
+
+        guard let activeJob = activeJobs.first
+        else { return }
+        if activeJob.jobID
+            == restored.canonicalJob?.jobID
+        {
+            beginPolling(jobID: activeJob.jobID)
+        } else if activeJob.jobID
+            == restored.transcriptJob?.jobID
+        {
+            beginTranscriptPolling(
+                jobID: activeJob.jobID
+            )
+        } else if activeJob.jobID
+            == restored.analysisJob?.jobID
+        {
+            beginAnalysisPolling(
+                jobID: activeJob.jobID
+            )
+        } else if activeJob.jobID
+            == restored.briefingJob?.jobID
+        {
+            beginBriefingPolling(
+                jobID: activeJob.jobID
+            )
+        } else {
+            throw TranscriptWorkflowError
+                .unavailable
+        }
     }
 
     private func resetAcceptedMediaReviewState(
@@ -1870,6 +2350,7 @@ public final class MediaReviewStore {
         pollingTask?.cancel()
         pollingTask = nil
         importedSource = nil
+        sourceReselectionJob = nil
         job = nil
         transcriptJob = nil
         routeReview = nil
@@ -1882,6 +2363,31 @@ public final class MediaReviewStore {
         briefingReview = nil
         lastBriefingExport = nil
         sceneState.resetForAcceptedMedia()
+    }
+
+    private func reconcileCompletedRecordingTrackSelection() {
+        guard let completedTracks =
+                recordingSession?
+                .completedTracks,
+              !completedTracks.isEmpty
+        else {
+            selectedCompletedRecordingTrackID =
+                nil
+            return
+        }
+        if let selected =
+                selectedCompletedRecordingTrackID,
+           completedTracks.contains(where: {
+               $0.trackID == selected
+           })
+        {
+            return
+        }
+        selectedCompletedRecordingTrackID =
+            completedTracks.count == 1
+            ? completedTracks.first?
+                .trackID
+            : nil
     }
 
     private func advanceWorkspaceSession() {
@@ -1923,7 +2429,10 @@ public final class MediaReviewStore {
                     let current = try await workflow.recordingReview(jobID: jobID)
                     guard !Task.isCancelled, session == workspaceSession else { return }
                     recordingSession = current
-                    if current.state.isTerminal { return }
+                    if current.state.isTerminal {
+                        reconcileCompletedRecordingTrackSelection()
+                        return
+                    }
                 } catch {
                     guard !Task.isCancelled, session == workspaceSession else { return }
                     safeErrorMessage = "Recording status is temporarily unavailable; sealed local audio remains retained."
@@ -2657,11 +3166,43 @@ public final class MediaReviewStore {
             }
             return TranscriptStartSubmission(
                 sourceLanguage: sourceLanguage,
-                targetLanguage: targetLanguage
+                targetLanguage: targetLanguage,
+                transcriptionSelection:
+                    sceneState
+                    .transcriptionSelection,
+                visibleRemoteAudioAuthorization:
+                    sceneState
+                    .remoteAudioUploadAcknowledged
             )
         } catch {
             safeErrorMessage = "Use valid language tags such as en, fr, or zh-hans."
             return nil
         }
+    }
+
+    private func validateSpeechToTextMeetingPolicy(
+        using sceneState: MediaReviewSceneState
+    ) -> Bool {
+        guard let selection =
+                sceneState.transcriptionSelection,
+              selection.providerIdentifier
+                  != "apple-speech"
+        else { return true }
+        guard sceneState.dataClassification
+                .restrictionRank
+                < DataClassification.sensitive
+                .restrictionRank
+        else {
+            safeErrorMessage =
+                "Sensitive and Restricted meetings can use only an installed local STT model or Record only."
+            return false
+        }
+        guard sceneState.remoteSpeechToTextAllowed
+        else {
+            safeErrorMessage =
+                "Authorize the selected remote STT provider for this meeting, or choose Local STT / Record only."
+            return false
+        }
+        return true
     }
 }

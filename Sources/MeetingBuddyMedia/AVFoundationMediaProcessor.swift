@@ -12,57 +12,32 @@ public final class AVFoundationMediaProcessor: NativeMediaProcessing, @unchecked
         let format = try ApprovedMediaFormat(fileExtension: sourceURL.pathExtension)
         let asset = AVURLAsset(url: sourceURL)
         let duration = try await asset.load(.duration)
-        let tracks = try await asset.loadTracks(withMediaType: .audio)
         guard duration.isNumeric, duration > .zero else {
             throw MediaContractError.unreadableMedia
         }
-        guard !tracks.isEmpty else {
-            throw MediaContractError.noAudioTrack
-        }
-        guard tracks.count <= MediaInspection.maximumAudioTrackCount else {
-            throw MediaContractError.invalidTimeline(
-                "Media inspection supports at most \(MediaInspection.maximumAudioTrackCount) audio tracks."
-            )
-        }
 
         let durationFrames = try frameCount(for: duration)
-        var descriptors: [AudioTrackDescriptor] = []
-        for track in tracks {
-            let timeRange = try await track.load(.timeRange)
-            let formatDescriptions = try await track.load(.formatDescriptions)
-            let languageValue = try await track.load(.extendedLanguageTag)
-            let basicDescription = formatDescriptions.first.flatMap {
-                CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee
-            }
-            let codec = formatDescriptions.first.map {
-                fourCharacterCode(CMFormatDescriptionGetMediaSubType($0))
-            }
-            let trackDuration = try frameCount(for: timeRange.duration)
-            descriptors.append(
-                try AudioTrackDescriptor(
-                    trackIdentifier: MediaTrackIdentifier(track.trackID),
-                    durationFrameCount: trackDuration,
-                    sourceSampleRateHertz: basicDescription.flatMap {
-                        guard $0.mSampleRate > 0,
-                              $0.mSampleRate <= Double(UInt32.max)
-                        else { return nil }
-                        return UInt32($0.mSampleRate.rounded())
-                    },
-                    sourceChannelCount: basicDescription.flatMap {
-                        guard $0.mChannelsPerFrame > 0,
-                              $0.mChannelsPerFrame <= UInt32(UInt16.max)
-                        else { return nil }
-                        return UInt16($0.mChannelsPerFrame)
-                    },
-                    codec: codec,
-                    language: languageValue.flatMap { try? LanguageTag($0) }
-                )
+        let descriptors =
+            try await audioTrackDescriptors(
+                in: asset
             )
-        }
         return try MediaInspection(
             format: format,
             durationFrameCount: durationFrames,
             audioTracks: descriptors
+        )
+    }
+
+    public func audioTracks(
+        in sourceURL: URL
+    ) async throws -> [AudioTrackDescriptor] {
+        let asset = AVURLAsset(url: sourceURL)
+        let duration = try await asset.load(.duration)
+        guard duration.isNumeric, duration > .zero else {
+            throw MediaContractError.unreadableMedia
+        }
+        return try await audioTrackDescriptors(
+            in: asset
         )
     }
 
@@ -148,6 +123,109 @@ public final class AVFoundationMediaProcessor: NativeMediaProcessing, @unchecked
         let rangeIssues: [MediaRangeIssue]
     }
 
+    private func audioTrackDescriptors(
+        in asset: AVAsset
+    ) async throws -> [AudioTrackDescriptor] {
+        let tracks = try await asset.loadTracks(
+            withMediaType: .audio
+        )
+        guard !tracks.isEmpty else {
+            throw MediaContractError.noAudioTrack
+        }
+        guard tracks.count
+                <= MediaInspection
+                .maximumAudioTrackCount
+        else {
+            throw MediaContractError.invalidTimeline(
+                "Media inspection supports at most \(MediaInspection.maximumAudioTrackCount) audio tracks."
+            )
+        }
+
+        var descriptors:
+            [AudioTrackDescriptor] = []
+        descriptors.reserveCapacity(tracks.count)
+        for track in tracks {
+            let timeRange =
+                try await track.load(.timeRange)
+            let formatDescriptions =
+                try await track.load(
+                    .formatDescriptions
+                )
+            let languageValue =
+                try await track.load(
+                    .extendedLanguageTag
+                )
+            let basicDescription =
+                formatDescriptions.first
+                .flatMap {
+                    CMAudioFormatDescriptionGetStreamBasicDescription(
+                        $0
+                    )?.pointee
+                }
+            let codec =
+                formatDescriptions.first
+                .map {
+                    fourCharacterCode(
+                        CMFormatDescriptionGetMediaSubType(
+                            $0
+                        )
+                    )
+                }
+            let trackDuration =
+                try frameCount(
+                    for: timeRange.duration
+                )
+            descriptors.append(
+                try AudioTrackDescriptor(
+                    trackIdentifier:
+                        MediaTrackIdentifier(
+                            track.trackID
+                        ),
+                    durationFrameCount:
+                        trackDuration,
+                    sourceSampleRateHertz:
+                        basicDescription.flatMap {
+                            guard
+                                $0.mSampleRate > 0,
+                                $0.mSampleRate
+                                    <= Double(
+                                        UInt32.max
+                                    )
+                            else {
+                                return nil
+                            }
+                            return UInt32(
+                                $0.mSampleRate
+                                    .rounded()
+                            )
+                        },
+                    sourceChannelCount:
+                        basicDescription.flatMap {
+                            guard
+                                $0.mChannelsPerFrame
+                                    > 0,
+                                $0.mChannelsPerFrame
+                                    <= UInt32(
+                                        UInt16.max
+                                    )
+                            else {
+                                return nil
+                            }
+                            return UInt16(
+                                $0.mChannelsPerFrame
+                            )
+                        },
+                    codec: codec,
+                    language:
+                        languageValue.flatMap {
+                            try? LanguageTag($0)
+                        }
+                )
+            )
+        }
+        return descriptors
+    }
+
     private func transcode(
         asset: AVAsset,
         track: AVAssetTrack,
@@ -174,7 +252,15 @@ public final class AVFoundationMediaProcessor: NativeMediaProcessing, @unchecked
         reader.add(output)
 
         try prepareAVAssetWriterDestination(destinationURL)
-        let writer = try AVAssetWriter(outputURL: destinationURL, fileType: .caf)
+        let fileType: AVFileType =
+            destinationURL.pathExtension.lowercased()
+                == "wav"
+            ? .wav
+            : .caf
+        let writer = try AVAssetWriter(
+            outputURL: destinationURL,
+            fileType: fileType
+        )
         let input = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
         input.expectsMediaDataInRealTime = false
         guard writer.canAdd(input) else {

@@ -42,17 +42,23 @@ macOS 26. This support gap needs a separate local-STT platform decision:
 
 ### Remote
 
-No remote STT adapter is authorized or implemented. A future adapter requires:
+The optional OpenAI batch adapter is implemented but is never a default or
+silent fallback. It requires an exact ready speech-provider profile, approved
+model capability, Keychain credential reference, canonical-audio-only data
+category, non-sensitive classification, approved provider-retention policy,
+and visible per-meeting upload authorization.
 
-- exact provider/model and batch/realtime capability;
-- API endpoint and TLS policy;
-- audio categories and bounded request shape;
-- retention/training policy;
-- Keychain secret reference;
-- user-visible upload destination and API cost owner;
-- explicit per-meeting authorization;
-- retry/idempotency semantics; and
-- local/record-only alternative.
+The transport pins `https://api.openai.com/v1/audio/transcriptions`, rejects
+redirect drift, uses an ephemeral no-cookie/no-cache session, bounds audio and
+response bytes, emits model-specific multipart response formats, validates
+timestamps against the exact canonical chunk, and fails closed on malformed or
+uncovered output. Its connection test sends only a fixed synthetic
+non-sensitive WAV and verifies the expected transcript; it never sends meeting
+content. API cost belongs to the user's OpenAI API account.
+
+Realtime STT remains capability-gated and unimplemented. Provider
+retention/training terms remain external policy facts shown to the user rather
+than properties the client can enforce.
 
 ### None / Record Only
 
@@ -85,15 +91,24 @@ the entire transcript view.
 
 ## Background lifecycle
 
-The current `MeetingBuddyApp` terminates when the main window closes during
-recording. The target design moves active-session ownership above the window:
+Active-session ownership is app-scoped rather than window-scoped:
 
-- closing the window keeps capture and durable autosave active;
-- a menu-bar status item exposes open, pause/resume when supported, and stop;
-- reopening attaches to the same session;
-- true Quit requests an explicit stop/finalize/flush decision;
-- sleep/wake and device loss produce visible epochs and recovery state;
-- no window or menu action can start a duplicate capture.
+- closing the main window keeps capture and durable autosave active;
+- a menu-bar status item exposes current state, exact source kinds, retained
+  audio duration, reopen, and stop/finalize;
+- reopening attaches to the same store and session;
+- true Quit retains the existing explicit stop/finalize/flush decision and
+  stays open on failure;
+- a completed recording can be selected by exact retained track and moved into
+  the canonical-audio/transcript workflow without guessing or mixing dual
+  tracks;
+- startup restores the newest verified completed-but-unprocessed recording;
+- no window, intake, or menu action can silently replace an active/dirty media
+  workflow.
+
+True pause/resume, live source switching, sleep/wake epochs, device-loss UI,
+and the 10m/1h/4h/8h real-device matrix remain open. The menu does not expose a
+fake Pause command.
 
 This is a functional reliability slice, not U1.
 

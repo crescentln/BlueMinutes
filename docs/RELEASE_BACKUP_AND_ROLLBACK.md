@@ -1,6 +1,6 @@
 # Release Backup and Rollback
 
-Status: v0.3 local-development procedure with retained Task 011 evidence
+Status: 0.4 formal-test procedure with retained v0.3 and Task 011 evidence
 Applies to: a user-selected BlueMinutes workspace
 Safety rule: preserve the newer workspace; restore into a distinct empty path
 
@@ -56,7 +56,52 @@ Do not treat a copy as a backup until the verifier prints
 
 The update policy remains manual. Automatic updates are unapproved.
 
-For the v0.3.0 local development release set:
+For the untagged 0.4.0 local formal-test development release set:
+
+1. Run `script/verify_release_candidate.sh` against
+   `dist/BlueMinutes-0.4.0-development/` in `development` mode.
+2. Confirm the schema-v2 `release-manifest.json` reports
+   `classification: DEVELOPMENT`, `distribution_authorized: false`, version
+   `0.4.0`, build `4`, the expected exact clean Git head/tree, an empty
+   `source.git_tag`, and the reviewed ad-hoc signature boundary.
+3. Retain `release-manifest.json`, `source-files.sha256`, and the ZIP digest
+   together with `BlueMinutes.app` and
+   `BlueMinutes-0.4.0-development.zip`.
+4. Expand the ZIP into a new temporary directory and verify the extracted app
+   if performing an independent manual inspection; the release-set verifier
+   already performs this step.
+5. Confirm `distribution` mode rejects the package.
+6. Do not install, upload, distribute, or treat this package as an automatic
+   update.
+
+The 0.4.0 development archive is ad-hoc signed and not notarized. It is
+approved only for local formal testing on the build Mac. No `v0.4.0` tag or
+GitHub Release is part of this procedure.
+
+### 0.4 application-support and credential boundary
+
+The cold-workspace backup above covers the selected Meeting workspace only.
+Version 0.4 also uses app-support state outside that workspace:
+
+- `~/Library/Application Support/BlueMinutes/Intelligence/configuration-v1.json`
+  contains provider metadata and routing preferences, but no secret bytes;
+- `~/Library/Application Support/BlueMinutes/CodexRuntime/` contains the
+  strict isolated runtime configuration and disposable session directories,
+  but no meeting audio; conversation history persistence is disabled and
+  private runtime state is purged before connection and after confirmed
+  process exit; and
+- BYOK provider secrets remain in macOS Keychain, while Codex subscription
+  authentication remains owned by the official Codex runtime.
+
+Do not copy, print, or place Keychain or Codex authentication material into a
+workspace backup, Git, logs, or release artifacts. For formal tests, record
+only whether the optional provider was configured and whether its bounded test
+passed. The existing workspace verifier does not back up or validate these
+app-support/Keychain locations. A real 0.4-to-0.3 rollback therefore requires a
+synthetic copied workspace and the actual older binary before it may be
+claimed; that proof is not provided by the DEVELOPMENT package alone.
+
+For the historical v0.3.0 local development release set:
 
 1. Run `script/verify_release_candidate.sh` against
    `dist/BlueMinutes-0.3.0-development/` in `development` mode.

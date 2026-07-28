@@ -11,7 +11,13 @@ struct TranscriptReviewView: View {
         RevisionID?
     @State private var presentationCache:
         TranscriptReviewPresentationCache?
+    @State private var transcriptSearchQuery =
+        ""
+    @State private var transcriptOutlineScope:
+        TranscriptOutlineScope = .all
     @FocusState private var focusedEditor: TranscriptEditorFocus?
+    private let intelligenceStore:
+        IntelligenceConfigurationStore?
     private let inspectorPresentationOverride:
         Binding<Bool>?
 
@@ -19,6 +25,8 @@ struct TranscriptReviewView: View {
         store: MediaReviewStore,
         sceneState:
             MediaReviewSceneState,
+        intelligenceStore:
+            IntelligenceConfigurationStore? = nil,
         initialInspectorIsPresented:
             Bool = false,
         inspectorPresentationOverride:
@@ -26,6 +34,8 @@ struct TranscriptReviewView: View {
     ) {
         self.store = store
         self.sceneState = sceneState
+        self.intelligenceStore =
+            intelligenceStore
         self.inspectorPresentationOverride =
             inspectorPresentationOverride
         _inspectorIsPresented =
@@ -104,6 +114,17 @@ struct TranscriptReviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 routeCard
+                GroupBox("Speech-to-Text Route") {
+                    SpeechToTextRoutePicker(
+                        sceneState: sceneState,
+                        intelligenceStore:
+                            intelligenceStore,
+                        existingMeeting: true,
+                        requiresExecutionAuthorization:
+                            true
+                    )
+                    .padding()
+                }
                 GroupBox("Languages") {
                     Form {
                         TextField(
@@ -121,7 +142,7 @@ struct TranscriptReviewView: View {
                     }
                     .formStyle(.grouped)
                     HStack {
-                        Button("Check Installed Models") {
+                        Button("Check STT Route") {
                             Task {
                                 await store
                                     .refreshTranscriptRoute(
@@ -129,7 +150,7 @@ struct TranscriptReviewView: View {
                                     )
                             }
                         }
-                        Button("Transcribe On Device") {
+                        Button("Start Transcription") {
                             Task {
                                 await store.startTranscript(
                                     using: sceneState
@@ -138,8 +159,9 @@ struct TranscriptReviewView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(
-                            store.routeReview?
-                                .isOnDeviceReady != true
+                            sceneState
+                                .transcriptionSelection
+                                == nil
                                 || store.isWorking
                         )
                     }
@@ -177,7 +199,7 @@ struct TranscriptReviewView: View {
                 }
                 Divider()
                 Text(
-                    "Meeting content remains on this Mac. Task 005B has no outbound provider adapter and never downloads a model during processing."
+                    routeDetail
                 )
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -193,16 +215,20 @@ struct TranscriptReviewView: View {
         VStack(alignment: .leading, spacing: 7) {
             LabeledContent(title) {
                 Label(
-                    decision.route == .appleOnDevice
-                        ? "Apple on-device model installed"
-                        : "Manual local fallback",
+                    routeLabel(decision.route),
                     systemImage:
-                        decision.route == .appleOnDevice
+                        decision.route
+                            == .approvedExternal
+                        ? "network.badge.shield.half.filled"
+                        : decision.route
+                            == .appleOnDevice
                         ? "checkmark.shield.fill"
                         : "person.text.rectangle"
                 )
                 .foregroundStyle(
                     decision.route == .appleOnDevice
+                        || decision.route
+                            == .approvedExternal
                         ? .green
                         : .orange
                 )
@@ -282,10 +308,39 @@ struct TranscriptReviewView: View {
         }
     }
 
+    private func routeLabel(
+        _ route: ModelExecutionRoute
+    ) -> String {
+        switch route {
+        case .appleOnDevice:
+            "Apple on-device model installed"
+        case .approvedExternal:
+            "Explicitly authorized remote STT"
+        case .deterministicTest:
+            "Deterministic test provider"
+        case .manualFallback:
+            "Record only / manual transcript"
+        }
+    }
+
+    private var routeDetail: String {
+        guard let route = store.routeReview else {
+            return "Choose Local STT, a meeting-approved remote STT API, or Record only. Codex never receives audio."
+        }
+        if route.sendsAudioOffDevice {
+            return route.isReady
+                ? "The exact remote provider/model and policy revision are ready for this one authorized upload. No fallback is configured."
+                : "The remote provider is selected, but upload authorization is not ready. No audio has been sent."
+        }
+        return route.selection == nil
+            ? "STT is not configured. Recording and transcript import remain available; BlueMinutes will not claim that transcription is running."
+            : "Meeting audio remains on this Mac. No provider fallback is configured."
+    }
+
     private func transcriptJobCard(
         _ job: MediaJobReview
     ) -> some View {
-        GroupBox("Local transcript task") {
+        GroupBox("Transcript task") {
             VStack(alignment: .leading, spacing: 10) {
                 LabeledContent(
                     "State",
@@ -391,6 +446,13 @@ struct TranscriptReviewView: View {
         let selectedSegment = presentation.segment(
             id: sceneState.transcript.selectedSegmentID
         )
+        let visibleSegments =
+            presentation.segments(
+                matching:
+                    transcriptSearchQuery,
+                scope:
+                    transcriptOutlineScope
+            )
         let selectedEvidence = selectedSegment.map {
             presentation.evidence(for: $0)
         } ?? []
@@ -413,11 +475,17 @@ struct TranscriptReviewView: View {
         return VStack(spacing: 0) {
             reviewHeader(
                 review: review,
-                presentation: presentation
+                presentation: presentation,
+                visibleSegmentCount:
+                    visibleSegments.count
             )
             Divider()
             HSplitView {
-                segmentList(presentation)
+                segmentList(
+                    visibleSegments,
+                    totalSegmentCount:
+                        presentation.segments.count
+                )
                     .frame(minWidth: 280, idealWidth: 340)
                 segmentDetail(presentation)
                     .frame(minWidth: 420)
@@ -456,7 +524,8 @@ struct TranscriptReviewView: View {
 
     private func reviewHeader(
         review: TranscriptReviewBundle,
-        presentation: TranscriptReviewPresentation
+        presentation: TranscriptReviewPresentation,
+        visibleSegmentCount: Int
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
@@ -535,6 +604,112 @@ struct TranscriptReviewView: View {
                 LabeledContent(
                     "Segments",
                     value: String(presentation.segments.count)
+                )
+            }
+
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField(
+                    "Search transcript",
+                    text:
+                        $transcriptSearchQuery
+                )
+                .textFieldStyle(.roundedBorder)
+                .frame(
+                    minWidth: 180,
+                    idealWidth: 280,
+                    maxWidth: 360
+                )
+                .accessibilityIdentifier(
+                    "BlueMinutes.Transcript.Search"
+                )
+                Picker(
+                    "Filter",
+                    selection:
+                        $transcriptOutlineScope
+                ) {
+                    ForEach(
+                        TranscriptOutlineScope
+                            .allCases
+                    ) { scope in
+                        Text(scope.label)
+                            .tag(scope)
+                    }
+                }
+                .pickerStyle(.menu)
+                .accessibilityIdentifier(
+                    "BlueMinutes.Transcript.OutlineFilter"
+                )
+                Menu {
+                    ForEach(
+                        presentation.outlineAnchors
+                    ) { anchor in
+                        Button(anchor.label) {
+                            guard canNavigate(
+                                to: anchor
+                                    .segmentID
+                            ) else {
+                                return
+                            }
+                            sceneState
+                                .requestTranscriptSelection(
+                                    anchor
+                                    .segmentID
+                                )
+                        }
+                    }
+                } label: {
+                    Label(
+                        "Time Outline",
+                        systemImage:
+                            "list.bullet.indent"
+                    )
+                }
+                .disabled(
+                    presentation
+                        .outlineAnchors.isEmpty
+                )
+                .accessibilityIdentifier(
+                    "BlueMinutes.Transcript.TimeOutline"
+                )
+                if !transcriptSearchQuery.isEmpty {
+                    Button {
+                        transcriptSearchQuery =
+                            ""
+                    } label: {
+                        Label(
+                            "Clear Search",
+                            systemImage:
+                                "xmark.circle.fill"
+                        )
+                    }
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel(
+                        "Clear transcript search"
+                    )
+                }
+                Spacer()
+                Text(
+                    "\(visibleSegmentCount) shown"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            if transcriptSearchQuery.utf8.count
+                > TranscriptReviewPresentation
+                .maximumSearchQueryUTF8Bytes
+            {
+                Label(
+                    "Search text is limited to \(TranscriptReviewPresentation.maximumSearchQueryUTF8Bytes) UTF-8 bytes.",
+                    systemImage:
+                        "exclamationmark.triangle"
+                )
+                .font(.caption)
+                .foregroundStyle(
+                    BlueMinutesColors.error
                 )
             }
 
@@ -617,44 +792,79 @@ struct TranscriptReviewView: View {
     }
 
     private func segmentList(
-        _ presentation: TranscriptReviewPresentation
+        _ segments: [TranscriptSegmentV1],
+        totalSegmentCount: Int
     ) -> some View {
-        List(
-            presentation.segments,
-            id: \.segmentID,
-            selection: transcriptSelection
-        ) { segment in
-            VStack(alignment: .leading, spacing: 5) {
-                Text(segment.text)
-                    .lineLimit(2)
-                HStack {
-                    Text(timeLabel(segment.timeRange))
-                    Text(
-                        label(
-                            segment.reviewStatus
-                                .encodedValue
-                        )
+        Group {
+            if segments.isEmpty {
+                ContentUnavailableView(
+                    "No Matching Segments",
+                    systemImage:
+                        "text.magnifyingglass",
+                    description: Text(
+                        totalSegmentCount == 0
+                            ? "This published transcript contains no speech segments."
+                            : "Change the transcript search or outline filter."
                     )
-                    Spacer()
-                    Text(
-                        provenanceLabel(
-                            segment.revision.createdBy
+                )
+            } else {
+                List(
+                    segments,
+                    id: \.segmentID,
+                    selection:
+                        transcriptSelection
+                ) { segment in
+                    VStack(
+                        alignment: .leading,
+                        spacing: 5
+                    ) {
+                        Text(segment.text)
+                            .lineLimit(2)
+                        HStack {
+                            Text(
+                                timeLabel(
+                                    segment
+                                        .timeRange
+                                )
+                            )
+                            Text(
+                                label(
+                                    segment
+                                        .reviewStatus
+                                        .encodedValue
+                                )
+                            )
+                            Spacer()
+                            Text(
+                                provenanceLabel(
+                                    segment
+                                        .revision
+                                        .createdBy
+                                )
+                            )
+                        }
+                        .font(.caption)
+                        .foregroundStyle(
+                            .secondary
                         )
+                    }
+                    .tag(segment.segmentID)
+                    .accessibilityElement(
+                        children: .combine
+                    )
+                    .accessibilityLabel(
+                        "\(timeLabel(segment.timeRange)), \(segment.text)"
+                    )
+                    .accessibilityValue(
+                        "\(provenanceLabel(segment.revision.createdBy)), \(label(segment.reviewStatus.encodedValue))"
                     )
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .listStyle(.inset)
+                .accessibilityIdentifier(
+                    "BlueMinutes.Transcript.SearchResults"
+                )
             }
-            .tag(segment.segmentID)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(
-                "\(timeLabel(segment.timeRange)), \(segment.text)"
-            )
-            .accessibilityValue(
-                "\(provenanceLabel(segment.revision.createdBy)), \(label(segment.reviewStatus.encodedValue))"
-            )
         }
-        .listStyle(.inset)
     }
 
     @ViewBuilder

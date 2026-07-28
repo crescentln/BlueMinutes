@@ -231,6 +231,31 @@ struct IntakeSurfacePresentationTests {
         #expect(local.contains("job.canCancel"))
         #expect(local.contains("job.canRetry"))
         #expect(local.contains("importRequestIsDisabled"))
+        #expect(
+            local.contains(
+                "\"Start a New Meeting\""
+            )
+        )
+        #expect(
+            local.contains(
+                "BlueMinutes.NewMeeting.Import"
+            )
+        )
+        #expect(
+            local.contains(
+                "BlueMinutes.NewMeeting.Record"
+            )
+        )
+        #expect(
+            local.contains(
+                "BlueMinutes.NewMeeting.UNWebTV"
+            )
+        )
+        #expect(
+            local.contains(
+                "sceneState.requestSection("
+            )
+        )
         #expect(!local.contains("sourceURL"))
         #expect(recording.contains("Checking capture capabilities"))
         #expect(recording.contains("Microphone permission denied"))

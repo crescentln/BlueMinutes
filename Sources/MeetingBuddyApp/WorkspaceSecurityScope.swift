@@ -4,6 +4,12 @@ import Foundation
 final class WorkspaceSecurityScope {
     private static let bookmarkKey = "meetingbuddy.workspace.security-scoped-bookmark.v1"
 
+    struct Candidate {
+        let url: URL
+        let bookmark: Data
+        let didStartSecurityScope: Bool
+    }
+
     private var activeURL: URL?
     private var didStartSecurityScope = false
 
@@ -13,8 +19,11 @@ final class WorkspaceSecurityScope {
         }
     }
 
-    func activate(_ url: URL) throws -> URL {
-        release()
+    /// Opens a candidate scope without changing the current scope or bookmark.
+    ///
+    /// The caller must either commit after the candidate workspace passes all
+    /// recovery checks or discard on every failure path.
+    func prepare(_ url: URL) throws -> Candidate {
         let standardized = url.standardizedFileURL
         let didStart = standardized.startAccessingSecurityScopedResource()
         do {
@@ -23,15 +32,41 @@ final class WorkspaceSecurityScope {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            UserDefaults.standard.set(bookmark, forKey: Self.bookmarkKey)
-            activeURL = standardized
-            didStartSecurityScope = didStart
-            return standardized
+            return Candidate(
+                url: standardized,
+                bookmark: bookmark,
+                didStartSecurityScope: didStart
+            )
         } catch {
             if didStart {
                 standardized.stopAccessingSecurityScopedResource()
             }
             throw AppWorkflowError.workspaceAuthorizationFailed
+        }
+    }
+
+    /// Atomically makes a validated candidate the restorable workspace.
+    func commit(_ candidate: Candidate) {
+        let previousURL = activeURL
+        let previousDidStart = didStartSecurityScope
+        UserDefaults.standard.set(
+            candidate.bookmark,
+            forKey: Self.bookmarkKey
+        )
+        activeURL = candidate.url
+        didStartSecurityScope =
+            candidate.didStartSecurityScope
+        if previousDidStart {
+            previousURL?
+                .stopAccessingSecurityScopedResource()
+        }
+    }
+
+    /// Closes a failed candidate without disturbing the active workspace.
+    func discard(_ candidate: Candidate) {
+        if candidate.didStartSecurityScope {
+            candidate.url
+                .stopAccessingSecurityScopedResource()
         }
     }
 

@@ -26,6 +26,52 @@ struct MediaReviewModelTests {
         ])
     }
 
+    @Test @MainActor
+    func savedRemoteSTTRouteRestoresProviderModelButNeverUploadAuthorization()
+        async throws
+    {
+        let workflow = try MediaReviewWorkflowProbe(
+            seededReviewState: true,
+            meetingSpeechToTextRoute:
+                MeetingSpeechToTextRouteV1(
+                    kind: .approvedRemote,
+                    providerIdentifier: "openai-stt",
+                    modelIdentifier: "whisper-1",
+                    intelligenceConfigurationRevision: 7
+                )
+        )
+        let store = MediaReviewStore(workflow: workflow)
+        let sceneState = MediaReviewSceneState()
+        try await loadSeededReviewState(
+            store: store,
+            sceneState: sceneState
+        )
+        sceneState.remoteAudioUploadAcknowledged =
+            true
+
+        await store.restoreMeetingSpeechToTextRoute(
+            using: sceneState
+        )
+
+        #expect(
+            sceneState.transcriptionSelection
+                == ProviderModelSelectionRecord(
+                    providerIdentifier: "openai-stt",
+                    modelIdentifier: "whisper-1"
+                )
+        )
+        #expect(
+            sceneState
+                .approvedRemoteSTTProviderIdentifier
+                == "openai-stt"
+        )
+        #expect(sceneState.remoteSpeechToTextAllowed)
+        #expect(
+            !sceneState
+                .remoteAudioUploadAcknowledged
+        )
+    }
+
     @Test
     func analysisBriefingAndHistoryAreIndependentNavigationSections() {
         #expect(
@@ -414,6 +460,210 @@ struct MediaReviewModelTests {
     }
 
     @Test @MainActor
+    func workspaceRestoreRehydratesTheLatestMediaRouteWithoutUploadAuthority()
+        async throws
+    {
+        let canonicalJob = try makeFeatureJobReview(
+            succeeded: true
+        )
+        let importedSource = ImportedSourceReview(
+            assetID:
+                featureID(
+                    3_101,
+                    SourceAssetID.self
+                ),
+            revisionID:
+                featureID(
+                    3_102,
+                    RevisionID.self
+                ),
+            sourceHash:
+                try ContentDigest.sha256(
+                    ofUTF8Text:
+                        "restored-source"
+                ),
+            byteSize: 512,
+            format: .wav,
+            durationFrameCount: 32_000,
+            selectedTrack:
+                try MediaTrackIdentifier(1),
+            speechSourceKind:
+                .originalSpeakerAudio
+        )
+        let restoredMedia =
+            RestoredMediaWorkflowReview(
+                meetingTitle:
+                    "Restored Meeting",
+                dataClassification:
+                    .internal,
+                sourceLanguage:
+                    try LanguageTag("fr"),
+                codexTextProcessingAllowed:
+                    true,
+                speechToTextRoute:
+                    try MeetingSpeechToTextRouteV1(
+                        kind: .approvedRemote,
+                        providerIdentifier:
+                            "openai-stt",
+                        modelIdentifier:
+                            "whisper-1",
+                        intelligenceConfigurationRevision:
+                            12
+                    ),
+                importedSource:
+                    importedSource,
+                canonicalJob:
+                    canonicalJob
+            )
+        let workflow = try MediaReviewWorkflowProbe(
+            restoredWorkspace:
+                WorkspaceReview(
+                    workspaceID:
+                        featureID(
+                            3_103,
+                            WorkspaceID.self
+                        ),
+                    displayName:
+                        "Restored Workspace"
+                ),
+            restoredMediaWorkflowReview:
+                restoredMedia
+        )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+        sceneState
+            .remoteAudioUploadAcknowledged =
+            true
+
+        await store.restoreWorkspace(
+            using: sceneState
+        )
+
+        #expect(
+            store.job?.jobID
+                == canonicalJob.jobID
+        )
+        #expect(
+            store.importedSource
+                == importedSource
+        )
+        #expect(
+            sceneState.meetingTitle
+                == "Restored Meeting"
+        )
+        #expect(
+            sceneState.dataClassification
+                == .internal
+        )
+        #expect(
+            sceneState.languageTag == "fr"
+        )
+        #expect(
+            sceneState
+                .codexTextProcessingAllowed
+        )
+        #expect(
+            sceneState
+                .transcriptionSelection
+                == ProviderModelSelectionRecord(
+                    providerIdentifier:
+                        "openai-stt",
+                    modelIdentifier:
+                        "whisper-1"
+                )
+        )
+        #expect(
+            sceneState
+                .approvedRemoteSTTProviderIdentifier
+                == "openai-stt"
+        )
+        #expect(
+            sceneState.remoteSpeechToTextAllowed
+        )
+        #expect(
+            !sceneState
+                .remoteAudioUploadAcknowledged
+        )
+        #expect(
+            workflow
+                .restoredMediaReviewCallCount
+                == 1
+        )
+    }
+
+    @Test @MainActor
+    func workspaceRestoreSurfacesInterruptedIntakeForSourceReselection()
+        async throws
+    {
+        let interrupted =
+            try makeFeatureFailedJobReview()
+        let restoredMedia =
+            RestoredMediaWorkflowReview(
+                meetingTitle:
+                    "Interrupted Import",
+                dataClassification:
+                    .internal,
+                sourceLanguage:
+                    try LanguageTag("en"),
+                codexTextProcessingAllowed:
+                    false,
+                speechToTextRoute: nil,
+                importedSource: nil,
+                sourceReselectionJob:
+                    interrupted,
+                canonicalJob: nil
+            )
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                restoredWorkspace:
+                    WorkspaceReview(
+                        workspaceID:
+                            featureID(
+                                3_104,
+                                WorkspaceID.self
+                            ),
+                        displayName:
+                            "Interrupted Workspace"
+                    ),
+                restoredMediaWorkflowReview:
+                    restoredMedia
+            )
+        let store = MediaReviewStore(
+            workflow: workflow
+        )
+        let sceneState =
+            MediaReviewSceneState()
+
+        await store.restoreWorkspace(
+            using: sceneState
+        )
+
+        #expect(store.workspace != nil)
+        #expect(store.job == nil)
+        #expect(store.importedSource == nil)
+        #expect(
+            store.sourceReselectionJob?
+                .jobID
+                == interrupted.jobID
+        )
+        #expect(
+            store.sourceReselectionJob?
+                .safeFailureSummary?
+                .contains(
+                    "Select the source again"
+                ) == true
+        )
+        #expect(
+            sceneState.meetingTitle
+                == "Interrupted Import"
+        )
+        #expect(!store.blocksWorkspaceSwitch)
+    }
+
+    @Test @MainActor
     func cancelledWorkspaceRestoreCanRetryWithoutAllowingOverlap() async throws {
         let restoreGate = AsyncGate()
         let restoredWorkspace = WorkspaceReview(
@@ -727,11 +977,22 @@ struct MediaReviewModelTests {
         await store.importAndProcess(using: sceneState)
 
         #expect(store.blocksMediaReplacement)
+        #expect(store.blocksWorkspaceSwitch)
         #expect(workflow.importCallCount == 1)
         #expect(store.pendingMedia != nil)
         #expect(
             store.safeErrorMessage
                 == "Wait for the current media workflow to finish before replacing its source."
+        )
+
+        await store.openOrCreateWorkspace(
+            at: URL(fileURLWithPath: "/synthetic-workspace-b"),
+            using: sceneState
+        )
+        #expect(workflow.openCallCount == 1)
+        #expect(
+            store.safeErrorMessage
+                == "Finish, cancel, or retain the current background work before switching workspaces."
         )
 
         await pollGate.release()
@@ -744,7 +1005,10 @@ struct MediaReviewModelTests {
     @Test @MainActor
     func lateWorkspaceAPollCannotWriteIntoWorkspaceBAfterReset() async throws {
         let pollGate = AsyncGate()
-        let workflow = try MediaReviewWorkflowProbe(pollGate: pollGate)
+        let workflow = try MediaReviewWorkflowProbe(
+            pollGate: pollGate,
+            pollingJobSucceeded: true
+        )
         let store = MediaReviewStore(workflow: workflow)
         let sceneState = MediaReviewSceneState()
 
@@ -3583,24 +3847,33 @@ struct MediaReviewModelTests {
             ),
             using: pollScene
         )
+        #expect(
+            pollStore.workspace?.displayName
+                == "Synthetic Workspace"
+        )
+        #expect(
+            pollStore.safeErrorMessage
+                == "Finish, cancel, or retain the current background work before switching workspaces."
+        )
         await pollGate.release()
         for _ in 0..<20 {
             await Task.yield()
         }
         #expect(
             pollStore.workspace?.displayName
-                == "Synthetic Workspace B"
+                == "Synthetic Workspace"
         )
         #expect(pollStore.historicalIndex == nil)
         #expect(
-            pollStore.historicalIndexJob == nil
+            pollStore.historicalIndexJob?
+                .state == .running
         )
         #expect(
             pollStore.historicalSearchPage == nil
         )
         #expect(
-            pollStore.historicalIndexFailureMessage
-                == nil
+            pollStore.safeErrorMessage
+                == "Finish, cancel, or retain the current background work before switching workspaces."
         )
     }
 
@@ -5076,6 +5349,177 @@ struct MediaReviewModelTests {
     }
 
     @Test @MainActor
+    func completedDualTrackRecordingRequiresExactSelectionBeforeCanonicalProcessing()
+        async throws
+    {
+        let recordingJobID =
+            featureID(8_201, JobID.self)
+        let microphoneTrack =
+            CompletedRecordingTrackReview(
+                trackID:
+                    featureID(
+                        8_202,
+                        RecordingTrackID.self
+                    ),
+                kind: .microphone,
+                sourceRevision:
+                    try SemanticRevisionReference(
+                        logicalID:
+                            featureID(
+                                8_203,
+                                SourceAssetID.self
+                            ),
+                        revisionID:
+                            featureID(
+                                8_204,
+                                RevisionID.self
+                            )
+                    ),
+                mediaTrackIdentifier:
+                    try MediaTrackIdentifier(1),
+                durationFrameCount: 32_000,
+                speechSourceKind:
+                    .originalSpeakerAudio,
+                language:
+                    try LanguageTag("en")
+            )
+        let applicationTrack =
+            CompletedRecordingTrackReview(
+                trackID:
+                    featureID(
+                        8_205,
+                        RecordingTrackID.self
+                    ),
+                kind: .applicationAudio,
+                sourceRevision:
+                    try SemanticRevisionReference(
+                        logicalID:
+                            featureID(
+                                8_206,
+                                SourceAssetID.self
+                            ),
+                        revisionID:
+                            featureID(
+                                8_207,
+                                RevisionID.self
+                            )
+                    ),
+                mediaTrackIdentifier:
+                    try MediaTrackIdentifier(1),
+                durationFrameCount: 32_000,
+                speechSourceKind:
+                    .simultaneousInterpretation,
+                language:
+                    try LanguageTag("fr")
+            )
+        let completed =
+            RecordingSessionReview(
+                sessionID:
+                    featureID(
+                        8_208,
+                        RecordingSessionID.self
+                    ),
+                jobID: recordingJobID,
+                state: .completed,
+                stateVersion: 4,
+                activeTrackKinds: [
+                    .applicationAudio,
+                    .microphone,
+                ],
+                durableThroughNanoseconds:
+                    2_000_000_000,
+                knownGapCount: 0,
+                safeReason: nil,
+                completedTracks: [
+                    microphoneTrack,
+                    applicationTrack,
+                ]
+            )
+        let setup = RecordingSetupReview(
+            capability:
+                CaptureCapabilitySnapshot(
+                    microphonePermission:
+                        .authorized,
+                    applicationAudioAvailable:
+                        true,
+                    systemPickerAvailable:
+                        true,
+                    checkedAt:
+                        featureInstant(
+                            1_950_000_000_002
+                        )
+                ),
+            microphones: [],
+            recoverableSession: completed
+        )
+        let workflow =
+            try MediaReviewWorkflowProbe(
+                recordingSetupReview: setup,
+                recordingReviewOverride:
+                    completed,
+                seededRunningJob: true
+            )
+        let store =
+            MediaReviewStore(
+                workflow: workflow
+            )
+        let sceneState =
+            MediaReviewSceneState()
+        await store.openOrCreateWorkspace(
+            at:
+                URL(
+                    fileURLWithPath:
+                        "/synthetic-recording-workspace"
+                ),
+            using: sceneState
+        )
+
+        #expect(
+            store
+                .selectedCompletedRecordingTrackID
+                == nil
+        )
+        await store.processCompletedRecording(
+            using: sceneState
+        )
+        #expect(
+            workflow
+                .completedRecordingProcessCallCount
+                == 0
+        )
+        #expect(store.job == nil)
+
+        store
+            .selectedCompletedRecordingTrackID =
+            applicationTrack.trackID
+        store.clearError()
+        await store.processCompletedRecording(
+            using: sceneState
+        )
+
+        #expect(
+            workflow
+                .completedRecordingProcessCallCount
+                == 1
+        )
+        #expect(
+            workflow
+                .lastProcessedRecordingJobID
+                == recordingJobID
+        )
+        #expect(
+            workflow
+                .lastProcessedRecordingTrackID
+                == applicationTrack.trackID
+        )
+        #expect(store.job != nil)
+        #expect(
+            sceneState.selectedSection
+                == .intake
+        )
+    }
+
+    @Test @MainActor
     func recordingStopRemainsAvailableWhileAnotherLocalOperationIsWorking()
         async throws
     {
@@ -5862,6 +6306,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private let inspection: MediaInspection
     private let restoreGate: AsyncGate?
     private let restoredWorkspace: WorkspaceReview?
+    private let restoredMediaWorkflowReview:
+        RestoredMediaWorkflowReview?
     private let openGate: AsyncGate?
     private let pollGate: AsyncGate?
     private let editorSaveGate: AsyncGate?
@@ -5883,6 +6329,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         Bool
     private let recordingSetupFailureCall: Int?
     private let pollingJob: MediaJobReview?
+    private let meetingSpeechToTextRoute:
+        MeetingSpeechToTextRouteV1?
     private let recordingSetupReview: RecordingSetupReview
     private let stoppedRecordingReview: RecordingSessionReview?
     private let webMetadataShouldFail: Bool
@@ -5917,6 +6365,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private(set) var inspectCallCount = 0
     private(set) var importCallCount = 0
     private(set) var restoreCallCount = 0
+    private(set) var restoredMediaReviewCallCount =
+        0
     private(set) var historicalRebuildCallCount = 0
     private(set) var historicalIndexCallCount = 0
     private(set) var historicalSearchCallCount = 0
@@ -5935,6 +6385,12 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     private(set) var permanentDeletionCallCount = 0
     private(set) var recordingStartCallCount = 0
     private(set) var recordingStopCallCount = 0
+    private(set) var completedRecordingProcessCallCount =
+        0
+    private(set) var lastProcessedRecordingJobID:
+        JobID?
+    private(set) var lastProcessedRecordingTrackID:
+        RecordingTrackID?
     private(set) var webMetadataFetchCallCount = 0
     private(set) var recordingSetupCallCount = 0
     private(set) var lastDeletionConfirmed = false
@@ -5952,6 +6408,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     init(
         restoreGate: AsyncGate? = nil,
         restoredWorkspace: WorkspaceReview? = nil,
+        restoredMediaWorkflowReview:
+            RestoredMediaWorkflowReview? = nil,
         restoreFailuresRemaining: Int = 0,
         openGate: AsyncGate? = nil,
         pollGate: AsyncGate? = nil,
@@ -5983,6 +6441,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             RecordingSessionReview? = nil,
         webMetadataCandidateOverride:
             UNWebTVMetadataCandidate? = nil,
+        pollingJobSucceeded: Bool = false,
         seededRunningJob: Bool = false,
         seededReviewState: Bool = false,
         seededLearnedPreferenceID:
@@ -5993,6 +6452,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             Bool = false,
         seededAnalysisStale:
             Bool = false,
+        meetingSpeechToTextRoute:
+            MeetingSpeechToTextRouteV1? = nil,
         historicalSearchResults:
             [HistoricalPositionResult] = [],
         historicalSearchFailureCall: Int? = nil,
@@ -6018,6 +6479,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
     ) throws {
         self.restoreGate = restoreGate
         self.restoredWorkspace = restoredWorkspace
+        self.restoredMediaWorkflowReview =
+            restoredMediaWorkflowReview
         self.restoreFailuresRemaining = restoreFailuresRemaining
         self.openGate = openGate
         self.pollGate = pollGate
@@ -6089,6 +6552,8 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             historicalIndexAvailability
         self.historicalRebuildCompletesImmediately =
             historicalRebuildCompletesImmediately
+        self.meetingSpeechToTextRoute =
+            meetingSpeechToTextRoute
         pollingJob = try pollGate == nil
             && !seededRunningJob
             && !seededReviewState
@@ -6096,6 +6561,7 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             : makeFeatureJobReview(
                 succeeded:
                     seededReviewState
+                    || pollingJobSucceeded
             )
         currentTranscriptReview = try seededReviewState
             ? makeFeatureTranscriptReview(
@@ -6175,6 +6641,13 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         return restoredWorkspace
     }
 
+    func restoredMediaReview() async throws
+        -> RestoredMediaWorkflowReview?
+    {
+        restoredMediaReviewCallCount += 1
+        return restoredMediaWorkflowReview
+    }
+
     func openOrCreateWorkspace(at _: URL) async throws -> WorkspaceReview {
         if let openGate { await openGate.block() }
         openCallCount += 1
@@ -6239,6 +6712,12 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
             throw ProbeError.unexpectedCall
         }
         return currentTranscriptReview
+    }
+
+    func meetingSpeechToTextRoute(
+        canonicalJobID _: JobID
+    ) async throws -> MeetingSpeechToTextRouteV1? {
+        meetingSpeechToTextRoute
     }
 
     func correctTranscript(
@@ -6696,6 +7175,22 @@ private final class MediaReviewWorkflowProbe: MediaReviewWorkflow {
         }
         currentRecordingReview = stoppedRecordingReview
         return stoppedRecordingReview
+    }
+
+    func processCompletedRecording(
+        jobID: JobID,
+        trackID: RecordingTrackID
+    ) async throws -> MediaJobReview {
+        completedRecordingProcessCallCount +=
+            1
+        lastProcessedRecordingJobID =
+            jobID
+        lastProcessedRecordingTrackID =
+            trackID
+        guard let pollingJob else {
+            throw ProbeError.unexpectedCall
+        }
+        return pollingJob
     }
 
     func fetchUNWebTVMetadata(
@@ -7213,6 +7708,78 @@ private func makeFeatureJobReview(
     )
 }
 
+private func makeFeatureFailedJobReview()
+    throws -> MediaJobReview
+{
+    let jobID = featureID(41, JobID.self)
+    let request = try JobRequest(
+        jobID: jobID,
+        jobType:
+            JobType(
+                "media-local-intake-v1"
+            ),
+        origin: .user,
+        requestedBy:
+            JobRequester(
+                "meetingbuddy-feature-test"
+            ),
+        dataClassification: .internal,
+        idempotencyKey:
+            JobIdempotencyKey(
+                lowercaseHex:
+                    String(
+                        repeating: "b",
+                        count: 64
+                    )
+            ),
+        totalUnitCount: 1,
+        diskBudgetBytes: 65_536
+    )
+    let lease = try TaskDirectoryLease(
+        jobID: jobID,
+        relativePath:
+            WorkspaceRelativePath(
+                ".tasks/\(jobID.canonicalString)"
+            ),
+        diskBudgetBytes: 65_536
+    )
+    let queued = try JobRecord(
+        request: request,
+        lease: lease,
+        createdAt:
+            featureInstant(
+                1_950_000_000_200
+            )
+    )
+    let running = try queued.transitioning(
+        to: .running,
+        at:
+            featureInstant(
+                1_950_000_000_201
+            )
+    )
+    let failure = try JobFailureRecord(
+        code:
+            "source_authority_unavailable",
+        safeSummary:
+            "Select the source again before importing it.",
+        retryable: false,
+        occurredAt:
+            featureInstant(
+                1_950_000_000_202
+            )
+    )
+    let failed = try running.transitioning(
+        to: .failed,
+        at:
+            featureInstant(
+                1_950_000_000_202
+            ),
+        failure: failure
+    )
+    return MediaJobReview(record: failed)
+}
+
 private func makeFeatureTranscriptReview(
     transcriptRevisionID: RevisionID = featureID(56, RevisionID.self),
     translationRevisionID: RevisionID? = featureID(58, RevisionID.self),
@@ -7336,6 +7903,15 @@ private func makeFeatureTranscriptReview(
             ? .failed
             : .transcribed,
         attemptCount: 1,
+        provider: try ProviderMetadata(
+            providerIdentifier:
+                "meetingbuddy-deterministic-transcription",
+            modelIdentifier: "fixture-v1"
+        ),
+        machineSegmentRevision:
+            incomplete
+            ? nil
+            : transcriptReference,
         reviewedSegmentRevision:
             incomplete
             ? nil

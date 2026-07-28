@@ -2,18 +2,24 @@
 
 ## Current status
 
-At rollback anchor `b41ae589`, BlueMinutes has no Codex application provider,
-runtime locator, app-server transport, subscription login, conversation
-persistence, or AI Chat surface. Local stdio MCP is a separate read-only
-automation boundary.
+The current branch implements a bounded Codex text vertical slice:
 
-The foundation slice adds only Codex capability metadata and safety rules:
+- exact official runtime discovery pinned by version, build, digest, and
+  signing identity;
+- an isolated BlueMinutes-owned Codex home and disposable non-workspace cwd;
+- app-server initialize, account/login/logout/rate-limit, thread
+  start/in-process reuse/delete, turn streaming/interrupt/retry, process-loss,
+  and reconnect-to-a-new-thread handling;
+- Intelligence Settings connection/account/quota state;
+- a selected-transcript-segment Assistant with visible per-request
+  authorization; and
+- one bounded application-owned current-meeting transcript search tool.
 
-- Codex supports selected text tasks;
-- Codex declares no batch or realtime STT;
-- its data route is authorized text through the user's Codex subscription;
-- its failure/quota state does not affect STT; and
-- Sensitive Meeting denies it.
+Codex declares no batch or realtime STT, never receives audio, and its
+failure/quota state does not affect recording, STT, editing, search, or export.
+Sensitive/Restricted meetings deny it in both the resolver and central
+model-policy router. Local stdio MCP remains a separate read-only automation
+boundary and is not exposed to the Codex subprocess.
 
 ## Verified official protocol baseline
 
@@ -42,21 +48,23 @@ version rather than copying illustrative JSON from this audit.
 Phase 1 uses a compatible official system-installed `codex` executable.
 BlueMinutes does not bundle, download, overwrite, or auto-update it.
 
-`CodexRuntimeLocator` must resolve an explicit trusted candidate, obtain its
-version, compare a supported schema range, and present install/upgrade guidance.
-It must not search arbitrary writable directories or execute a meeting-provided
-path.
+`CodexRuntimeManager` resolves only the explicit official application/installed
+candidates allowed by policy, verifies version/build/digest/signing identity,
+and returns typed missing, incompatible, or untrusted states. It does not
+search arbitrary writable directories or execute a meeting-provided path.
 
 ## Authentication
 
-BlueMinutes calls official app-server account methods and opens the returned
-browser/device URL through the normal macOS path. Login may be cancelled.
-Logout consequences must be visible because the official runtime may have a
-user-wide session.
+BlueMinutes calls official app-server account methods and exposes both returned
+browser and device-code flows through normal macOS links. Login may be
+cancelled. Logout is explicit because the official runtime may have a user-wide
+session.
 
 BlueMinutes never reads `~/.codex/auth.json`, browser storage, cookies, OAuth
 tokens, refresh tokens, or API keys. It persists only safe account state and
-opaque login/thread identifiers required by the protocol.
+no BlueMinutes-owned account, login, thread, or conversation state. Protocol
+identifiers and account/quota projections remain in memory only. The official
+runtime retains sole control of authentication through its keyring path.
 
 ## Transport and session service
 
@@ -66,7 +74,8 @@ The implementation uses:
   bounded event queue, initialize, process exit, cancellation, and redacted
   errors;
 - `CodexMeetingSessionService` for meeting/thread mapping, turn lifecycle,
-  quota state, reconnect, and exact context requests;
+  quota state, ephemeral reconnect, confirmed process shutdown/private-state
+  purge, and exact context requests;
 - fake transport tests before any live/synthetic gate.
 
 No SwiftUI view directly starts or owns the subprocess.
@@ -83,9 +92,18 @@ the user's defaults.
 The per-thread config overlay must disable the shell tool, unified execution,
 web search, Apps/connectors, plugins, multi-agent, memories, hooks, and login
 shells; it must not load user MCP servers, skills, workspace configuration, or
-experimental tools. The sole possible experimental exception is the exact
-version-pinned `dynamicTools` field needed for the bounded transcript reader,
-and it remains disabled until its schema and fail-closed behavior are tested.
+experimental tools. The sole enabled dynamic surface is the exact
+version-pinned `dynamicTools` field used for the bounded transcript reader. Its
+schema, opaque identifiers, page limit, result shape, and fail-closed behavior
+are covered by transport and contract tests.
+
+`history.persistence` is forced to `none`. The private Codex home, session
+directory, and temporary directory are removed before every connection and
+after confirmed process exit. Cleanup failure remains a visible failed state
+with its retry handle retained; the service cannot report disconnected or
+replace an unconfirmed process. A disconnect during runtime discovery or
+startup cancels and awaits that attempt before application termination may
+complete.
 
 The client must reject and terminate the thread on every command-execution,
 file-change, patch/diff, filesystem-path, MCP/app/plugin, shell-command, or
@@ -122,18 +140,18 @@ option.
 
 ## Independent BYOK path
 
-BYOK is a separate provider family, not Codex authentication. The repository
-already has `MacOSKeychainSecretStore`; the v4 path must reuse it and persist
-only an opaque `SecretIdentifier`. Provider/profile state records exact model
-capabilities, text-versus-audio data route, destination, retention/training
-policy, API cost owner, readiness, and visible authorization. A text-only key
-cannot appear in STT, and an audio-capable remote STT model requires the
-separate audio-egress approval described in the audio audit.
+BYOK is a separate provider family, not Codex authentication. The implemented
+configuration reuses `MacOSKeychainSecretStore` and persists only an opaque
+`SecretIdentifier`. Provider/profile state records exact model capabilities,
+text-versus-audio data route, destination, retention policy, API cost owner,
+readiness, and test timestamp. A text-only key cannot appear in STT.
 
-No new BYOK profile UI, remote adapter, credential-validation PoC, or network
-request has run in the foundation slice. Those remain explicit implementation
-and test gates; Codex login success cannot satisfy them and BYOK failure never
-causes a silent Codex switch.
+The OpenAI speech connection test sends only the integrity-bound synthetic
+sample and verifies its expected transcript. Actual remote batch STT
+additionally requires exact canonical audio, non-sensitive classification, a
+ready speech-capable profile, and fresh visible per-meeting audio-egress
+authorization. Codex login success cannot satisfy any BYOK gate and BYOK
+failure never causes a silent Codex switch.
 
 ## Error and quota behavior
 
@@ -143,23 +161,17 @@ turn interrupted, invalid response, and context denied. Never silently switch
 to a paid BYOK API. Recording, local STT, editing, search, and export remain
 available.
 
-## Required vertical-slice proof
+## Vertical-slice proof
 
-- compatible and incompatible runtime detection;
-- initialize/initialized handshake;
-- browser/device login start, cancel, completion, account read, and logout;
-- thread start/resume;
-- ordered agent-message streaming;
-- turn interrupt;
-- process loss and explicit reconnect;
-- rate-limit/quota presentation;
-- selected-text context bound;
-- one bounded read-only transcript tool;
-- disposable non-workspace cwd plus explicit read-only/never policy;
-- shell, file-change, command, Apps/plugins/MCP, web, and permission-denial
-  tests;
-- audio/path/secret absence tests;
-- synthetic opt-in live test with no user data.
+Deterministic tests cover compatible/incompatible runtime detection, the
+initialize handshake, browser/device login and cancellation, account/logout,
+ephemeral thread start, ordered streaming, interrupt/retry, process loss and
+fresh reconnect, connection/disconnect races, rate limits, selected-text
+binding, the bounded transcript tool, strict disposable confinement,
+prohibited command/file/App/plugin/MCP/web and permission events, and
+audio/path/secret absence. Opt-in tests also exercised the installed pinned
+official runtime and a no-meeting-data account/session connection on
+2026-07-28.
 
 App Sandbox, signing, bundled-runtime, and public-distribution proof remain
 separate gates.

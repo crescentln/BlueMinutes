@@ -48,8 +48,10 @@ public enum ProviderRetentionPolicy: String, Codable, Hashable, Sendable {
 
 public enum ProviderDataCategory: String, Codable, Hashable, Sendable, Comparable {
     case canonicalAudio = "canonical_audio"
+    case userPromptText = "user_prompt_text"
     case transcriptText = "transcript_text"
     case translationText = "translation_text"
+    case documentText = "document_text"
     case speakerContext = "speaker_context"
     case evidenceIdentifiers = "evidence_identifiers"
     case validatedIntelligenceClaims = "validated_intelligence_claims"
@@ -253,8 +255,10 @@ public struct ModelRouteRequest: Codable, Hashable, Sendable {
             return set == [.transcriptText]
         case .analysis:
             let allowed: Set<ProviderDataCategory> = [
+                .userPromptText,
                 .transcriptText,
                 .translationText,
+                .documentText,
                 .speakerContext,
                 .evidenceIdentifiers,
                 .validatedIntelligenceClaims
@@ -268,8 +272,15 @@ public struct ModelRouteRequest: Codable, Hashable, Sendable {
                 .validatedIntelligenceClaims,
                 .evidenceIdentifiers
             ]
+            let conversationalRequired: Set<ProviderDataCategory> = [
+                .userPromptText
+            ]
             return set.isSubset(of: allowed)
-                && (extractionRequired.isSubset(of: set) || aggregationRequired.isSubset(of: set))
+                && (
+                    extractionRequired.isSubset(of: set)
+                        || aggregationRequired.isSubset(of: set)
+                        || conversationalRequired.isSubset(of: set)
+                )
         }
     }
 
@@ -287,6 +298,20 @@ public struct ModelRouteRequest: Codable, Hashable, Sendable {
         case securityPolicy = "security_policy"
     }
 
+}
+
+/// A concrete adapter can consume this value only after the application-owned
+/// policy router has rechecked the complete outbound policy request.
+///
+/// The initializer is intentionally unavailable outside this module. The value
+/// is neither Codable nor printable, so persisted settings and logs cannot
+/// manufacture external execution authority.
+public struct ExternalModelExecutionAuthorization: Hashable, Sendable {
+    public let decision: ModelRouteDecision
+
+    fileprivate init(decision: ModelRouteDecision) {
+        self.decision = decision
+    }
 }
 
 public struct ModelRouteDecision: Codable, Hashable, Sendable {
@@ -400,6 +425,11 @@ public struct ModelPolicyRouter: Sendable {
         guard request.organizationAllowsExternalProcessing,
               request.visibleUserAuthorization,
               request.dataClassification != .restricted,
+              (
+                  !request.dataCategories.contains(.canonicalAudio)
+                      || request.dataClassification.restrictionRank
+                          < DataClassification.sensitive.restrictionRank
+              ),
               request.retentionPolicy != .localWorkspaceOnly,
               case let .approvedProvider(identifier) = request.destination,
               !identifier.isEmpty,
@@ -414,6 +444,57 @@ public struct ModelPolicyRouter: Sendable {
         // Task 007 hardens the policy gate but authorizes no outbound adapter.
         throw AIProviderContractError.routeDenied(
             "An external route passed policy, but Task 005B has no approved outbound provider adapter."
+        )
+    }
+
+    /// Rechecks the complete policy request for one exact concrete external
+    /// adapter. Calling `decide(_:)` remains fail-closed for legacy callers.
+    public func authorizeExternal(
+        _ request: ModelRouteRequest,
+        expectedProviderIdentifier: String
+    ) throws -> ExternalModelExecutionAuthorization {
+        let provider = expectedProviderIdentifier
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard provider == expectedProviderIdentifier,
+              !provider.isEmpty,
+              provider.utf8.count <= 128,
+              !provider.unicodeScalars.contains(
+                  where: CharacterSet.controlCharacters.contains
+              ),
+              !request.offlineMode,
+              !request.localModelAvailable,
+              let securityPolicy = request.securityPolicy,
+              !securityPolicy.noOutboundMode,
+              request.organizationAllowsExternalProcessing,
+              request.visibleUserAuthorization,
+              request.dataClassification != .restricted,
+              (
+                  !request.dataCategories.contains(.canonicalAudio)
+                      || request.dataClassification.restrictionRank
+                          < DataClassification.sensitive.restrictionRank
+              ),
+              request.dataClassification == securityPolicy.effectiveClassification,
+              request.retentionPolicy != .localWorkspaceOnly,
+              case let .approvedProvider(destinationProvider) = request.destination,
+              destinationProvider == provider,
+              securityPolicy.allowsExternalProvider(provider),
+              securityPolicy.approvedDeploymentEnvironments.contains(
+                  request.deploymentEnvironment
+              ),
+              securityPolicy.approvedRetentionPolicies.contains(request.retentionPolicy)
+        else {
+            throw AIProviderContractError.routeDenied(
+                "The complete external model policy did not authorize this exact provider."
+            )
+        }
+
+        return ExternalModelExecutionAuthorization(
+            decision: try ModelRouteDecision(
+                route: .approvedExternal,
+                providerIdentifier: provider,
+                reasonCode: "external_provider_authorized",
+                request: request
+            )
         )
     }
 

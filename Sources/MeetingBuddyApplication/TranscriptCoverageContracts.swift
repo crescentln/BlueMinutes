@@ -200,13 +200,34 @@ public struct TranscriptCoverageManifest: Codable, Hashable, Sendable {
     }
 
     public func validate() throws {
+        let transcriptionRouteIsValid: Bool = {
+            guard transcriptionRoute.request.capability == .transcription,
+                  transcriptionRoute.request.dataCategories == [.canonicalAudio]
+            else {
+                return false
+            }
+            guard transcriptionRoute.route == .approvedExternal else {
+                return transcriptionRoute.route.privacyRoute == .localOnly
+            }
+            guard let providerIdentifier = transcriptionRoute.providerIdentifier,
+                  transcriptionRoute.request.dataClassification.restrictionRank
+                    < DataClassification.sensitive.restrictionRank,
+                  transcriptionRoute.request.retentionPolicy
+                    == .approvedProviderRetention,
+                  let authorization = try? ModelPolicyRouter().authorizeExternal(
+                      transcriptionRoute.request,
+                      expectedProviderIdentifier: providerIdentifier
+                  )
+            else {
+                return false
+            }
+            return authorization.decision == transcriptionRoute
+        }()
         guard canonicalSourceRevision.objectType == .sourceAsset,
               canonicalFrameCount > 0,
               chunkPlanIdentifier == Self.chunkPlanIdentifier,
               chunkPlanVersion == Self.schemaVersion,
-              transcriptionRoute.route.privacyRoute == .localOnly,
-              transcriptionRoute.request.capability == .transcription,
-              transcriptionRoute.request.dataCategories == [.canonicalAudio],
+              transcriptionRouteIsValid,
               translationRoute.map({
                   $0.route.privacyRoute == .localOnly
                       && $0.request.capability == .translation
@@ -224,6 +245,42 @@ public struct TranscriptCoverageManifest: Codable, Hashable, Sendable {
                   stored.coreRange == planned.coreRange,
                   stored.physicalRange == planned.physicalRange
             else { throw TranscriptCoverageError.invalidManifest("Coverage ranges do not match the canonical chunk plan.") }
+        }
+        if let expectedProvider =
+            transcriptionRoute
+            .providerIdentifier
+        {
+            guard chunks.allSatisfy({
+                $0.disposition == .missing
+                    || $0.provider?
+                        .providerIdentifier
+                        == expectedProvider
+            }),
+                chunks.allSatisfy({
+                    $0.disposition
+                        != .transcribed
+                        || $0
+                        .machineSegmentRevision
+                        != nil
+                })
+            else {
+                throw TranscriptCoverageError
+                    .invalidManifest(
+                        "Attempted provider coverage must retain the authorized provider and exact machine segment."
+                    )
+            }
+        } else {
+            guard chunks.allSatisfy({
+                $0.provider == nil
+                    && $0
+                    .machineSegmentRevision
+                    == nil
+            }) else {
+                throw TranscriptCoverageError
+                    .invalidManifest(
+                        "Manual coverage cannot claim machine-provider provenance."
+                    )
+            }
         }
         let machine = chunks.compactMap(\.machineSegmentRevision)
         guard Set(machine).count == machine.count
@@ -299,18 +356,122 @@ public struct TranscriptPublication: Sendable {
         translations: [TranslationSegmentV1]
     ) throws {
         try manifest.validate()
-        let transcriptReferences = try transcriptSegments.map {
-            try SemanticRevisionReference(logicalID: $0.segmentID, revisionID: $0.revision.revisionID)
-        }.sorted()
-        let translationReferences = try translations.map {
-            try SemanticRevisionReference(logicalID: $0.translationID, revisionID: $0.revision.revisionID)
-        }.sorted()
+        let transcriptPairs =
+            try transcriptSegments.map {
+                (
+                    try SemanticRevisionReference(
+                        logicalID: $0.segmentID,
+                        revisionID:
+                            $0.revision
+                            .revisionID
+                    ),
+                    $0
+                )
+            }
+        let transcriptReferences =
+            transcriptPairs.map(\.0).sorted()
+        let translationPairs =
+            try translations.map {
+                (
+                    try SemanticRevisionReference(
+                        logicalID:
+                            $0.translationID,
+                        revisionID:
+                            $0.revision
+                            .revisionID
+                    ),
+                    $0
+                )
+            }
+        let translationReferences =
+            translationPairs.map(\.0).sorted()
+        let transcriptByReference =
+            Dictionary(
+                transcriptPairs,
+                uniquingKeysWith: {
+                    current, _ in current
+                }
+            )
+        let translationByReference =
+            Dictionary(
+                translationPairs,
+                uniquingKeysWith: {
+                    current, _ in current
+                }
+            )
+        let providerProvenanceMatches =
+            manifest.chunks.allSatisfy {
+                chunk in
+                guard chunk.disposition
+                        == .transcribed,
+                      let reviewed =
+                        chunk
+                        .reviewedSegmentRevision,
+                      let transcript =
+                        transcriptByReference[
+                            reviewed
+                        ]
+                else {
+                    return chunk.disposition
+                        == .noSpeech
+                }
+                if manifest.transcriptionRoute
+                    .providerIdentifier
+                    != nil
+                {
+                    guard let machine =
+                            chunk
+                            .machineSegmentRevision,
+                          machine == reviewed,
+                          transcript
+                            .transcriptionProvider
+                            == chunk.provider,
+                          transcript.revision
+                            .generationMetadata?
+                            .privacyRoute
+                            == manifest
+                            .transcriptionRoute
+                            .route
+                            .privacyRoute
+                    else { return false }
+                } else if transcript.revision
+                    .generationMetadata != nil
+                {
+                    return false
+                }
+                guard let translationReference =
+                        chunk.translationRevision
+                else { return true }
+                guard let translation =
+                        translationByReference[
+                            translationReference
+                        ]
+                else { return false }
+                if let expectedProvider =
+                    manifest.translationRoute?
+                    .providerIdentifier
+                {
+                    return translation.provider?
+                        .providerIdentifier
+                        == expectedProvider
+                        && translation.revision
+                            .generationMetadata?
+                            .privacyRoute
+                            == manifest
+                            .translationRoute?
+                            .route
+                            .privacyRoute
+                }
+                return translation.revision
+                    .generationMetadata == nil
+            }
         guard manifest.status == .published,
               manifest.chunks.allSatisfy({ chunk in
                   chunk.disposition != .noSpeech || chunk.noSpeechConfirmation != nil
               }),
               transcriptReferences == manifest.transcriptRevisionReferences.sorted(),
               translationReferences == manifest.translationRevisionReferences.sorted(),
+              providerProvenanceMatches,
               transcriptSegments.allSatisfy({
                   $0.meetingID == manifest.meetingID
                       && $0.sourceAssetRevision == manifest.canonicalSourceRevision

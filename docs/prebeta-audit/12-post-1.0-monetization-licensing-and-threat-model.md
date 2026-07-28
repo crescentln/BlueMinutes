@@ -18,15 +18,18 @@ Disabled means:
 `BillingFeatureGate.publicBeta` encodes this behavior. Production cannot be
 constructed through the current public application contract. Internal sandbox
 requires a non-public build approval token and still is not wired into app
-composition. This is a compile-gated foundation contract, not proof that the
-running app has zero billing traffic; composition and network-spy proof remain
-required.
+composition. The running app composes the public-Beta release configuration in
+the About surface, which shows all features unlocked, billing disabled, and the
+website disconnected. A full runtime network-spy session is still required
+before claiming complete zero outbound billing traffic. A bounded isolated
+idle/About/close/reopen/quit smoke observed no established TCP or UDP socket,
+but did not exercise every provider, failure, or duration state.
 
 ## Modes
 
 | Mode | Intended use | Current availability |
 | --- | --- | --- |
-| `disabled` | Beta/1.0 unlocked product | Compile-gated contract; composition proof pending |
+| `disabled` | Beta/1.0 unlocked product | Composed and live-observed in About; bounded no-socket smoke passes, full runtime network-spy proof pending |
 | `sandbox` | Explicit internal payment/license tests | Vocabulary and build gate only |
 | `production` | Post-1.0 commercial service | No constructor/client/UI; go/no-go required |
 
@@ -49,8 +52,9 @@ refund, privacy, terms, monitoring, migration, and rollback gates pass.
 
 ## Website/payment boundary
 
-The separate BlueMinutes-Site is currently a UI-only prototype. Its visible
-account/billing/download states are simulated and grant no desktop authority.
+The separately developed BlueMinutes website remains disconnected from this
+repository. No visible website, account, billing, or download state grants
+desktop authority.
 
 The sandbox payment repository has versioned HTTP/license concepts, but the app
 does not connect to it. A checkout success redirect is not payment or

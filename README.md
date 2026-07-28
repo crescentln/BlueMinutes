@@ -39,13 +39,13 @@ conditions, exact source evidence, review state, and later corrections.
 BlueMinutes is not affiliated with, sponsored by, or endorsed by the United
 Nations, any United Nations entity, or any government.
 
-The `v0.3.0` milestone is a source release for developers and early evaluators
-who build BlueMinutes locally. It completes the native Editorial Dossier
-foundation across intake, transcript, analysis, briefing, history, storage,
-Settings, and deterministic visual/accessibility contracts. It also defines a
-version-bound local development package for testing on the build Mac. A
-Developer ID-signed and notarized app download remains a separate future
-distribution milestone.
+Application version `0.4.0` (build `4`) is the formal software-testing
+candidate for the current v4 pre-Beta functional round. It adds capability-
+based task routing, independent local/remote/record-only speech-to-text,
+bounded Codex subscription text intelligence, recording lifecycle recovery,
+transcript navigation, and truthful release-service state while preserving the
+existing UI language. It is not a tagged GitHub Release or a distributable app
+download; the latest public source Release remains `v0.3.0`.
 
 ## Product preview
 
@@ -119,7 +119,7 @@ about every transcription tool.
 | Corrections | In-place text edit | Immutable revisions with exact downstream stale propagation |
 | Review boundary | Optional transcript edit | Consequential analysis and briefing export require explicit confirmation of exact current revisions |
 | Historical comparison | Text search or semantic similarity | Deterministic retrieval over confirmed positions with qualified, evidence-linked comparison states |
-| Data routing | Provider-dependent | Local by default, with application-owned policy checks and no current outbound inference provider |
+| Data routing | Provider-dependent | Local by default, with explicit task capability, destination, retention, sensitivity, authorization, and cost-owner checks before any bounded external route |
 
 ## Current capabilities
 
@@ -129,7 +129,8 @@ about every transcription tool.
 | Canonical audio | 16 kHz mono signed-int16 CAF, deterministic chunking, checkpoints, retry, and exact range accounting | Local workspace and Task Manager |
 | Visible audio capture | Microphone, one user-selected application, or both as separate tracks | Local only; requires visible user action and macOS permissions; no screen/video, hidden, all-system, or multi-app capture |
 | UN Web TV metadata | Reviewed title, date, duration, body, language, and related metadata candidates from a supported asset page | One explicit credential-free HTTPS request to exact `webtv.un.org`; no player inspection, media acquisition, download, or redistribution |
-| Transcription and translation | Apple on-device Speech and Translation on macOS 26+ when required language assets are installed; complete manual transcript/translation fallback | Local device; no cloud ASR or translation adapter |
+| Transcription and translation | Apple on-device Speech on macOS 26+ when required language assets are installed, optional OpenAI remote batch STT through a separately configured Keychain-backed profile, explicit record-only mode, and manual transcript/translation intake | Local by default; remote audio requires a ready speech-capable profile plus visible per-meeting authorization and is denied for Sensitive Meetings |
+| Text intelligence | Selected-transcript Codex Assistant using a compatible user-installed official Codex runtime, with account/quota state, ephemeral thread lifecycle, streaming, interruption, and one bounded read-only transcript search tool | Explicitly approved bounded text only; reconnect starts a fresh thread after private runtime state is purged; never audio, paths, credentials, shell/file tools, web search, Apps, plugins, MCP, or silent provider fallback |
 | Diplomatic analysis | Evidence-linked participants, organizations, issues, positions, commitments, decisions, intervention cards, and delegation-position cards | Bounded Apple on-device Foundation Models route on macOS 26+; candidate output remains quarantined until exact human confirmation |
 | Briefing | One multilateral template with Meeting Overview, Major Issues, and Major Delegations; per-section editing, locking, regeneration, validation, and Markdown export | Local generation and export; only confirmed current sections may be exported |
 | Meeting history | Deterministic filters over confirmed published positions, qualified comparison, and visible presentation preferences | Local lexical and exact-identity retrieval; no hidden vector or LLM memory |
@@ -146,6 +147,10 @@ about every transcription tool.
 - macOS 26 and installed Apple language/model assets are required for automatic
   transcription, translation, analysis, and briefing generation. The verified
   development toolchain is Xcode 26.6.
+- Codex Assistant is optional and requires the exact compatible official Codex
+  runtime shown as supported in Intelligence Settings.
+- Remote OpenAI speech-to-text is optional, uses a separate API key stored in
+  macOS Keychain, and still requires visible authorization for each meeting.
 
 ### Clone, build, and test
 
@@ -183,16 +188,16 @@ From a clean committed source tree, run:
 ```sh
 MEETINGBUDDY_SIGN_IDENTITY=- ./script/package_release_candidate.sh
 ./script/verify_release_candidate.sh \
-  dist/BlueMinutes-0.3.0-development \
+  dist/BlueMinutes-0.4.0-development \
   development
 ```
 
-This produces `BlueMinutes.app`, `BlueMinutes-0.3.0-development.zip`, the ZIP
+This produces `BlueMinutes.app`, `BlueMinutes-0.4.0-development.zip`, the ZIP
 checksum, a full tracked-source inventory, and a source/build manifest together
-under the ignored `dist/BlueMinutes-0.3.0-development/` directory. The manifest
-binds the app to version `0.3.0` (build `3`), the exact Git head/tree/tag,
-resolved dependency digest, build toolchain, app/archive digests, and signature
-classification.
+under the ignored `dist/BlueMinutes-0.4.0-development/` directory. The manifest
+binds the app to version `0.4.0` (build `4`), the exact Git
+head/tree/optional tag, resolved dependency digest, build toolchain,
+app/archive digests, and signature classification.
 
 The package is ad-hoc signed with Hardened Runtime for local development testing
 on this Mac. It is not notarized, installable as a supported release, or
@@ -212,16 +217,22 @@ source-only and contain zero maintainer-uploaded app assets.
    unknown.
 4. **Create canonical audio.** BlueMinutes copies and hashes the source,
    normalizes audio, creates deterministic chunks, and records exact coverage.
-5. **Review the transcript.** Use installed Apple models on macOS 26+, or enter
-   and confirm a complete transcript/translation manually. Corrections create
-   new revisions rather than overwriting source history.
-6. **Confirm speakers and analysis.** Review identity, capacity, evidence,
+5. **Review the transcript.** Select record-only, supported Apple local STT, or
+   an explicitly configured remote speech route. Remote audio still needs
+   visible meeting authorization. A complete transcript/translation can also
+   be entered manually. Corrections create new revisions rather than
+   overwriting source history.
+6. **Use bounded text assistance when appropriate.** Codex Assistant can
+   receive one selected transcript segment and the prompt only after explicit
+   approval. It never receives meeting audio and remains unavailable for
+   Sensitive Meetings.
+7. **Confirm speakers and analysis.** Review identity, capacity, evidence,
    qualifications, and uncertainty before confirming the exact analysis
    ledger.
-7. **Prepare the briefing.** Generate the three current sections, edit or lock
+8. **Prepare the briefing.** Generate the three current sections, edit or lock
    them independently, review validation results, and confirm the current
    final before local Markdown export.
-8. **Review history and storage.** Search confirmed positions, inspect qualified
+9. **Review history and storage.** Search confirmed positions, inspect qualified
    comparisons, manage visible presentation preferences, and review workspace
    storage and Trash.
 
@@ -291,13 +302,19 @@ workspace. See [Task 009B MCP](docs/TASK_009B_MCP.md).
 
 - Meeting audio, transcripts, metadata, and derived intelligence remain in the
   selected local workspace by default.
-- The current inference routes use installed Apple models on the local device.
-  There is no outbound inference provider or automatic provider fallback.
-- The only implemented network route is an explicit, bounded request for
-  metadata from an exact `webtv.un.org` asset page; offline/no-outbound mode
-  disables it.
-- Credentials belong in macOS Keychain. They are not stored in repository
-  files, workspaces, task directories, or logs.
+- Local Apple models remain the default. Optional external routes are
+  deliberately separate: Codex receives only explicitly approved bounded text,
+  while remote OpenAI STT receives exact canonical audio only after a ready
+  speech profile and visible per-meeting authorization. Neither route is a
+  silent fallback.
+- Sensitive Meetings and no-outbound policy deny external intelligence routes.
+  Recording and record-only operation remain available without them.
+- UN Web TV metadata remains an explicit bounded request to the exact supported
+  host; offline/no-outbound mode disables it.
+- BYOK credentials belong in macOS Keychain, while Codex subscription
+  authentication remains under the official runtime's control. BlueMinutes
+  does not store either secret in repository files, workspaces, task
+  directories, or logs.
 - Imported text and web metadata are treated as untrusted data and cannot
   change application policy, provider routing, tool permissions, or protected
   diplomatic rules.
@@ -325,6 +342,7 @@ BlueMinutes is a Swift 6 modular monolith:
 | Task runtime | The single durable runtime for long-running and recoverable work |
 | Media | AVFoundation intake, canonical audio, visible capture, recording persistence, and UN Web TV metadata parsing |
 | On-device AI | Bounded Apple providers, protected prompts, pipeline orchestration, and application-owned validation |
+| Bounded external intelligence | Capability- and policy-gated Codex text plus optional OpenAI remote batch STT, with separate authentication and no fallback between them |
 | Native app | SwiftUI review experience and composition root |
 | Local automation | Typed, permissioned CLI and MCP adapters |
 
@@ -343,7 +361,7 @@ there and retain their legacy compatibility identifiers.
 ## Known limitations
 
 - GitHub Releases contain source code only and have no maintainer-uploaded app
-  asset. The local `0.3.0` build-`3` development package is ad-hoc signed and
+  asset. The local `0.4.0` build-`4` formal-test package is ad-hoc signed and
   not notarized. A Developer ID-signed app download, installer, automatic
   updater, universal/Intel build, and clean-machine distribution proof remain
   future milestones.
@@ -361,11 +379,18 @@ there and retain their legacy compatibility identifiers.
 - Native capture is visible and recoverable by design, but intended-identity
   TCC behavior, device changes, long physical recordings, sleep, force-quit,
   and sudden power-loss behavior are not fully release-proven.
+- Codex Assistant depends on an exact compatible user-installed official
+  runtime. Bundling, sandboxed distribution, adverse account/quota behavior,
+  and protocol drift remain formal-test and distribution gates.
+- Remote STT remains an optional explicitly authorized route; provider
+  destination, retention, cost, and intended-device network behavior require
+  release-policy review before broader distribution.
 - Deterministic validation proves structure, source accounting, evidence keys,
   and required review states. It is not independent fact-checking, and human
   confirmation can still be mistaken.
-- There is no cloud provider, cloud synchronization, HTTP API, remote MCP, or
-  remote-control path.
+- There is no cloud synchronization, HTTP API, remote MCP, or remote-control
+  path. The bounded external inference routes described above are the only
+  provider expansion in this candidate.
 
 See the [Roadmap](ROADMAP.md) and
 [MVP acceptance record](docs/MVP_ACCEPTANCE.md) for current scope and deferred

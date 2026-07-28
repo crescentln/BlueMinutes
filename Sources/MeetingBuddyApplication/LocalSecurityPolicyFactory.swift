@@ -30,9 +30,37 @@ public struct LocalSecurityPolicyBundle: Sendable, Equatable {
                 manualLocalReviewAllowed: accessPolicy.manualLocalReviewAllowed,
                 externalProcessingAllowed: accessPolicy.externalProcessingAllowed,
                 approvedExternalProviderIdentifiers: accessPolicy
-                    .approvedExternalProviderIdentifiers
+                    .approvedExternalProviderIdentifiers,
+                approvedDeploymentEnvironments:
+                    accessPolicy.externalProcessingAllowed
+                    ? [.production]
+                    : [],
+                approvedRetentionPolicies:
+                    approvedRetentionPolicies(
+                        for: accessPolicy
+                            .approvedExternalProviderIdentifiers
+                    )
             )
         }
+    }
+
+    private func approvedRetentionPolicies(
+        for providerIdentifiers: [String]
+    ) -> [ProviderRetentionPolicy] {
+        var policies: [ProviderRetentionPolicy] = []
+        if providerIdentifiers.contains(
+            CodexTextExecutionAuthorization
+                .providerIdentifier
+        ) {
+            policies.append(.noProviderRetention)
+        }
+        if providerIdentifiers.contains(where: {
+            $0 != CodexTextExecutionAuthorization
+                .providerIdentifier
+        }) {
+            policies.append(.approvedProviderRetention)
+        }
+        return policies
     }
 }
 
@@ -49,8 +77,26 @@ public struct LocalSecurityPolicyFactory: Sendable {
         sensitivityLabelRevisionID: RevisionID,
         accessPolicyID: AccessPolicyID,
         accessPolicyRevisionID: RevisionID,
-        createdAt: UTCInstant
+        createdAt: UTCInstant,
+        approvedExternalProviderIdentifiers: [String] = []
     ) throws -> LocalSecurityPolicyBundle {
+        let providers =
+            approvedExternalProviderIdentifiers.sorted()
+        guard Set(providers).count == providers.count,
+              providers.isEmpty
+                  || (
+                      meeting.cloudProcessingPolicy
+                          == .approvedCloudAllowed
+                          && meeting.revision.dataClassification
+                              .restrictionRank
+                              < DataClassification.sensitive
+                              .restrictionRank
+                  )
+        else {
+            throw AIProviderContractError.invalidRequest(
+                "External processing requires an eligible meeting policy and Public or Internal classification."
+            )
+        }
         let meetingReference = try SemanticRevisionReference(
             logicalID: meeting.meetingID,
             revisionID: meeting.revision.revisionID
@@ -103,6 +149,8 @@ public struct LocalSecurityPolicyFactory: Sendable {
             logicalID: label.labelID,
             revisionID: label.revision.revisionID
         )
+        let policyCreationActor: CreationActor =
+            providers.isEmpty ? .application : .user
         let policyDraftEnvelope = try RevisionEnvelope(
             logicalID: accessPolicyID,
             revisionID: accessPolicyRevisionID,
@@ -110,7 +158,7 @@ public struct LocalSecurityPolicyFactory: Sendable {
             lifecycleStatus: .draft,
             validationState: .notValidated,
             createdAt: createdAt,
-            createdBy: .application,
+            createdBy: policyCreationActor,
             inputRevisions: [labelReference],
             dataClassification: label.effectiveClassification
         )
@@ -118,7 +166,8 @@ public struct LocalSecurityPolicyFactory: Sendable {
             revision: policyDraftEnvelope,
             meetingID: meeting.meetingID,
             labelReference: labelReference,
-            classification: label.effectiveClassification
+            classification: label.effectiveClassification,
+            approvedExternalProviderIdentifiers: providers
         )
         let policyEnvelope = try RevisionEnvelope(
             logicalID: accessPolicyID,
@@ -127,7 +176,7 @@ public struct LocalSecurityPolicyFactory: Sendable {
             lifecycleStatus: .published,
             validationState: .valid,
             createdAt: createdAt,
-            createdBy: .application,
+            createdBy: policyCreationActor,
             publishedAt: createdAt,
             inputRevisions: [labelReference],
             dataClassification: label.effectiveClassification,
@@ -137,7 +186,8 @@ public struct LocalSecurityPolicyFactory: Sendable {
             revision: policyEnvelope,
             meetingID: meeting.meetingID,
             labelReference: labelReference,
-            classification: label.effectiveClassification
+            classification: label.effectiveClassification,
+            approvedExternalProviderIdentifiers: providers
         )
         try SecurityPolicyGraphValidator.validate(
             meeting: meeting,
@@ -154,29 +204,39 @@ public struct LocalSecurityPolicyFactory: Sendable {
         revision: RevisionEnvelope<AccessPolicyIDTag>,
         meetingID: MeetingID,
         labelReference: SemanticRevisionReference,
-        classification: DataClassification
+        classification: DataClassification,
+        approvedExternalProviderIdentifiers: [String]
     ) throws -> AccessPolicyV1 {
-        try AccessPolicyV1(
+        let externalProcessingAllowed =
+            !approvedExternalProviderIdentifiers.isEmpty
+        return try AccessPolicyV1(
             revision: revision,
             meetingID: meetingID,
             sensitivityLabelRevision: labelReference,
             effectiveClassification: classification,
             localProcessingAllowed: true,
             manualLocalReviewAllowed: true,
-            externalProcessingAllowed: false,
-            organizationAllowsExternalProcessing: false,
-            deploymentAllowsExternalProcessing: false,
-            destinationAllowsExternalProcessing: false,
-            retentionAllowsExternalProcessing: false,
+            externalProcessingAllowed:
+                externalProcessingAllowed,
+            organizationAllowsExternalProcessing:
+                externalProcessingAllowed,
+            deploymentAllowsExternalProcessing:
+                externalProcessingAllowed,
+            destinationAllowsExternalProcessing:
+                externalProcessingAllowed,
+            retentionAllowsExternalProcessing:
+                externalProcessingAllowed,
             requiresVisibleUserAuthorization: true,
-            approvedExternalProviderIdentifiers: [],
-            noOutboundMode: true,
+            approvedExternalProviderIdentifiers:
+                approvedExternalProviderIdentifiers,
+            noOutboundMode: !externalProcessingAllowed,
             telemetryMode: .disabled,
             localExportAllowed: true,
             trashAllowed: true,
             minimumTrashRetentionDays: Self.defaultTrashRetentionDays,
-            reviewStatus: .unreviewed,
-            userConfirmed: false
+            reviewStatus:
+                externalProcessingAllowed ? .confirmed : .unreviewed,
+            userConfirmed: externalProcessingAllowed
         )
     }
 }

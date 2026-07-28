@@ -8,6 +8,18 @@ import Testing
 @Suite(.serialized)
 struct WorkspaceAndMigrationTests {
     @Test
+    func namedDisposableWorkspacesRemainIsolatedAcrossRuns() throws {
+        let first = try DisposableMeetingBuddyWorkspace(suffix: "repeatable-diagnostic")
+        defer { first.cleanup() }
+        let second = try DisposableMeetingBuddyWorkspace(suffix: "repeatable-diagnostic")
+        defer { second.cleanup() }
+
+        #expect(first.container != second.container)
+        #expect(first.root != second.root)
+        #expect(first.descriptor.layout.database != second.descriptor.layout.database)
+    }
+
+    @Test
     func createsPrivateWorkspaceAndIdempotentSchema() throws {
         let workspace = try DisposableMeetingBuddyWorkspace()
         defer { workspace.cleanup() }

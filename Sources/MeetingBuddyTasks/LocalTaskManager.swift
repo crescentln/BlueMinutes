@@ -351,6 +351,46 @@ public actor LocalTaskManager: TaskRuntimeManaging {
         )
     }
 
+    /// Finalizes records that were persisted as queued before a process died.
+    ///
+    /// The prior process may have lost a transient file handle, capture
+    /// authority, or visible outbound authorization between repository create
+    /// and scheduling. Startup therefore never replays these records
+    /// implicitly. The user can explicitly recreate or retry an eligible local
+    /// operation from current state.
+    public func cancelPersistedQueuedJobs()
+        async throws -> [JobID]
+    {
+        guard runningTasks.isEmpty else {
+            throw TaskRuntimeError
+                .startupCheckFailed(
+                    "Persisted queued jobs can be finalized only before task execution begins."
+                )
+        }
+        let queued =
+            try await repository
+            .jobs(states: [.queued])
+        var cancelled: [JobID] = []
+        for record in queued {
+            let replacement =
+                try await cancel(
+                    jobID: record.jobID
+                )
+            guard replacement.state
+                    == .cancelled
+            else {
+                throw TaskRuntimeError
+                    .startupCheckFailed(
+                        "A persisted queued job did not reach its safe terminal state."
+                    )
+            }
+            cancelled.append(
+                record.jobID
+            )
+        }
+        return cancelled.sorted()
+    }
+
     private func scheduleEligibleJobs() async throws {
         var availableSlots = maximumConcurrentJobs - runningTasks.count
         guard availableSlots > 0 else { return }

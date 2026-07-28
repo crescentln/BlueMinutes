@@ -62,11 +62,13 @@ Fallback is never activated silently. Runtime states distinguish ready,
 not-installed, not-authenticated, invalid credential, incompatible runtime,
 quota unavailable, and unavailable.
 
-Provider runtime readiness is not external-processing authorization. Only local
-routes can become `ready` in the foundation resolver. Codex/remote candidates
+Provider runtime readiness is not external-processing authorization. Local
+routes may become ready directly when installed. Codex and remote candidates
 must additionally bind deployment environment, destination, retention, data
 categories, organization policy, visible user authorization, and an approved
-adapter through the existing `ModelRouteRequest` policy path.
+adapter through the existing `ModelRouteRequest` policy path. The implemented
+OpenAI batch adapter consumes only that exact authorization; a ready connection
+profile by itself cannot upload audio.
 
 ## Task matrix
 
@@ -100,16 +102,23 @@ Missing entries and `inherit` continue to the next less-specific scope.
 Record Only selection masks a workspace or global STT route and can never be
 mistaken for inheritance.
 
-The foundation slice implements this deterministic in-memory three-state scope
-stack but does not persist it. Persistence requires schema v11,
-migration/rollback proof, supported-v10 tests, and fail-closed unknown decoding.
+The deterministic three-state scope stack remains the resolver contract.
+Current app-wide non-secret provider and task-route settings persist in a
+private revisioned JSON repository under Application Support; credentials stay
+in Keychain. `MeetingProfileV1` stores the exact selected STT intent without a
+secret or one-time upload authorization, and each transcript job stores the
+exact executable route snapshot. Reopen restores the provider/model intent but
+never restores visible upload authorization.
+
 The stack cannot be assembled from independent identity values and an unrelated
 policy snapshot. `TaskRoutingSecurityContext` first validates the exact
 `MeetingProfileV1 -> SensitivityLabelV1 -> AccessPolicyV1` graph, derives
 `WorkspaceID` and `MeetingID` from that meeting, and requires the immutable
 model-policy snapshot to match the graph without wider local, external, or
 provider authority. The winning global/workspace/meeting profile origin remains
-separate routing evidence.
+separate routing evidence. A later post-record route change controls the new
+transcript job but does not rewrite the immutable meeting-start profile; a full
+profile-supersession graph is an explicit residual design decision.
 
 ## Routing snapshot
 
@@ -145,6 +154,9 @@ text provider.
 ## Restart behavior
 
 UI preferences remain immediate. Provider runtime reconnect, model install,
-and credentials are independently observable. App-server process restart must
-not require application restart. A future migration may require reopening a
-workspace but must never restart or discard an active meeting.
+and credentials are independently observable. App-server process loss is typed
+and explicitly reconnectable without restarting BlueMinutes. Configuration
+reload restores non-secret provider/route records; missing Keychain material
+produces repair state. A completed verified recording that has not yet entered
+canonical processing is restored after app restart. No recovery path may
+restart or discard an active meeting.

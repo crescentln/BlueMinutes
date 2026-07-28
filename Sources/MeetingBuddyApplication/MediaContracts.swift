@@ -640,6 +640,10 @@ public protocol ManagedMediaFileAccess: Sendable {
 public protocol NativeMediaProcessing: Sendable {
     func inspect(_ sourceURL: URL) async throws -> MediaInspection
 
+    func audioTracks(
+        in sourceURL: URL
+    ) async throws -> [AudioTrackDescriptor]
+
     func writeCanonicalAudio(
         from sourceURL: URL,
         selectedTrack: MediaTrackIdentifier,
@@ -654,6 +658,14 @@ public protocol NativeMediaProcessing: Sendable {
         profile: CanonicalAudioProfile,
         to destinationURL: URL
     ) async throws
+}
+
+public extension NativeMediaProcessing {
+    func audioTracks(
+        in sourceURL: URL
+    ) async throws -> [AudioTrackDescriptor] {
+        try await inspect(sourceURL).audioTracks
+    }
 }
 
 public enum MediaJobTypes {

@@ -48,7 +48,12 @@ struct AppCapabilitiesTests {
         #expect(app.contains("let capabilities = AppCapabilities()"))
         #expect(
             app.contains(
-                "AppMediaReviewWorkflow(capabilities: capabilities)"
+                "let workflow = AppMediaReviewWorkflow("
+            )
+        )
+        #expect(
+            app.contains(
+                "capabilities: capabilities,"
             )
         )
 
@@ -57,13 +62,28 @@ struct AppCapabilitiesTests {
         )
         #expect(workflow.contains("let capabilities: AppCapabilities"))
         #expect(workflow.contains("private let capabilities: AppCapabilities"))
-        #expect(workflow.contains("init(capabilities: AppCapabilities)"))
+        #expect(
+            workflow.contains(
+                "init(\n        capabilities: AppCapabilities,"
+            )
+        )
         #expect(
             workflow.components(
                 separatedBy: "capabilities: capabilities"
             ).count == 3
         )
-        #expect(!workflow.contains("capabilities."))
+        for capability in [
+            "research",
+            "transcriptSourceResolution",
+            "sharedObjectStore",
+            "conversationPersistence",
+        ] {
+            #expect(
+                !workflow.contains(
+                    "capabilities.\(capability)"
+                )
+            )
+        }
 
         #expect(
             try productionSourceReferences(to: "AppCapabilities") == [
@@ -127,6 +147,150 @@ struct AppCapabilitiesTests {
         let completedPreflight = try #require(preflightRanges.last)
 
         #expect(completedPreflight.lowerBound < firstPersistentWrite.lowerBound)
+    }
+
+    @Test
+    func appWorkflowRecoversEveryPersistedIntakeBoundary()
+        throws
+    {
+        let workflow = try source(
+            "Sources/MeetingBuddyApp/AppMediaReviewWorkflow.swift"
+        )
+        let restoreStart = try #require(
+            workflow.range(
+                of:
+                    "func restoredMediaReview() async throws"
+            )
+        )
+        let restoreEnd = try #require(
+            workflow.range(
+                of:
+                    "func openOrCreateWorkspace",
+                range:
+                    restoreStart.upperBound
+                        ..< workflow.endIndex
+            )
+        )
+        let restoreBody = String(
+            workflow[
+                restoreStart.lowerBound
+                    ..< restoreEnd.lowerBound
+            ]
+        )
+
+        for required in [
+            "MediaJobTypes.localIntake",
+            ".manager.cancel(",
+            "intakeRecord.state",
+            "== .succeeded",
+            "CanonicalAudioJobFactory()",
+            "sourceReselectionJob:",
+            "canonicalJob: nil"
+        ] {
+            #expect(
+                restoreBody.contains(required)
+            )
+        }
+    }
+
+    @Test
+    func startupRecoveryDoesNotReplayOrStrandPersistedQueuedJobs()
+        throws
+    {
+        let workflow = try source(
+            "Sources/MeetingBuddyApp/AppMediaReviewWorkflow.swift"
+        )
+        for required in [
+            "cancelPersistedQueuedJobs()",
+            "A queued record proves persistence completed",
+            "visible outbound authorization"
+        ] {
+            #expect(
+                workflow.contains(required)
+            )
+        }
+    }
+
+    @Test
+    func workspaceSwitchChecksRecordingAndEveryTaskManagerJob()
+        throws
+    {
+        let workflow = try source(
+            "Sources/MeetingBuddyApp/AppMediaReviewWorkflow.swift"
+        )
+        let switchStart = try #require(
+            workflow.range(
+                of:
+                    "func openOrCreateWorkspace(at selectedDirectory: URL)"
+            )
+        )
+        let switchEnd = try #require(
+            workflow.range(
+                of:
+                    "func inspectSelectedMedia",
+                range:
+                    switchStart.upperBound
+                        ..< workflow.endIndex
+            )
+        )
+        let switchBody = String(
+            workflow[
+                switchStart.lowerBound
+                    ..< switchEnd.lowerBound
+            ]
+        )
+        #expect(
+            switchBody.contains(
+                "nonterminalSessions()"
+            )
+        )
+        #expect(
+            switchBody.contains(
+                "runtime.manager"
+            )
+        )
+        #expect(
+            switchBody.contains(
+                ".allSatisfy(\\.state.isTerminal)"
+            )
+        )
+        let prepare = try #require(
+            switchBody.range(
+                of:
+                    ".prepare(selectedDirectory)"
+            )
+        )
+        let recover = try #require(
+            switchBody.range(
+                of:
+                    "try await nextRuntime.recover()"
+            )
+        )
+        let commit = try #require(
+            switchBody.range(
+                of:
+                    ".commit(candidateScope)"
+            )
+        )
+        #expect(
+            prepare.lowerBound
+                < recover.lowerBound
+        )
+        #expect(
+            recover.lowerBound
+                < commit.lowerBound
+        )
+        #expect(
+            switchBody.components(
+                separatedBy:
+                    ".discard(candidateScope)"
+            ).count == 3
+        )
+        #expect(
+            !switchBody.contains(
+                "workspaceSecurityScope.forget()"
+            )
+        )
     }
 
     private var repositoryRoot: URL {

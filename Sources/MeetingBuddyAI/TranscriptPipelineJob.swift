@@ -36,7 +36,9 @@ public struct TranscriptChunkIdentity: Codable, Hashable, Sendable, Comparable {
 
 public struct TranscriptPipelineJobPlan: Codable, Hashable, Sendable {
     public static let inputFormatIdentifier = "meetingbuddy.transcript-pipeline"
-    public static let inputFormatVersion: UInt32 = 1
+    public static let inputFormatVersion: UInt32 = 2
+    public static let minimumSupportedInputFormatVersion:
+        UInt32 = 1
 
     public let meetingID: MeetingID
     public let canonicalSourceRevision: SemanticRevisionReference
@@ -49,6 +51,11 @@ public struct TranscriptPipelineJobPlan: Codable, Hashable, Sendable {
     public let transcriptSetID: TranscriptSetID
     public let manifestID: TranscriptCoverageManifestID
     public let transcriptionRoute: ModelRouteDecision
+    public let transcriptionSelection:
+        ProviderModelSelectionRecord
+    public let remoteProviderConfiguration:
+        RemoteProviderConfiguration?
+    public let intelligenceConfigurationRevision: UInt64?
     public let translationRoute: ModelRouteDecision?
     public let chunkIdentities: [TranscriptChunkIdentity]
 
@@ -64,6 +71,11 @@ public struct TranscriptPipelineJobPlan: Codable, Hashable, Sendable {
         transcriptSetID: TranscriptSetID = TranscriptSetID(UUID()),
         manifestID: TranscriptCoverageManifestID = TranscriptCoverageManifestID(UUID()),
         transcriptionRoute: ModelRouteDecision,
+        transcriptionSelection:
+            ProviderModelSelectionRecord? = nil,
+        remoteProviderConfiguration:
+            RemoteProviderConfiguration? = nil,
+        intelligenceConfigurationRevision: UInt64? = nil,
         translationRoute: ModelRouteDecision?
     ) throws {
         let chunkPlan = try CanonicalChunkPlanner.plan(totalFrameCount: canonicalFrameCount)
@@ -74,22 +86,188 @@ public struct TranscriptPipelineJobPlan: Codable, Hashable, Sendable {
                 translationRevisionID: targetLanguage == nil ? nil : RevisionID(UUID())
             )
         }
-        guard canonicalSourceRevision.objectType == .sourceAsset,
+        try self.init(
+            meetingID: meetingID,
+            canonicalSourceRevision:
+                canonicalSourceRevision,
+            canonicalFrameCount: canonicalFrameCount,
+            speechSourceKind: speechSourceKind,
+            sourceLanguage: sourceLanguage,
+            targetLanguage: targetLanguage,
+            dataClassification: dataClassification,
+            createdAt: createdAt,
+            transcriptSetID: transcriptSetID,
+            manifestID: manifestID,
+            transcriptionRoute: transcriptionRoute,
+            transcriptionSelection:
+                transcriptionSelection
+                ?? Self.defaultSelection(
+                    for: transcriptionRoute
+                ),
+            remoteProviderConfiguration:
+                remoteProviderConfiguration,
+            intelligenceConfigurationRevision:
+                intelligenceConfigurationRevision,
+            translationRoute: translationRoute,
+            chunkIdentities: identities
+        )
+    }
+
+    private init(validating decoded: Self) throws {
+        try self.init(
+            meetingID: decoded.meetingID,
+            canonicalSourceRevision:
+                decoded.canonicalSourceRevision,
+            canonicalFrameCount:
+                decoded.canonicalFrameCount,
+            speechSourceKind:
+                decoded.speechSourceKind,
+            sourceLanguage: decoded.sourceLanguage,
+            targetLanguage: decoded.targetLanguage,
+            dataClassification:
+                decoded.dataClassification,
+            createdAt: decoded.createdAt,
+            transcriptSetID: decoded.transcriptSetID,
+            manifestID: decoded.manifestID,
+            transcriptionRoute:
+                decoded.transcriptionRoute,
+            transcriptionSelection:
+                decoded.transcriptionSelection,
+            remoteProviderConfiguration:
+                decoded.remoteProviderConfiguration,
+            intelligenceConfigurationRevision:
+                decoded
+                .intelligenceConfigurationRevision,
+            translationRoute:
+                decoded.translationRoute,
+            chunkIdentities:
+                decoded.chunkIdentities
+        )
+    }
+
+    private init(
+        meetingID: MeetingID,
+        canonicalSourceRevision:
+            SemanticRevisionReference,
+        canonicalFrameCount: UInt64,
+        speechSourceKind: SpeechSourceKind,
+        sourceLanguage: LanguageTag,
+        targetLanguage: LanguageTag?,
+        dataClassification: DataClassification,
+        createdAt: UTCInstant,
+        transcriptSetID: TranscriptSetID,
+        manifestID: TranscriptCoverageManifestID,
+        transcriptionRoute: ModelRouteDecision,
+        transcriptionSelection:
+            ProviderModelSelectionRecord,
+        remoteProviderConfiguration:
+            RemoteProviderConfiguration?,
+        intelligenceConfigurationRevision: UInt64?,
+        translationRoute: ModelRouteDecision?,
+        chunkIdentities: [TranscriptChunkIdentity]
+    ) throws {
+        let expectedPlan = try CanonicalChunkPlanner
+            .plan(
+                totalFrameCount:
+                    canonicalFrameCount
+            )
+        let identities = chunkIdentities.sorted()
+        let localRoute =
+            transcriptionRoute.route
+                == .appleOnDevice
+            || transcriptionRoute.route
+                == .deterministicTest
+        let remoteRoute =
+            transcriptionRoute.route
+                == .approvedExternal
+        let remoteConfigurationIsValid =
+            if let remoteProviderConfiguration {
+                remoteRoute
+                    && remoteProviderConfiguration
+                        .purpose == .speechToText
+                    && remoteProviderConfiguration
+                        .connectionState == .ready
+                    && remoteProviderConfiguration
+                        .capabilities.contains(
+                            .speechToTextBatch
+                        )
+                    && remoteProviderConfiguration
+                        .identifier
+                        == transcriptionSelection
+                        .providerIdentifier
+                    && remoteProviderConfiguration
+                        .modelIdentifier
+                        == transcriptionSelection
+                        .modelIdentifier
+                    && transcriptionRoute
+                        .providerIdentifier
+                        == remoteProviderConfiguration
+                        .identifier
+                    && intelligenceConfigurationRevision
+                        != nil
+                    && dataClassification
+                        .restrictionRank
+                        < DataClassification.sensitive
+                        .restrictionRank
+            } else {
+                localRoute
+                    && transcriptionRoute
+                        .providerIdentifier
+                        == transcriptionSelection
+                        .providerIdentifier
+                    && intelligenceConfigurationRevision
+                        == nil
+            }
+        guard canonicalSourceRevision.objectType
+                == .sourceAsset,
               canonicalFrameCount > 0,
               speechSourceKind.isKnown,
               dataClassification.isKnown,
-              (transcriptionRoute.route == .appleOnDevice
-                || transcriptionRoute.route == .deterministicTest),
-              transcriptionRoute.route.privacyRoute == .localOnly,
-              (targetLanguage == nil) == (translationRoute == nil),
+              localRoute || remoteRoute,
+              remoteConfigurationIsValid,
+              transcriptionRoute.route.privacyRoute
+                == (remoteRoute
+                    ? PrivacyRoute.approvedCloud
+                    : PrivacyRoute.localOnly),
+              (targetLanguage == nil)
+                == (translationRoute == nil),
               targetLanguage != sourceLanguage,
               translationRoute.map({
-                  $0.route == .appleOnDevice || $0.route == .deterministicTest
-              }) ?? true
-        else { throw AIProviderContractError.invalidRequest("The transcript pipeline plan has an unauthorized route or invalid source.") }
+                  $0.route == .appleOnDevice
+                      || $0.route
+                          == .deterministicTest
+              }) ?? true,
+              identities.map(\.index)
+                == expectedPlan.map(\.index),
+              Set(
+                  identities.map(
+                      \.transcriptRevisionID
+                  )
+              ).count == identities.count,
+              identities.allSatisfy({
+                  (targetLanguage == nil)
+                      ? (
+                          $0.translationID == nil
+                              && $0.translationRevisionID
+                                  == nil
+                      )
+                      : (
+                          $0.translationID != nil
+                              && $0.translationRevisionID
+                                  != nil
+                      )
+              })
+        else {
+            throw AIProviderContractError
+                .invalidRequest(
+                    "The transcript pipeline plan has an unauthorized provider/model route, policy snapshot, or source."
+                )
+        }
         self.meetingID = meetingID
-        self.canonicalSourceRevision = canonicalSourceRevision
-        self.canonicalFrameCount = canonicalFrameCount
+        self.canonicalSourceRevision =
+            canonicalSourceRevision
+        self.canonicalFrameCount =
+            canonicalFrameCount
         self.speechSourceKind = speechSourceKind
         self.sourceLanguage = sourceLanguage
         self.targetLanguage = targetLanguage
@@ -97,35 +275,16 @@ public struct TranscriptPipelineJobPlan: Codable, Hashable, Sendable {
         self.createdAt = createdAt
         self.transcriptSetID = transcriptSetID
         self.manifestID = manifestID
-        self.transcriptionRoute = transcriptionRoute
+        self.transcriptionRoute =
+            transcriptionRoute
+        self.transcriptionSelection =
+            transcriptionSelection
+        self.remoteProviderConfiguration =
+            remoteProviderConfiguration
+        self.intelligenceConfigurationRevision =
+            intelligenceConfigurationRevision
         self.translationRoute = translationRoute
         self.chunkIdentities = identities
-    }
-
-    private init(validating decoded: Self) throws {
-        let expectedPlan = try CanonicalChunkPlanner.plan(totalFrameCount: decoded.canonicalFrameCount)
-        let identities = decoded.chunkIdentities.sorted()
-        guard decoded.canonicalSourceRevision.objectType == .sourceAsset,
-              decoded.canonicalFrameCount > 0,
-              decoded.speechSourceKind.isKnown,
-              decoded.dataClassification.isKnown,
-              (decoded.transcriptionRoute.route == .appleOnDevice
-                || decoded.transcriptionRoute.route == .deterministicTest),
-              decoded.transcriptionRoute.route.privacyRoute == .localOnly,
-              (decoded.targetLanguage == nil) == (decoded.translationRoute == nil),
-              decoded.targetLanguage != decoded.sourceLanguage,
-              decoded.translationRoute.map({
-                  $0.route == .appleOnDevice || $0.route == .deterministicTest
-              }) ?? true,
-              identities.map(\.index) == expectedPlan.map(\.index),
-              Set(identities.map(\.transcriptRevisionID)).count == identities.count,
-              identities.allSatisfy({
-                  (decoded.targetLanguage == nil)
-                      ? ($0.translationID == nil && $0.translationRevisionID == nil)
-                      : ($0.translationID != nil && $0.translationRevisionID != nil)
-              })
-        else { throw AIProviderContractError.invalidRequest("The persisted transcript plan failed validation.") }
-        self = decoded
     }
 
     public func jobInputPayload() throws -> JobInputPayload {
@@ -141,16 +300,117 @@ public struct TranscriptPipelineJobPlan: Codable, Hashable, Sendable {
     public static func decode(from input: JobInputPayload?) throws -> Self {
         guard let input,
               input.formatIdentifier == inputFormatIdentifier,
-              input.formatVersion == inputFormatVersion
+              input.formatVersion
+                  >= minimumSupportedInputFormatVersion,
+              input.formatVersion
+                  <= inputFormatVersion
         else { throw AIProviderContractError.invalidRequest("The transcript job payload is missing or unsupported.") }
         do {
-            return try Self(validating: JSONDecoder().decode(Self.self, from: input.payload))
+            if input.formatVersion
+                == inputFormatVersion
+            {
+                return try Self(
+                    validating:
+                        JSONDecoder().decode(
+                            Self.self,
+                            from: input.payload
+                        )
+                )
+            }
+            let legacy = try JSONDecoder().decode(
+                LegacyTranscriptPipelineJobPlan.self,
+                from: input.payload
+            )
+            return try Self(
+                meetingID: legacy.meetingID,
+                canonicalSourceRevision:
+                    legacy
+                    .canonicalSourceRevision,
+                canonicalFrameCount:
+                    legacy.canonicalFrameCount,
+                speechSourceKind:
+                    legacy.speechSourceKind,
+                sourceLanguage:
+                    legacy.sourceLanguage,
+                targetLanguage:
+                    legacy.targetLanguage,
+                dataClassification:
+                    legacy.dataClassification,
+                createdAt: legacy.createdAt,
+                transcriptSetID:
+                    legacy.transcriptSetID,
+                manifestID: legacy.manifestID,
+                transcriptionRoute:
+                    legacy.transcriptionRoute,
+                transcriptionSelection:
+                    try defaultSelection(
+                        for:
+                            legacy
+                            .transcriptionRoute
+                    ),
+                remoteProviderConfiguration: nil,
+                intelligenceConfigurationRevision:
+                    nil,
+                translationRoute:
+                    legacy.translationRoute,
+                chunkIdentities:
+                    legacy.chunkIdentities
+            )
         } catch let error as AIProviderContractError {
             throw error
         } catch {
             throw AIProviderContractError.invalidRequest("The transcript job payload could not be decoded.")
         }
     }
+
+    private static func defaultSelection(
+        for route: ModelRouteDecision
+    ) throws -> ProviderModelSelectionRecord {
+        guard let provider =
+                route.providerIdentifier
+        else {
+            throw AIProviderContractError
+                .invalidRequest(
+                    "A transcript route requires an exact provider."
+                )
+        }
+        let model: String
+        switch provider {
+        case "apple-speech":
+            model = "speech-analyzer-installed"
+        case "meetingbuddy-deterministic-transcription":
+            model = "fixture-v1"
+        default:
+            throw AIProviderContractError
+                .invalidRequest(
+                    "An external transcript route requires an explicit provider/model snapshot."
+                )
+        }
+        return ProviderModelSelectionRecord(
+            providerIdentifier: provider,
+            modelIdentifier: model
+        )
+    }
+}
+
+private struct LegacyTranscriptPipelineJobPlan:
+    Codable,
+    Sendable
+{
+    let meetingID: MeetingID
+    let canonicalSourceRevision:
+        SemanticRevisionReference
+    let canonicalFrameCount: UInt64
+    let speechSourceKind: SpeechSourceKind
+    let sourceLanguage: LanguageTag
+    let targetLanguage: LanguageTag?
+    let dataClassification: DataClassification
+    let createdAt: UTCInstant
+    let transcriptSetID: TranscriptSetID
+    let manifestID: TranscriptCoverageManifestID
+    let transcriptionRoute: ModelRouteDecision
+    let translationRoute: ModelRouteDecision?
+    let chunkIdentities: [TranscriptChunkIdentity]
 }
 
 public struct TranscriptPipelineJobFactory: Sendable {
@@ -176,7 +436,9 @@ public struct TranscriptPipelineJobFactory: Sendable {
             requestedBy: requestedBy,
             inputPayload: input,
             inputRevisionIDs: [plan.canonicalSourceRevision],
-            privacyRoute: .localOnly,
+            privacyRoute:
+                plan.transcriptionRoute.route
+                .privacyRoute,
             dataClassification: plan.dataClassification,
             idempotencyKey: JobIdempotencyKey(lowercaseHex: digest),
             resumeCapability: .checkpointed,

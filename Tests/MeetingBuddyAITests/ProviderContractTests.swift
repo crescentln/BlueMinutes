@@ -138,6 +138,69 @@ struct ProviderContractTests {
     }
 
     @Test
+    func explicitExternalAuthorizationRequiresTheExactCompletePolicy() throws {
+        let policy = try externalSecurityPolicy()
+        let request = try ModelRouteRequest(
+            capability: .analysis,
+            dataClassification: .internal,
+            offlineMode: false,
+            organizationAllowsExternalProcessing: true,
+            deploymentEnvironment: .production,
+            destination: .approvedProvider(identifier: "synthetic-approved"),
+            retentionPolicy: .noProviderRetention,
+            dataCategories: [.userPromptText, .transcriptText],
+            visibleUserAuthorization: true,
+            localModelAvailable: false,
+            securityPolicy: policy
+        )
+        let router = ModelPolicyRouter()
+        let authorization = try router.authorizeExternal(
+            request,
+            expectedProviderIdentifier: "synthetic-approved"
+        )
+        #expect(authorization.decision.route == .approvedExternal)
+        #expect(
+            authorization.decision.providerIdentifier
+                == "synthetic-approved"
+        )
+        #expect(authorization.decision.request == request)
+
+        // Existing callers still have no concrete outbound adapter.
+        #expect(throws: AIProviderContractError.self) {
+            _ = try router.decide(request)
+        }
+        #expect(throws: AIProviderContractError.self) {
+            _ = try router.authorizeExternal(
+                request,
+                expectedProviderIdentifier: "different-provider"
+            )
+        }
+        #expect(throws: AIProviderContractError.self) {
+            _ = try router.authorizeExternal(
+                ModelRouteRequest(
+                    capability: .analysis,
+                    dataClassification: .internal,
+                    offlineMode: false,
+                    organizationAllowsExternalProcessing: true,
+                    deploymentEnvironment: .production,
+                    destination: .approvedProvider(
+                        identifier: "synthetic-approved"
+                    ),
+                    retentionPolicy: .noProviderRetention,
+                    dataCategories: [
+                        .userPromptText,
+                        .documentText
+                    ],
+                    visibleUserAuthorization: true,
+                    localModelAvailable: true,
+                    securityPolicy: policy
+                ),
+                expectedProviderIdentifier: "synthetic-approved"
+            )
+        }
+    }
+
+    @Test
     func routePolicyMatrixKeepsEveryClassificationLocalAndRejectsPolicyDrift() throws {
         let router = ModelPolicyRouter()
         for (index, classification) in [
@@ -311,6 +374,100 @@ struct ProviderContractTests {
     }
 
     @Test
+    func providerCoverageRejectsAProviderThatDoesNotMatchTheAuthorizedRoute()
+        throws
+    {
+        let route = try ModelPolicyRouter()
+            .decide(
+                request(
+                    localModelAvailable: true,
+                    environment: .test
+                )
+            )
+        let source =
+            try SemanticRevisionReference(
+                logicalID:
+                    aiID(
+                        944,
+                        SourceAssetID.self
+                    ),
+                revisionID:
+                    aiID(
+                        945,
+                        RevisionID.self
+                    )
+            )
+        let planned = try #require(
+            CanonicalChunkPlanner
+                .plan(
+                    totalFrameCount:
+                        16_000
+                ).first
+        )
+        let transcriptReference =
+            try SemanticRevisionReference(
+                logicalID:
+                    aiID(
+                        946,
+                        TranscriptSegmentID.self
+                    ),
+                revisionID:
+                    aiID(
+                        947,
+                        RevisionID.self
+                    )
+            )
+        let mismatched =
+            try TranscriptChunkCoverage(
+                index: planned.index,
+                coreRange:
+                    planned.coreRange,
+                physicalRange:
+                    planned.physicalRange,
+                disposition: .transcribed,
+                attemptCount: 1,
+                provider:
+                    ProviderMetadata(
+                        providerIdentifier:
+                            "different-provider",
+                        modelIdentifier:
+                            "fixture-v1"
+                    ),
+                machineSegmentRevision:
+                    transcriptReference,
+                reviewedSegmentRevision:
+                    transcriptReference
+            )
+
+        #expect(
+            throws:
+                TranscriptCoverageError.self
+        ) {
+            _ = try TranscriptCoverageManifest(
+                transcriptSetID:
+                    TranscriptSetID(UUID()),
+                meetingID:
+                    aiID(
+                        948,
+                        MeetingID.self
+                    ),
+                canonicalSourceRevision:
+                    source,
+                canonicalFrameCount:
+                    16_000,
+                transcriptionRoute:
+                    route,
+                status: .published,
+                chunks: [mismatched],
+                createdAt:
+                    aiInstant(
+                        1_900_000_000_002
+                    )
+            )
+        }
+    }
+
+    @Test
     func productionNoSpeechVerifierAcceptsOnlyExactDigitalSilence() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "meetingbuddy-no-speech-\(UUID().uuidString.lowercased())",
@@ -467,6 +624,93 @@ struct ProviderContractTests {
         #expect(!text.contains("filename"))
         #expect(!text.contains("path"))
         #expect(!text.contains("meeting_id"))
+    }
+
+    @Test
+    func unifiedDiagnosticsRemainContentFreeAndCopyable() throws {
+        #expect(
+            BlueMinutesDiagnosticCategory
+                .allCases
+                .map(\.rawValue)
+                == [
+                    "AudioCapture",
+                    "STT",
+                    "Import",
+                    "Storage",
+                    "AIProvider",
+                    "Licensing",
+                    "Update",
+                    "Windowing"
+                ]
+        )
+        #expect(
+            BlueMinutesDiagnosticEvent
+                .allCases
+                .allSatisfy {
+                    !$0.rawValue.isEmpty
+                        && $0.rawValue
+                            .unicodeScalars
+                            .allSatisfy {
+                                CharacterSet
+                                    .lowercaseLetters
+                                    .contains($0)
+                                    || CharacterSet
+                                        .decimalDigits
+                                        .contains($0)
+                                    || $0 == "_"
+                            }
+                }
+        )
+
+        let report =
+            try SanitizedDiagnosticsReport(
+                productName: "BlueMinutes",
+                appVersion: "0.3.0",
+                buildVersion: "3",
+                operatingSystem:
+                    "Version 26.5.2 (Build 25F84)",
+                architecture: "arm64",
+                releaseConfiguration:
+                    .publicBeta,
+                telemetryMode: .disabled
+            )
+        let text = report.renderedText
+        for required in [
+            "Product access: unlocked",
+            "Billing: disabled",
+            "Website: disconnected",
+            "Updates: unconfigured",
+            "Local telemetry: disabled",
+            "Release-service requests: disabled",
+            "Meeting content included: no",
+            "Credentials or tokens included: no",
+            "URLs or file paths included: no"
+        ] {
+            #expect(text.contains(required))
+        }
+        for forbidden in [
+            "https://",
+            "/Users/",
+            "sk-",
+            "transcript=",
+            "meeting_id"
+        ] {
+            #expect(!text.contains(forbidden))
+        }
+        #expect(throws: SanitizedDiagnosticsError.self) {
+            _ = try SanitizedDiagnosticsReport(
+                productName: "BlueMinutes",
+                appVersion:
+                    "0.3.0\nWorkspace: /Users/private",
+                buildVersion: "3",
+                operatingSystem:
+                    "Version 26.5.2 (Build 25F84)",
+                architecture: "arm64",
+                releaseConfiguration:
+                    .publicBeta,
+                telemetryMode: .disabled
+            )
+        }
     }
 }
 

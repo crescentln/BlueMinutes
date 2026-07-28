@@ -461,6 +461,142 @@ struct TaskManagerTests {
     }
 
     @Test
+    func startupFinalizesPersistedQueuedWorkWithoutExecutingIt()
+        async throws
+    {
+        let workspace = try TaskTestWorkspace()
+        defer { workspace.cleanup() }
+        let jobType =
+            try JobType(
+                "fresh-authority-required"
+            )
+        let jobID = testJobID(84)
+        let request = try JobRequest(
+            jobID: jobID,
+            jobType: jobType,
+            origin: .user,
+            requestedBy:
+                JobRequester(
+                    "meetingbuddy-test"
+                ),
+            privacyRoute:
+                .approvedCloud,
+            dataClassification:
+                .internal,
+            idempotencyKey:
+                testIdempotencyKey(84),
+            maximumRetryCount: 0,
+            totalUnitCount: 1,
+            diskBudgetBytes: 65_536
+        )
+        let lease =
+            try await workspace
+            .temporaryStorage
+            .allocateDirectory(
+                for: jobID,
+                diskBudgetBytes:
+                    request.diskBudgetBytes
+            )
+        let queued = try JobRecord(
+            request: request,
+            lease: lease,
+            createdAt:
+                testInstant(
+                    1_800_000_660_000
+                )
+        )
+        try await workspace.repository
+            .create(queued)
+        _ = try await workspace
+            .temporaryStorage.write(
+                Data(
+                    "must-not-execute"
+                        .utf8
+                ),
+                to:
+                    WorkspaceRelativePath(
+                        "remote/chunk.wav"
+                    ),
+                in: lease
+            )
+        let attempts = AttemptCounter()
+        let executor =
+            ClosureTaskExecutor(
+                jobType: jobType
+            ) { _ in
+                _ = await attempts.next()
+                return try JobExecutionResult()
+            }
+        let manager = try LocalTaskManager(
+            repository:
+                workspace.repository,
+            temporaryStorage:
+                workspace.temporaryStorage,
+            logStore:
+                workspace.logStore,
+            clock:
+                SteppingTaskClock(
+                    start:
+                        1_800_000_700_000
+                ),
+            executors: [executor]
+        )
+
+        _ = try await manager
+            .recoverAtStartup(
+                policy:
+                    StartupRecoveryPolicy(
+                        maximumOrphansToInspect:
+                            16,
+                        maximumOrphansToRemove:
+                            4,
+                        orphanGracePeriodMilliseconds:
+                            0,
+                        minimumAvailableCapacityBytes:
+                            0,
+                        maximumManagedAssetOperations:
+                            16
+                    )
+            )
+        #expect(
+            try await manager
+                .job(id: jobID)?
+                .state == .queued
+        )
+
+        #expect(
+            try await manager
+                .cancelPersistedQueuedJobs()
+                == [jobID]
+        )
+        #expect(
+            try await manager
+                .job(id: jobID)?
+                .state == .cancelled
+        )
+        #expect(await attempts.value == 0)
+        let directory =
+            workspace.root
+            .appendingPathComponent(
+                ".tasks/\(jobID.canonicalString)",
+                isDirectory: true
+            )
+        #expect(
+            !FileManager.default
+                .fileExists(
+                    atPath:
+                        directory.path
+                )
+        )
+        #expect(
+            try await manager
+                .cancelPersistedQueuedJobs()
+                .isEmpty
+        )
+        #expect(await attempts.value == 0)
+    }
+
+    @Test
     func startupRecoveryMarksInterruptedWorkAndRetainsItsCheckpointDirectory() async throws {
         let workspace = try TaskTestWorkspace()
         defer { workspace.cleanup() }

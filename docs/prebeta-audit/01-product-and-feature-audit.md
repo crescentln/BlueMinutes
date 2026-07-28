@@ -20,22 +20,22 @@ tree is in
 | --- | --- | --- |
 | Local workspace, immutable revisions, stale propagation | Implemented and accepted | Preserve |
 | Segmented recording, task checkpoints, startup recovery | Implemented and accepted | Preserve; add real-device fault matrix |
-| Local batch STT | Apple Speech on macOS 26+; manual fallback otherwise | Adapt; expose honest installed/not-ready state |
+| Local batch STT | Apple Speech on macOS 26+ with an honest system-managed model state; record-only/manual fallback otherwise | Implemented; macOS 15 product decision remains |
 | Realtime STT | Not implemented | P1 capability gate; do not mislabel batch |
 | Translation, analysis, briefing | Apple on-device routes with manual fallback | Preserve and register by capability |
-| Provider registry and task routing | Foundation contracts added in Issue #60 slice | Implement UI, scope precedence, persistence, and snapshots |
-| Codex subscription text intelligence | Not present at rollback anchor | P0 app-server vertical slice |
-| Independent STT / BYOK settings | Not present at rollback anchor | P0/P1 |
-| Sensitive Meeting | New resolver contract; no persisted profile yet | P0/P1 |
-| Start a New Meeting | Inputs are separate pages | P1 functional coordinator using existing pages |
-| Active meeting after window close | Closing during recording currently terminates | P0 bug |
-| Transcript outline/search | Stable list exists; dedicated search/outline absent | P0/P1 |
-| AI Chat | Absent | P1 after Codex context bridge |
+| Provider registry and task routing | Capability-filtered Intelligence UI, persisted non-secret routes, Keychain-backed provider profiles, and exact job snapshots | Implemented for the current global and meeting workflow; post-record profile supersession remains a later immutable-revision design |
+| Codex subscription text intelligence | Pinned official runtime, isolated app-server transport/session, login/account/quota state, and bounded transcript-text Assistant | Implemented text-only vertical slice; no audio, shell, arbitrary file, web, plugin, or MCP surface |
+| Independent STT / BYOK settings | Separate Apple local, OpenAI remote, record-only, and text-provider setup | Implemented with explicit per-meeting audio-upload authorization and no silent fallback |
+| Sensitive Meeting | Resolver and persisted meeting profile deny every remote/Codex route | Implemented; central model-policy defense repeats the denial |
+| Start a New Meeting | Lightweight coordinator reuses existing import, recording, and UN metadata pages | Implemented without duplicating forms or starting side effects |
+| Active meeting after window close | App-owned store and menu-bar lifecycle preserve one recording session | Implemented for close/reopen/stop/quit; pause, live source switching, sleep/wake, and long-run hardware proof remain |
+| Transcript outline/search | Deterministic five-minute outline plus bounded text/time search and stable selection | Implemented; real-device long-document performance proof remains |
+| AI Chat | Selected-segment Codex Assistant with visible per-request authorization, streaming, stop, retry, and isolated thread lifecycle | Implemented bounded P1 slice |
 | UN Web TV | Exact-host metadata only | Preserve security; additional ingestion remains gated |
 | Export | Controlled Markdown briefing | P1 formats and exact-revision archive |
-| Update | Manual/unconfigured policy only | P0 shell; Sparkle remains distribution-gated |
+| Update | About surface composes an honest unconfigured update policy and disconnected website handoff | P0 shell implemented; Sparkle remains distribution-gated |
 | Billing/licensing | No client or network path | Keep `BillingMode.disabled` through Beta/1.0 |
-| Website | Separate UI-only prototype; no desktop contract | App-side disconnected interface only |
+| Website | Separate project plus app-side typed handoff | Remains disconnected with no configured endpoint or request path |
 | Visual system | Accepted Editorial Dossier foundation and 50 goldens | Preserve; U1 deferred |
 
 ## Conflict and duplication findings

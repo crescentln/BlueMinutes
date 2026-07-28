@@ -14,7 +14,9 @@ destinations:
 7. Meeting History
 8. Storage
 
-Settings currently contain General, Appearance, and Learned Preferences.
+Settings contain General, Appearance, Intelligence, and Learned Preferences.
+The Intelligence tab owns the four ordered Codex, speech-to-text, BYOK, and
+Task Routing sections.
 The existing editor canvas, evidence inspector, state views, sidebar rows,
 toolbars, confirmation dialogs, and visual tokens remain the integration
 language.
@@ -48,20 +50,22 @@ Onboarding
 | Local/remote/no STT | Same tab, second section | Capability-filtered options; Codex excluded |
 | BYOK | Same tab, third section | Keychain-backed profiles |
 | Task Routing | Same tab, fourth section | Task/provider/data/cost/readiness |
-| Start New Meeting | Coordinator over existing import/record/UN forms | Review exact snapshot before start |
-| Live Meeting | Existing Recording destination/banner | Background lifecycle and honest STT state |
+| Start New Meeting | Lightweight coordinator over existing import/record/UN forms | Choose a workflow without duplicating forms or starting work; exact policy and route review remains in the selected page |
+| Live Meeting | Existing Recording destination, banner, and app-owned menu-bar item | Background close/reopen lifecycle, durable stop/finalize, honest STT state, and later canonical preparation |
 | Processing Queue | Existing Task Manager/store | Real job list; no fabricated static queue |
-| Transcript outline/search | Existing transcript split view | Stable filtered navigation |
-| Codex Assistant | Inspector tab or independent window | Preserve evidence inspector width |
-| About/update | Native Settings/About scene | Version and honest unconfigured update state |
+| Transcript outline/search | Existing transcript split view | Deterministic five-minute outline, bounded text/time search, and stable filtered navigation |
+| Codex Assistant | Existing transcript workspace assistant tab | Selected-segment text only, per-request authorization, streaming/stop/retry, and no audio |
+| About/update | Independent native About scene | Icon/version plus honest unlocked, website-disconnected, and update-unconfigured state |
 | Billing | No visible surface while disabled | M1 only |
 
 ## State and route visibility
 
 Every task detail must show provider, exact model, Local/Codex/User API route,
-cost owner, readiness, and a repair action. Starting a meeting records the
-resolved snapshot. No control may imply Codex transcribes audio or that an
-unconfigured STT route is active.
+cost owner, readiness, and a repair action. Import and recording starts persist
+the selected STT intent; transcript jobs bind the exact execution snapshot.
+Changing the picker after recording affects later transcript execution but does
+not rewrite the immutable meeting-start profile. No control may imply Codex
+transcribes audio or that an unconfigured STT route is active.
 
 ## UI boundary
 
