@@ -2,9 +2,6 @@
 set -euo pipefail
 
 APP_PRODUCT="MeetingBuddyApp"
-APP_BUNDLE_NAME="MeetingBuddy.app"
-RELEASE_SET_NAME="MeetingBuddy-0.1.0-internal-alpha"
-ARCHIVE_NAME="MeetingBuddy-0.1.0-internal-alpha.zip"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -42,7 +39,7 @@ verify_release() {
 }
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "macOS is required"
-[[ "$(uname -m)" == "arm64" ]] || fail "Task 011 initial packaging is Apple Silicon only"
+[[ "$(uname -m)" == "arm64" ]] || fail "the validated development package is Apple Silicon only"
 for required in \
     "$INFO_PLIST" "$ENTITLEMENTS" "$PRIVACY_MANIFEST" "$APP_ICON" "$GRDB_LICENSE" \
     "$PACKAGE_RESOLVED" "$VERIFY_SCRIPT"; do
@@ -50,6 +47,26 @@ for required in \
 done
 
 /usr/bin/plutil -lint "$INFO_PLIST" "$ENTITLEMENTS" "$PRIVACY_MANIFEST" >/dev/null
+BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
+PUBLIC_PRODUCT_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$INFO_PLIST")"
+[[ "$BUNDLE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || fail "bundle short version must be a three-component semantic version"
+[[ "$BUILD_VERSION" =~ ^[1-9][0-9]*$ ]] \
+    || fail "bundle build version must be a positive integer"
+[[ "$PUBLIC_PRODUCT_NAME" == "BlueMinutes" ]] \
+    || fail "unexpected public product name: $PUBLIC_PRODUCT_NAME"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$INFO_PLIST")" == "BlueMinutes" ]] \
+    || fail "unexpected public bundle name"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$INFO_PLIST")" == "$APP_PRODUCT" ]] \
+    || fail "unexpected compatibility executable"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PLIST")" \
+    == "com.meetingbuddy.desktop" ]] || fail "unexpected compatibility bundle identifier"
+
+APP_BUNDLE_NAME="$PUBLIC_PRODUCT_NAME.app"
+RELEASE_SET_NAME="$PUBLIC_PRODUCT_NAME-$BUNDLE_VERSION-development"
+ARCHIVE_NAME="$RELEASE_SET_NAME.zip"
+
 if [[ -e "$DIST_DIR" || -L "$DIST_DIR" ]]; then
     [[ -d "$DIST_DIR" && ! -L "$DIST_DIR" ]] \
         || fail "dist exists but is not a real directory"
@@ -91,22 +108,57 @@ write_source_inventory() {
             || fail "source inventory input is missing, non-regular, or linked: $relative"
         digest="$(/usr/bin/shasum -a 256 "$ROOT_DIR/$relative" | /usr/bin/awk '{print $1}')"
         /usr/bin/printf '%s  %s\n' "$digest" "$relative" >> "$output"
-    done < <(
-        /usr/bin/git -C "$ROOT_DIR" ls-files -co --exclude-standard -z -- \
-            Package.swift Package.resolved Sources Tests Configuration ThirdPartyNotices script
-    )
+    done < <(/usr/bin/git -C "$ROOT_DIR" ls-files -z)
     [[ -s "$output" ]] || fail "source inventory is empty"
 }
 
 source_status() {
-    /usr/bin/git -C "$ROOT_DIR" status --porcelain=v1 --untracked-files=all -- \
-        Package.swift Package.resolved Sources Tests Configuration ThirdPartyNotices script
+    /usr/bin/git -C "$ROOT_DIR" status --porcelain=v1 --untracked-files=all
+}
+
+exact_git_tag() {
+    local revision="$1"
+    local tags
+    local count
+    tags="$(/usr/bin/git -C "$ROOT_DIR" tag --points-at "$revision" | LC_ALL=C /usr/bin/sort)"
+    count="$(/usr/bin/printf '%s\n' "$tags" | /usr/bin/sed '/^$/d' | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+    [[ "$count" -le 1 ]] || fail "release source has more than one exact tag"
+    if [[ -n "$tags" ]]; then
+        [[ "$(/usr/bin/git -C "$ROOT_DIR" cat-file -t "refs/tags/$tags")" == "tag" ]] \
+            || fail "exact release tag must be annotated"
+    fi
+    /usr/bin/printf '%s' "$tags"
+}
+
+write_bundle_inventory() {
+    local bundle="$1"
+    local output="$2"
+    local relative
+    local digest
+    : > "$output"
+    while IFS= read -r relative; do
+        relative="${relative#./}"
+        [[ -n "$relative" && "$relative" != *$'\t'* ]] \
+            || fail "unsupported app-bundle inventory path"
+        [[ -f "$bundle/$relative" && ! -L "$bundle/$relative" ]] \
+            || fail "app-bundle inventory input is missing, non-regular, or linked: $relative"
+        digest="$(/usr/bin/shasum -a 256 "$bundle/$relative" | /usr/bin/awk '{print $1}')"
+        /usr/bin/printf '%s  %s\n' "$digest" "$relative" >> "$output"
+    done < <(
+        cd "$bundle"
+        /usr/bin/find . -type f -print | LC_ALL=C /usr/bin/sort
+    )
+    [[ -s "$output" ]] || fail "app-bundle inventory is empty"
 }
 
 PREBUILD_SOURCE_INVENTORY="$STAGE_ROOT/prebuild-source-files.sha256"
 write_source_inventory "$PREBUILD_SOURCE_INVENTORY"
 PREBUILD_GIT_HEAD="$(/usr/bin/git -C "$ROOT_DIR" rev-parse HEAD)"
+PREBUILD_GIT_TREE="$(/usr/bin/git -C "$ROOT_DIR" rev-parse 'HEAD^{tree}')"
+PREBUILD_GIT_TAG="$(exact_git_tag "$PREBUILD_GIT_HEAD")"
 PREBUILD_SOURCE_STATUS="$(source_status)"
+[[ -z "$PREBUILD_SOURCE_STATUS" ]] \
+    || fail "the complete repository must be clean before development packaging"
 
 cd "$ROOT_DIR"
 /usr/bin/swift build \
@@ -152,7 +204,7 @@ else
         "$STAGED_APP"
 fi
 
-verify_release "$STAGED_APP" internal-alpha
+verify_release "$STAGED_APP" development
 
 STAGED_ARCHIVE="$RELEASE_SET/$ARCHIVE_NAME"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$STAGED_APP" "$STAGED_ARCHIVE"
@@ -161,7 +213,7 @@ STAGED_ARCHIVE="$RELEASE_SET/$ARCHIVE_NAME"
     /usr/bin/shasum -a 256 "$ARCHIVE_NAME"
 ) > "$RELEASE_SET/$ARCHIVE_NAME.sha256"
 /usr/bin/ditto -x -k "$STAGED_ARCHIVE" "$EXTRACT_ROOT"
-verify_release "$EXTRACT_ROOT/$APP_BUNDLE_NAME" internal-alpha
+verify_release "$EXTRACT_ROOT/$APP_BUNDLE_NAME" development
 
 SOURCE_INVENTORY="$RELEASE_SET/source-files.sha256"
 write_source_inventory "$SOURCE_INVENTORY"
@@ -171,17 +223,22 @@ write_source_inventory "$SOURCE_INVENTORY"
 GIT_HEAD="$(/usr/bin/git -C "$ROOT_DIR" rev-parse HEAD)"
 [[ "$GIT_HEAD" == "$PREBUILD_GIT_HEAD" ]] \
     || fail "Git HEAD changed during the release build"
+GIT_TREE="$(/usr/bin/git -C "$ROOT_DIR" rev-parse 'HEAD^{tree}')"
+[[ "$GIT_TREE" == "$PREBUILD_GIT_TREE" ]] \
+    || fail "Git tree changed during the release build"
+GIT_TAG="$(exact_git_tag "$GIT_HEAD")"
+[[ "$GIT_TAG" == "$PREBUILD_GIT_TAG" ]] \
+    || fail "exact Git tag changed during the release build"
 [[ "$(source_status)" == "$PREBUILD_SOURCE_STATUS" ]] \
-    || fail "scoped Git status changed during the release build"
-SOURCE_TREE_STATE="dirty"
-if [[ -z "$PREBUILD_SOURCE_STATUS" ]]; then
-    SOURCE_TREE_STATE="clean"
-fi
+    || fail "repository status changed during the release build"
 SOURCE_INVENTORY_SHA256="$(/usr/bin/shasum -a 256 "$SOURCE_INVENTORY" | /usr/bin/awk '{print $1}')"
 SOURCE_FILE_COUNT="$(/usr/bin/wc -l < "$SOURCE_INVENTORY" | /usr/bin/tr -d ' ')"
 PACKAGE_RESOLVED_SHA256="$(/usr/bin/shasum -a 256 "$PACKAGE_RESOLVED" | /usr/bin/awk '{print $1}')"
 ARCHIVE_SHA256="$(/usr/bin/shasum -a 256 "$STAGED_ARCHIVE" | /usr/bin/awk '{print $1}')"
 EXECUTABLE_SHA256="$(/usr/bin/shasum -a 256 "$CONTENTS/MacOS/$APP_PRODUCT" | /usr/bin/awk '{print $1}')"
+APP_BUNDLE_INVENTORY="$STAGE_ROOT/app-files.sha256"
+write_bundle_inventory "$STAGED_APP" "$APP_BUNDLE_INVENTORY"
+APP_BUNDLE_SHA256="$(/usr/bin/shasum -a 256 "$APP_BUNDLE_INVENTORY" | /usr/bin/awk '{print $1}')"
 BUILT_AT_UTC="$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')"
 SWIFT_VERSION="$(/usr/bin/swift --version 2>&1 | /usr/bin/tr '\n' ' ' | /usr/bin/sed 's/[[:space:]]*$//')"
 XCODE_VERSION="$(/usr/bin/xcodebuild -version | /usr/bin/paste -sd ' ' -)"
@@ -199,7 +256,8 @@ fi
 /usr/bin/jq -n \
     --arg built_at_utc "$BUILT_AT_UTC" \
     --arg git_head "$GIT_HEAD" \
-    --arg tree_state "$SOURCE_TREE_STATE" \
+    --arg git_tree "$GIT_TREE" \
+    --arg git_tag "$GIT_TAG" \
     --arg source_inventory_sha "$SOURCE_INVENTORY_SHA256" \
     --argjson source_file_count "$SOURCE_FILE_COUNT" \
     --arg package_resolved_sha "$PACKAGE_RESOLVED_SHA256" \
@@ -207,18 +265,34 @@ fi
     --arg xcode_version "$XCODE_VERSION" \
     --arg host_os_version "$HOST_OS_VERSION" \
     --arg host_architecture "$(uname -m)" \
+    --arg public_product_name "$PUBLIC_PRODUCT_NAME" \
+    --arg bundle_version "$BUNDLE_VERSION" \
+    --arg build_version "$BUILD_VERSION" \
+    --arg app_bundle "$APP_BUNDLE_NAME" \
+    --arg archive "$ARCHIVE_NAME" \
     --arg archive_sha "$ARCHIVE_SHA256" \
+    --arg app_bundle_sha "$APP_BUNDLE_SHA256" \
     --arg executable_sha "$EXECUTABLE_SHA256" \
     --arg signature_kind "$SIGNATURE_KIND" \
     --arg team_identifier "$TEAM_IDENTIFIER" '
     {
-      schema_version: 1,
-      classification: "INTERNAL_ALPHA",
+      schema_version: 2,
+      classification: "DEVELOPMENT",
       distribution_authorized: false,
       built_at_utc: $built_at_utc,
+      product: {
+        public_name: $public_product_name,
+        compatibility_name: "MeetingBuddy",
+        version: $bundle_version,
+        build: $build_version,
+        bundle_identifier: "com.meetingbuddy.desktop",
+        executable: "MeetingBuddyApp"
+      },
       source: {
         git_head: $git_head,
-        tree_state: $tree_state,
+        git_tree: $git_tree,
+        git_tag: $git_tag,
+        tree_state: "clean",
         inventory: "source-files.sha256",
         inventory_sha256: $source_inventory_sha,
         file_count: $source_file_count,
@@ -231,8 +305,10 @@ fi
         architecture: $host_architecture
       },
       artifact: {
-        app_bundle: "MeetingBuddy.app",
-        archive: "MeetingBuddy-0.1.0-internal-alpha.zip",
+        app_bundle: $app_bundle,
+        app_bundle_sha256: $app_bundle_sha,
+        app_bundle_digest_kind: "sha256_of_sorted_file_sha256_inventory_v1",
+        archive: $archive,
         archive_sha256: $archive_sha,
         executable_sha256: $executable_sha
       },
@@ -245,7 +321,7 @@ fi
     }
 ' > "$RELEASE_SET/release-manifest.json"
 
-verify_release "$RELEASE_SET" internal-alpha
+verify_release "$RELEASE_SET" development
 
 FINAL_RELEASE_SET="$DIST_DIR/$RELEASE_SET_NAME"
 PREVIOUS_RELEASE_SET="$DIST_DIR/.previous-$RELEASE_SET_NAME"
@@ -263,7 +339,7 @@ if ! /bin/mv "$RELEASE_SET" "$FINAL_RELEASE_SET"; then
         || /bin/mv "$PREVIOUS_RELEASE_SET" "$FINAL_RELEASE_SET"
     fail "could not publish the verified release set"
 fi
-if ! verify_release "$FINAL_RELEASE_SET" internal-alpha; then
+if ! verify_release "$FINAL_RELEASE_SET" development; then
     /bin/rm -rf "$FINAL_RELEASE_SET"
     [[ ! -e "$PREVIOUS_RELEASE_SET" ]] \
         || /bin/mv "$PREVIOUS_RELEASE_SET" "$FINAL_RELEASE_SET"
@@ -273,7 +349,7 @@ fi
 
 echo "release set: $FINAL_RELEASE_SET"
 echo "release bundle: $FINAL_RELEASE_SET/$APP_BUNDLE_NAME"
-echo "verified update archive: $FINAL_RELEASE_SET/$ARCHIVE_NAME"
+echo "verified development archive: $FINAL_RELEASE_SET/$ARCHIVE_NAME"
 echo "archive digest: $FINAL_RELEASE_SET/$ARCHIVE_NAME.sha256"
 echo "source/build manifest: $FINAL_RELEASE_SET/release-manifest.json"
 if [[ "$SIGN_IDENTITY" == "-" ]]; then

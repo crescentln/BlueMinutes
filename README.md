@@ -39,11 +39,12 @@ conditions, exact source evidence, review state, and later corrections.
 BlueMinutes is not affiliated with, sponsored by, or endorsed by the United
 Nations, any United Nations entity, or any government.
 
-The `v0.2.0` milestone is a source release for developers and early evaluators
-who build BlueMinutes locally. It adds a hidden, default-off
-compatibility and validation foundation for future Meeting / Research work; it
-does not add a Research interface, connector, external provider, or persistent
-Research data. A signed and notarized app download is a separate future
+The `v0.3.0` milestone is a source release for developers and early evaluators
+who build BlueMinutes locally. It completes the native Editorial Dossier
+foundation across intake, transcript, analysis, briefing, history, storage,
+Settings, and deterministic visual/accessibility contracts. It also defines a
+version-bound local development package for testing on the build Mac. A
+Developer ID-signed and notarized app download remains a separate future
 distribution milestone.
 
 ## Product preview
@@ -175,6 +176,29 @@ before launching the new build. The app displays the BlueMinutes name and icon;
 the development bundle path and process name retain legacy compatibility
 identifiers.
 
+### Build the coherent local development package
+
+From a clean committed source tree, run:
+
+```sh
+MEETINGBUDDY_SIGN_IDENTITY=- ./script/package_release_candidate.sh
+./script/verify_release_candidate.sh \
+  dist/BlueMinutes-0.3.0-development \
+  development
+```
+
+This produces `BlueMinutes.app`, `BlueMinutes-0.3.0-development.zip`, the ZIP
+checksum, a full tracked-source inventory, and a source/build manifest together
+under the ignored `dist/BlueMinutes-0.3.0-development/` directory. The manifest
+binds the app to version `0.3.0` (build `3`), the exact Git head/tree/tag,
+resolved dependency digest, build toolchain, app/archive digests, and signature
+classification.
+
+The package is ad-hoc signed with Hardened Runtime for local development testing
+on this Mac. It is not notarized, installable as a supported release, or
+authorized for public upload or distribution. GitHub Releases remain
+source-only and contain zero maintainer-uploaded app assets.
+
 ## Using the app
 
 1. **Choose a workspace.** Select an existing BlueMinutes workspace or an empty
@@ -304,10 +328,10 @@ BlueMinutes is a Swift 6 modular monolith:
 | Native app | SwiftUI review experience and composition root |
 | Local automation | Typed, permissioned CLI and MCP adapters |
 
-The `v0.2.0` source tree also defines provider-neutral contracts and
-exact-revision compatibility adapters for future Meeting / Research
-integration. Every related capability remains disabled by default; no Research
-interface, provider, persistence, migration, or new network route is active.
+The source tree also defines provider-neutral contracts and exact-revision
+compatibility adapters for future Meeting / Research integration. Every related
+capability remains disabled by default; no Research interface, provider,
+persistence, migration, or new network route is active.
 
 GRDB 7.11.1 is the only external package dependency and is confined to the
 persistence implementation and tests. Start with
@@ -318,11 +342,11 @@ there and retain their legacy compatibility identifiers.
 
 ## Known limitations
 
-- GitHub Releases currently contain source code only. A Developer ID signed
-  and notarized app download, installer, automatic updater, universal/Intel
-  build, and clean-machine distribution proof remain future milestones. The
-  development app bundle retains its separately gated `0.1.0` internal-alpha
-  metadata.
+- GitHub Releases contain source code only and have no maintainer-uploaded app
+  asset. The local `0.3.0` build-`3` development package is ad-hoc signed and
+  not notarized. A Developer ID-signed app download, installer, automatic
+  updater, universal/Intel build, and clean-machine distribution proof remain
+  future milestones.
 - Automatic Apple transcription, translation, analysis, and briefing require
   macOS 26, supported hardware/locales, and installed system model assets.
   Manual transcript and translation intake remain available, but there is no

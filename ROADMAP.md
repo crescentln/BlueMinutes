@@ -4,7 +4,7 @@ This roadmap describes maintenance priorities, not delivery promises. Scope and
 timing are decided through Issues, ADRs, Pull Requests, passing gates, and
 explicit maintainer authorization.
 
-## Completed milestone: public source-publication foundation
+## Completed milestones: source publication and native UI Foundation
 
 - Completed the evidence-integrity remediation and warning-as-error test gate.
 - Adopted the maintainer-selected `BlueMinutes` public brand while preserving
@@ -31,9 +31,23 @@ explicit maintainer authorization.
   binary distribution.
 - Added high-resolution Local Media and UN Web TV Metadata screenshots from a
   disposable synthetic empty workspace, with no real meeting or user data.
+- Completed the native Editorial Dossier migration across intake, Transcript,
+  Analysis, Briefing, Meeting History, learned preferences, Storage, and
+  Settings while preserving local-first state and exact evidence boundaries.
+- Added a pinned 50-case native visual baseline, runtime accessibility
+  contracts, same-runner zero-threshold calibration, and bounded actual-app
+  synthetic intake evidence.
+- Published `v0.3.0` as a source-only UI Foundation release with zero uploaded
+  assets and promoted the local application bundle to version `0.3.0` build
+  `3`.
+- Added a version-bound, ad-hoc-signed local development package with a full
+  tracked-source inventory and source/build manifest for testing on the build
+  Mac.
 
-No distributable binary, signing, notarization, installer, package, updater, or
-deployment is part of this source-release milestone.
+No distributable binary, Developer ID signing, notarization, installer,
+automatic updater, or deployment is part of this source-release milestone. The
+local development package is not a supported download and is never attached to
+the GitHub Release.
 
 ## Candidate milestone: public project presentation
 
