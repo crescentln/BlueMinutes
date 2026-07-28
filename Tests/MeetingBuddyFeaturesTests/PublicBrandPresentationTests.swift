@@ -88,6 +88,25 @@ struct PublicBrandPresentationTests {
             )
         )
 
+        let executionLedger = try source("docs/CODEX_EXECUTION_STATE.md")
+        #expect(executionLedger.contains("version: \"v0.3.0\""))
+        #expect(
+            executionLedger.contains(
+                "bundle_version_status: \"Configuration/MeetingBuddy-Info.plist is promoted"
+            )
+        )
+        #expect(
+            executionLedger.contains(
+                "working_tree_status_summary: \"at this ledger-bearing post-commit state"
+            )
+        )
+        #expect(executionLedger.contains("changes exactly eleven Issue #54 paths"))
+        #expect(
+            !executionLedger.contains(
+                "remains the separately gated 0.1.0 internal-alpha application-bundle version"
+            )
+        )
+
         let currentReleaseNotes = try source("docs/RELEASE_NOTES_0.3.0.md")
         let normalizedCurrentReleaseNotes = currentReleaseNotes
             .split(whereSeparator: \.isWhitespace)
