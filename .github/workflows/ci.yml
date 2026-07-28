@@ -69,6 +69,11 @@ jobs:
       - name: Validate public brand metadata and icon
         run: |
           plutil -lint Configuration/MeetingBuddy-Info.plist
+          ./script/generate_brand_assets.sh
+          git diff --exit-code -- \
+            Configuration/Branding/BlueMinutes-AppIcon-1024.png \
+            Configuration/Branding/BlueMinutes.icns \
+            docs/assets/BlueMinutes-logo.png
           swift test -Xswiftc -warnings-as-errors --filter PublicBrandPresentationTests
           icon_dir="$(mktemp -d "$RUNNER_TEMP/blueminutes-icon.XXXXXX")"
           iconutil -c iconset Configuration/Branding/BlueMinutes.icns \
@@ -92,6 +97,7 @@ jobs:
           swift test -Xswiftc -warnings-as-errors --filter AnalysisPipelineIntegrationTests
           swift test -Xswiftc -warnings-as-errors --filter BriefingPipelineIntegrationTests
           swift test -Xswiftc -warnings-as-errors --filter ProviderContractTests
+          swift test -Xswiftc -warnings-as-errors --filter ProviderRoutingContractTests
 
       - name: Run bounded Golden smoke tests
         run: |

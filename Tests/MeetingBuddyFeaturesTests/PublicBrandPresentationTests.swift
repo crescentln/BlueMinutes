@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import ImageIO
 import Testing
 
 @Suite
@@ -30,6 +32,60 @@ struct PublicBrandPresentationTests {
         )
         let icon = try Data(contentsOf: iconURL)
         #expect(!icon.isEmpty)
+    }
+
+    @Test
+    func reviewedBrandSourcesAndDerivedAssetsRemainBound() throws {
+        let repository = repositoryRoot
+        let iconSourceURL = repository.appendingPathComponent(
+            "Configuration/Branding/Sources/BlueMinutes-AppIcon-Source.png"
+        )
+        let logoSourceURL = repository.appendingPathComponent(
+            "Configuration/Branding/Sources/BlueMinutes-Logo-Source.png"
+        )
+        let iconMasterURL = repository.appendingPathComponent(
+            "Configuration/Branding/BlueMinutes-AppIcon-1024.png"
+        )
+        let iconURL = repository.appendingPathComponent(
+            "Configuration/Branding/BlueMinutes.icns"
+        )
+        let publicLogoURL = repository.appendingPathComponent(
+            "docs/assets/BlueMinutes-logo.png"
+        )
+
+        #expect(
+            sha256(iconSourceURL)
+                == "a36fa53503c95047a04c5e3ba9d5f0e6619789f19eb2bbf1225f61d318cadbd4"
+        )
+        #expect(
+            sha256(logoSourceURL)
+                == "d0f0e05164a84b14533e2a3f2f83486baab544f2c6029a14911c5a4ba95fcd39"
+        )
+        #expect(
+            sha256(iconMasterURL)
+                == "6bb1f6f61ea536e83433fe979eb8749b4b3745270ba7b1da6bb08e893bee289a"
+        )
+        #expect(
+            sha256(iconURL)
+                == "87459e6a19758af87eb34884b2f06066413000298c7ec6468f6eb0046aa06bca"
+        )
+        #expect(try Data(contentsOf: logoSourceURL) == Data(contentsOf: publicLogoURL))
+        #expect(try pixelSize(iconSourceURL) == [1254, 1254])
+        #expect(try pixelSize(logoSourceURL) == [1448, 1086])
+        #expect(try pixelSize(iconMasterURL) == [1024, 1024])
+        #expect(try profileName(iconMasterURL).contains("sRGB"))
+
+        let readme = try source("README.md")
+        #expect(readme.contains("docs/assets/BlueMinutes-logo.png"))
+        #expect(!readme.contains("docs/assets/BlueMinutes-logo.jpg"))
+
+        let generator = try source("script/generate_brand_assets.sh")
+        #expect(generator.contains("EXPECTED_ICON_SOURCE_SHA256"))
+        #expect(generator.contains("EXPECTED_LOGO_SOURCE_SHA256"))
+        #expect(generator.contains("EXPECTED_ICON_MASTER_SHA256"))
+        #expect(generator.contains("EXPECTED_ICON_OUTPUT_SHA256"))
+        #expect(generator.contains("/usr/bin/iconutil -c icns"))
+        #expect(generator.contains("No tracked output changes until every derived artifact"))
     }
 
     @Test
@@ -97,10 +153,20 @@ struct PublicBrandPresentationTests {
         )
         #expect(
             executionLedger.contains(
-                "working_tree_status_summary: \"at this ledger-bearing post-commit state"
+                "working_tree_status_summary: \"the self-relative Issue #60 foundation carrier"
             )
         )
-        #expect(executionLedger.contains("changes exactly two Issue #58 paths"))
+        #expect(executionLedger.contains("current_task: \"v4-prebeta\""))
+        #expect(
+            executionLedger.contains(
+                "tracking_issue: \"Issue #60 at https://github.com/crescentln/BlueMinutes/issues/60\""
+            )
+        )
+        #expect(
+            executionLedger.contains(
+                "Do not start U1, production billing, website deployment"
+            )
+        )
         #expect(
             !executionLedger.contains(
                 "remains the separately gated 0.1.0 internal-alpha application-bundle version"
@@ -251,6 +317,39 @@ struct PublicBrandPresentationTests {
             )
         )
         #expect(!scalarValues.contains("MeetingBuddy contract timestamps"))
+    }
+
+    private func sha256(_ url: URL) -> String {
+        let data = (try? Data(contentsOf: url)) ?? Data()
+        return SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    private func pixelSize(_ url: URL) throws -> [Int] {
+        let source = try #require(
+            CGImageSourceCreateWithURL(url as CFURL, nil)
+        )
+        let properties = try #require(
+            CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                as? [CFString: Any]
+        )
+        let width = try #require(properties[kCGImagePropertyPixelWidth] as? Int)
+        let height = try #require(properties[kCGImagePropertyPixelHeight] as? Int)
+        return [width, height]
+    }
+
+    private func profileName(_ url: URL) throws -> String {
+        let source = try #require(
+            CGImageSourceCreateWithURL(url as CFURL, nil)
+        )
+        let properties = try #require(
+            CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                as? [CFString: Any]
+        )
+        return try #require(
+            properties[kCGImagePropertyProfileName] as? String
+        )
     }
 
     @Test
