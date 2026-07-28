@@ -1,13 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-RELEASE_SET_NAME="MeetingBuddy-0.1.0-internal-alpha"
-APP_BUNDLE_NAME="MeetingBuddy.app"
-ARCHIVE_NAME="MeetingBuddy-0.1.0-internal-alpha.zip"
+APP_PRODUCT="MeetingBuddyApp"
+PUBLIC_PRODUCT_NAME="BlueMinutes"
+COMPATIBILITY_NAME="MeetingBuddy"
+EXPECTED_BUNDLE_IDENTIFIER="com.meetingbuddy.desktop"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-TARGET="${1:-$ROOT_DIR/dist/$RELEASE_SET_NAME}"
-VERIFICATION_MODE="${2:-internal-alpha}"
+SOURCE_INFO_PLIST="$ROOT_DIR/Configuration/MeetingBuddy-Info.plist"
 EXPECTED_ENTITLEMENTS="$ROOT_DIR/Configuration/MeetingBuddy.entitlements"
 EXPECTED_PRIVACY_MANIFEST="$ROOT_DIR/Configuration/PrivacyInfo.xcprivacy"
 EXPECTED_APP_ICON="$ROOT_DIR/Configuration/Branding/BlueMinutes.icns"
@@ -20,13 +20,58 @@ fail() {
 }
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "macOS is required"
+[[ -f "$SOURCE_INFO_PLIST" && ! -L "$SOURCE_INFO_PLIST" ]] \
+    || fail "source Info.plist is missing or linked"
+/usr/bin/plutil -lint "$SOURCE_INFO_PLIST" >/dev/null
+BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$SOURCE_INFO_PLIST")"
+BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$SOURCE_INFO_PLIST")"
+[[ "$BUNDLE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || fail "source bundle short version is invalid"
+[[ "$BUILD_VERSION" =~ ^[1-9][0-9]*$ ]] \
+    || fail "source bundle build version is invalid"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$SOURCE_INFO_PLIST")" \
+    == "$PUBLIC_PRODUCT_NAME" ]] || fail "source public display name is invalid"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$SOURCE_INFO_PLIST")" \
+    == "$PUBLIC_PRODUCT_NAME" ]] || fail "source public bundle name is invalid"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$SOURCE_INFO_PLIST")" \
+    == "$APP_PRODUCT" ]] || fail "source compatibility executable is invalid"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$SOURCE_INFO_PLIST")" \
+    == "$EXPECTED_BUNDLE_IDENTIFIER" ]] || fail "source compatibility bundle identifier is invalid"
+
+APP_BUNDLE_NAME="$PUBLIC_PRODUCT_NAME.app"
+RELEASE_SET_NAME="$PUBLIC_PRODUCT_NAME-$BUNDLE_VERSION-development"
+ARCHIVE_NAME="$RELEASE_SET_NAME.zip"
+TARGET="${1:-$ROOT_DIR/dist/$RELEASE_SET_NAME}"
+VERIFICATION_MODE="${2:-development}"
+
 case "$VERIFICATION_MODE" in
-    internal-alpha|distribution) ;;
-    *) fail "verification mode must be internal-alpha or distribution" ;;
+    development|distribution) ;;
+    *) fail "verification mode must be development or distribution" ;;
 esac
 
-TEMP_DIR="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/meetingbuddy-release-verify.XXXXXX")"
+TEMP_DIR="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/blueminutes-release-verify.XXXXXX")"
 trap '/bin/rm -rf "$TEMP_DIR"' EXIT
+
+write_bundle_inventory() {
+    local bundle="$1"
+    local output="$2"
+    local relative
+    local digest
+    : > "$output"
+    while IFS= read -r relative; do
+        relative="${relative#./}"
+        [[ -n "$relative" && "$relative" != *$'\t'* ]] \
+            || fail "unsupported app-bundle inventory path"
+        [[ -f "$bundle/$relative" && ! -L "$bundle/$relative" ]] \
+            || fail "app-bundle inventory input is missing, non-regular, or linked: $relative"
+        digest="$(/usr/bin/shasum -a 256 "$bundle/$relative" | /usr/bin/awk '{print $1}')"
+        /usr/bin/printf '%s  %s\n' "$digest" "$relative" >> "$output"
+    done < <(
+        cd "$bundle"
+        /usr/bin/find . -type f -print | LC_ALL=C /usr/bin/sort
+    )
+    [[ -s "$output" ]] || fail "app-bundle inventory is empty"
+}
 
 verify_app() {
     local app_bundle="$1"
@@ -35,7 +80,7 @@ verify_app() {
     app_bundle="$(cd "$(dirname "$app_bundle")" && pwd -P)/$(basename "$app_bundle")"
 
     local info_plist="$app_bundle/Contents/Info.plist"
-    local executable="$app_bundle/Contents/MacOS/MeetingBuddyApp"
+    local executable="$app_bundle/Contents/MacOS/$APP_PRODUCT"
     local app_icon="$app_bundle/Contents/Resources/BlueMinutes.icns"
     local privacy_manifest="$app_bundle/Contents/Resources/PrivacyInfo.xcprivacy"
     local grdb_privacy="$app_bundle/Contents/Resources/GRDB_GRDB.bundle/PrivacyInfo.xcprivacy"
@@ -74,19 +119,19 @@ LAYOUT
 
     /usr/bin/plutil -lint "$info_plist" "$privacy_manifest" "$grdb_privacy" >/dev/null
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_plist")" \
-        == "com.meetingbuddy.desktop" ]] || fail "unexpected bundle identifier"
+        == "$EXPECTED_BUNDLE_IDENTIFIER" ]] || fail "unexpected bundle identifier"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info_plist")" \
-        == "0.1.0" ]] || fail "unexpected short version"
+        == "$BUNDLE_VERSION" ]] || fail "unexpected short version"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$info_plist")" \
-        == "1" ]] || fail "unexpected build version"
+        == "$BUILD_VERSION" ]] || fail "unexpected build version"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$info_plist")" \
         == "15.0" ]] || fail "unexpected minimum system version"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")" \
-        == "MeetingBuddyApp" ]] || fail "unexpected executable declaration"
+        == "$APP_PRODUCT" ]] || fail "unexpected executable declaration"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$info_plist")" \
-        == "BlueMinutes" ]] || fail "unexpected public display name"
+        == "$PUBLIC_PRODUCT_NAME" ]] || fail "unexpected public display name"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$info_plist")" \
-        == "BlueMinutes" ]] || fail "unexpected public bundle name"
+        == "$PUBLIC_PRODUCT_NAME" ]] || fail "unexpected public bundle name"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$info_plist")" \
         == "BlueMinutes.icns" ]] || fail "unexpected application icon declaration"
     /usr/bin/cmp -s "$EXPECTED_APP_ICON" "$app_icon" \
@@ -151,10 +196,12 @@ LAYOUT
         || fail "hardened runtime flag is absent"
 
     local signature_kind
+    local team_identifier
     if /usr/bin/grep -q '^Signature=adhoc$' "$signature"; then
-        [[ "$VERIFICATION_MODE" == "internal-alpha" ]] \
+        [[ "$VERIFICATION_MODE" == "development" ]] \
             || fail "distribution verification rejects an ad-hoc signature"
         signature_kind="ad-hoc"
+        team_identifier=""
     else
         /usr/bin/grep -q '^Authority=Developer ID Application:' "$signature" \
             || fail "non-ad-hoc signature is not a Developer ID Application identity"
@@ -163,6 +210,9 @@ LAYOUT
         /usr/bin/grep -Eq '^Timestamp=.+' "$signature" \
             || fail "Developer ID signature has no secure timestamp"
         signature_kind="developer-id"
+        team_identifier="$(
+            /usr/bin/sed -n 's/^TeamIdentifier=//p' "$signature" | /usr/bin/head -n 1
+        )"
     fi
 
     if [[ "$VERIFICATION_MODE" == "distribution" ]]; then
@@ -177,7 +227,96 @@ LAYOUT
     APP_EXECUTABLE_SHA256="$(/usr/bin/shasum -a 256 "$executable" | /usr/bin/awk '{print $1}')"
     APP_EXECUTABLE_BYTES="$(/usr/bin/stat -f '%z' "$executable")"
     APP_SIGNATURE_KIND="$signature_kind"
+    APP_TEAM_IDENTIFIER="$team_identifier"
     APP_ARCHITECTURES="$architectures"
+    local bundle_inventory="$TEMP_DIR/$label.app-files.sha256"
+    write_bundle_inventory "$app_bundle" "$bundle_inventory"
+    APP_BUNDLE_SHA256="$(/usr/bin/shasum -a 256 "$bundle_inventory" | /usr/bin/awk '{print $1}')"
+}
+
+verify_source_inventory() {
+    local release_set="$1"
+    local manifest="$2"
+    local inventory="$release_set/source-files.sha256"
+    local git_head
+    local git_tree
+    local git_tag
+    local line
+    local digest
+    local relative
+    local actual_digest
+    local actual_paths="$TEMP_DIR/source-paths.actual"
+    local expected_paths="$TEMP_DIR/source-paths.expected"
+
+    [[ -f "$inventory" && ! -L "$inventory" ]] \
+        || fail "source inventory is missing or linked"
+    SOURCE_MANIFEST_SHA256="$(
+        /usr/bin/shasum -a 256 "$inventory" | /usr/bin/awk '{print $1}'
+    )"
+    SOURCE_FILE_COUNT="$(/usr/bin/wc -l < "$inventory" | /usr/bin/tr -d ' ')"
+    [[ "$SOURCE_FILE_COUNT" -gt 0 ]] || fail "source inventory is empty"
+
+    git_head="$(/usr/bin/jq -er '.source.git_head' "$manifest")"
+    git_tree="$(/usr/bin/jq -er '.source.git_tree' "$manifest")"
+    git_tag="$(/usr/bin/jq -er '.source.git_tag' "$manifest")"
+    [[ "$git_head" =~ ^[0-9a-f]{40}$ ]] || fail "manifest Git head is invalid"
+    [[ "$git_tree" =~ ^[0-9a-f]{40}$ ]] || fail "manifest Git tree is invalid"
+    /usr/bin/git -C "$ROOT_DIR" cat-file -e "$git_head^{commit}" \
+        || fail "manifest Git commit is unavailable"
+    [[ "$(/usr/bin/git -C "$ROOT_DIR" rev-parse "$git_head^{tree}")" == "$git_tree" ]] \
+        || fail "manifest Git tree does not match its commit"
+    if /usr/bin/git -C "$ROOT_DIR" ls-tree -r "$git_head" \
+        | /usr/bin/awk '$1 == "120000" { found = 1 } END { exit(found ? 0 : 1) }'; then
+        fail "manifest source commit contains a symbolic link"
+    fi
+
+    : > "$actual_paths"
+    while IFS= read -r line; do
+        /usr/bin/printf '%s\n' "$line" \
+            | /usr/bin/grep -Eq '^[0-9a-f]{64}  [^/].+$' \
+            || fail "source inventory line has an invalid format"
+        digest="${line%%  *}"
+        relative="${line#*  }"
+        case "$relative" in
+            /*|..|../*|*/../*|*/..) fail "source inventory path escapes the repository" ;;
+        esac
+        [[ "$relative" != *$'\t'* ]] || fail "source inventory path contains a tab"
+        /usr/bin/printf '%s\n' "$relative" >> "$actual_paths"
+        actual_digest="$(
+            /usr/bin/git -C "$ROOT_DIR" show "$git_head:$relative" \
+                | /usr/bin/shasum -a 256 \
+                | /usr/bin/awk '{print $1}'
+        )"
+        [[ "$actual_digest" == "$digest" ]] \
+            || fail "source inventory digest mismatch: $relative"
+    done < "$inventory"
+
+    : > "$expected_paths"
+    while IFS= read -r -d '' relative; do
+        [[ "$relative" != *$'\n'* && "$relative" != *$'\t'* ]] \
+            || fail "source commit paths containing tabs or newlines are unsupported"
+        /usr/bin/printf '%s\n' "$relative" >> "$expected_paths"
+    done < <(/usr/bin/git -C "$ROOT_DIR" ls-tree -r -z --name-only "$git_head")
+    /usr/bin/cmp -s "$expected_paths" "$actual_paths" \
+        || fail "source inventory does not cover the exact tracked tree"
+
+    if [[ -n "$git_tag" ]]; then
+        [[ "$git_tag" == "v$BUNDLE_VERSION" ]] \
+            || fail "manifest exact tag does not match the bundle version"
+        [[ "$(/usr/bin/git -C "$ROOT_DIR" cat-file -t "refs/tags/$git_tag")" == "tag" ]] \
+            || fail "manifest exact tag is not annotated"
+        [[ "$(/usr/bin/git -C "$ROOT_DIR" rev-parse "refs/tags/$git_tag^{}")" == "$git_head" ]] \
+            || fail "manifest exact tag does not peel to its Git head"
+    fi
+
+    SOURCE_GIT_HEAD="$git_head"
+    SOURCE_GIT_TREE="$git_tree"
+    SOURCE_GIT_TAG="$git_tag"
+    SOURCE_PACKAGE_RESOLVED_SHA256="$(
+        /usr/bin/git -C "$ROOT_DIR" show "$git_head:Package.resolved" \
+            | /usr/bin/shasum -a 256 \
+            | /usr/bin/awk '{print $1}'
+    )"
 }
 
 if [[ "$TARGET" == *.app ]]; then
@@ -188,6 +327,7 @@ if [[ "$TARGET" == *.app ]]; then
     echo "signature: $APP_SIGNATURE_KIND with hardened runtime"
     echo "executable bytes: $APP_EXECUTABLE_BYTES"
     echo "executable sha256: $APP_EXECUTABLE_SHA256"
+    echo "app bundle sha256: $APP_BUNDLE_SHA256"
     exit 0
 fi
 
@@ -209,35 +349,78 @@ LAYOUT
 /usr/bin/cmp -s "$TEMP_DIR/release-set.expected-layout" "$TEMP_DIR/release-set.actual-layout" \
     || fail "release-set layout is not the reviewed closed allowlist"
 
-(
-    cd "$RELEASE_SET"
-    /usr/bin/shasum -a 256 -c "$ARCHIVE_NAME.sha256"
-)
-SOURCE_MANIFEST_SHA256="$(
-    /usr/bin/shasum -a 256 "$RELEASE_SET/source-files.sha256" | /usr/bin/awk '{print $1}'
-)"
 ARCHIVE_SHA256="$(/usr/bin/shasum -a 256 "$RELEASE_SET/$ARCHIVE_NAME" | /usr/bin/awk '{print $1}')"
+/usr/bin/printf '%s  %s\n' "$ARCHIVE_SHA256" "$ARCHIVE_NAME" \
+    > "$TEMP_DIR/archive-checksum.expected"
+/usr/bin/cmp -s "$TEMP_DIR/archive-checksum.expected" \
+    "$RELEASE_SET/$ARCHIVE_NAME.sha256" \
+    || fail "archive checksum file is not the exact reviewed record"
 
 verify_app "$RELEASE_SET/$APP_BUNDLE_NAME" "release-set"
-EXPECTED_CLASSIFICATION="INTERNAL_ALPHA"
+verify_source_inventory "$RELEASE_SET" "$RELEASE_SET/release-manifest.json"
+EXPECTED_CLASSIFICATION="DEVELOPMENT"
 EXPECTED_DISTRIBUTION_AUTHORIZATION=false
+EXPECTED_NOTARIZATION="not_submitted"
 if [[ "$VERIFICATION_MODE" == "distribution" ]]; then
-    EXPECTED_CLASSIFICATION="RELEASE_CANDIDATE"
+    EXPECTED_CLASSIFICATION="DISTRIBUTION"
     EXPECTED_DISTRIBUTION_AUTHORIZATION=true
+    EXPECTED_NOTARIZATION="stapled"
 fi
 /usr/bin/jq -e \
+    --arg public_name "$PUBLIC_PRODUCT_NAME" \
+    --arg compatibility_name "$COMPATIBILITY_NAME" \
+    --arg version "$BUNDLE_VERSION" \
+    --arg build "$BUILD_VERSION" \
+    --arg bundle_identifier "$EXPECTED_BUNDLE_IDENTIFIER" \
+    --arg executable "$APP_PRODUCT" \
+    --arg git_head "$SOURCE_GIT_HEAD" \
+    --arg git_tree "$SOURCE_GIT_TREE" \
+    --arg git_tag "$SOURCE_GIT_TAG" \
+    --arg app_bundle "$APP_BUNDLE_NAME" \
+    --arg app_bundle_sha "$APP_BUNDLE_SHA256" \
+    --arg archive "$ARCHIVE_NAME" \
     --arg archive_sha "$ARCHIVE_SHA256" \
     --arg executable_sha "$APP_EXECUTABLE_SHA256" \
     --arg source_manifest_sha "$SOURCE_MANIFEST_SHA256" \
+    --arg package_resolved_sha "$SOURCE_PACKAGE_RESOLVED_SHA256" \
+    --argjson source_file_count "$SOURCE_FILE_COUNT" \
+    --arg signature_kind "$APP_SIGNATURE_KIND" \
+    --arg team_identifier "$APP_TEAM_IDENTIFIER" \
+    --arg expected_notarization "$EXPECTED_NOTARIZATION" \
     --arg expected_classification "$EXPECTED_CLASSIFICATION" \
     --argjson expected_distribution_authorization "$EXPECTED_DISTRIBUTION_AUTHORIZATION" '
-    .schema_version == 1 and
+    .schema_version == 2 and
     .classification == $expected_classification and
     .distribution_authorized == $expected_distribution_authorization and
+    (.built_at_utc | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+    .product.public_name == $public_name and
+    .product.compatibility_name == $compatibility_name and
+    .product.version == $version and
+    .product.build == $build and
+    .product.bundle_identifier == $bundle_identifier and
+    .product.executable == $executable and
+    .source.git_head == $git_head and
+    .source.git_tree == $git_tree and
+    .source.git_tag == $git_tag and
+    .source.tree_state == "clean" and
+    .source.inventory == "source-files.sha256" and
+    .source.file_count == $source_file_count and
+    .source.package_resolved_sha256 == $package_resolved_sha and
+    .artifact.app_bundle == $app_bundle and
+    .artifact.app_bundle_sha256 == $app_bundle_sha and
+    .artifact.app_bundle_digest_kind == "sha256_of_sorted_file_sha256_inventory_v1" and
+    .artifact.archive == $archive and
     .artifact.archive_sha256 == $archive_sha and
     .artifact.executable_sha256 == $executable_sha and
     .source.inventory_sha256 == $source_manifest_sha and
-    (.source.tree_state == "clean" or .source.tree_state == "dirty")
+    .signing.kind == $signature_kind and
+    .signing.team_identifier == $team_identifier and
+    .signing.hardened_runtime == true and
+    .signing.notarization == $expected_notarization and
+    (.toolchain.swift | type == "string" and length > 0) and
+    (.toolchain.xcode | type == "string" and length > 0) and
+    (.toolchain.macos | type == "string" and length > 0) and
+    .toolchain.architecture == "arm64"
 ' "$RELEASE_SET/release-manifest.json" >/dev/null \
     || fail "release manifest does not bind the verified artifact and source inventory"
 
@@ -263,5 +446,9 @@ echo "architecture: $APP_ARCHITECTURES"
 echo "signature: $APP_SIGNATURE_KIND with hardened runtime"
 echo "executable bytes: $APP_EXECUTABLE_BYTES"
 echo "executable sha256: $APP_EXECUTABLE_SHA256"
+echo "app bundle sha256: $APP_BUNDLE_SHA256"
 echo "archive sha256: $ARCHIVE_SHA256"
 echo "source inventory sha256: $SOURCE_MANIFEST_SHA256"
+echo "source git head: $SOURCE_GIT_HEAD"
+echo "source git tree: $SOURCE_GIT_TREE"
+echo "source exact tag: ${SOURCE_GIT_TAG:-none}"

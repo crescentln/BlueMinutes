@@ -74,6 +74,30 @@ swift test -Xswiftc -warnings-as-errors
 - [ ] P0/P1 security, privacy, evidence-integrity, or data-loss findings are
       closed. Accepted lower-priority risk is explicit.
 
+## Local development-package gate
+
+This gate is separate from public binary distribution. Passing it authorizes
+only a package retained in the ignored local `dist/` directory when the
+maintainer has explicitly approved that exact scope.
+
+- [ ] `CFBundleShortVersionString`, `CFBundleVersion`, public bundle/package
+      names, and compatibility-sensitive executable/bundle identifiers match
+      the reviewed release contract.
+- [ ] The repository is clean and the package manifest binds the exact Git
+      head, tree, optional annotated release tag, complete tracked-source
+      inventory, `Package.resolved`, and build toolchain.
+- [ ] The development release set has the exact reviewed top-level layout and
+      contains no symbolic link, credential, signing material, workspace,
+      database, log, model, real meeting content, or generated briefing.
+- [ ] The direct app, coherent release set, and fresh ZIP extraction pass
+      `script/verify_release_candidate.sh ... development`.
+- [ ] App/executable/archive/source-inventory digests and the ad-hoc Hardened
+      Runtime signature match the schema-v2 manifest.
+- [ ] `distribution` verification rejects the ad-hoc package; no check is
+      bypassed or weakened to make it pass.
+- [ ] The local app/ZIP is not installed, uploaded, attached to a GitHub
+      Release, advertised as a supported download, or used as an update.
+
 ## Binary-distribution gate
 
 - [ ] A reproducible build procedure records the full Xcode/Swift/macOS
@@ -101,8 +125,10 @@ Perform these only after the exact release authorization is recorded:
 
 1. Re-run the complete gate on the intended commit.
 2. Create the approved annotated tag without rewriting history.
-3. Build and verify only the authorized artifacts.
-4. Publish release notes and checksums that match the exact artifacts.
+3. Build and verify only the authorized local artifacts, keeping them local
+   unless binary publication was separately approved.
+4. Publish source release notes. Attach artifacts or checksums only when their
+   exact public distribution was separately approved.
 5. Verify repository visibility, tag, release record, and attached files.
 6. Monitor the supported update and rollback path.
 

@@ -8,6 +8,67 @@ All notable project changes are documented here. The format follows
 
 No notable changes yet.
 
+## [0.3.0] - 2026-07-27
+
+Native Editorial Dossier and local development-package foundation.
+
+### Added
+
+- A unified native Editorial Dossier shell for local media, visible recording,
+  bounded UN Web TV metadata, Transcript, Analysis, Briefing, Meeting History,
+  learned preferences, and Storage review.
+- Native Settings, exact state ownership, keyboard/focus routing, inspector
+  presentation, and accessibility contracts across the migrated surfaces.
+- A pinned 50-case native visual baseline with zero-tolerance regression
+  comparison and same-runner calibration evidence.
+- A coherent local development package containing `BlueMinutes.app`, a
+  versioned ZIP, checksum, full tracked-source inventory, and schema-v2
+  source/build manifest.
+
+### Changed
+
+- Promoted the BlueMinutes application bundle to version `0.3.0` (build `3`)
+  while retaining compatibility-sensitive internal identifiers.
+- The release packager now requires a clean complete repository and binds the
+  package to its exact Git head, tree, optional annotated tag, source inventory,
+  dependency lockfile, toolchain, app digest, archive digest, and signature
+  classification.
+- The verifier now has explicit `development` and `distribution` modes.
+  Development accepts the reviewed local signing boundary; distribution
+  continues to require Developer ID, timestamp, notarization/stapling,
+  Gatekeeper, and distribution-policy proof.
+
+### Fixed
+
+- Workspace-scoped asynchronous review state can no longer commit stale
+  results into a replacement workspace.
+- Historical search, pagination, learned-preference, and Storage presentation
+  failures retain their exact accepted-state and retry boundaries.
+- Intake preflight failures are resolved before persistence or job enqueue, and
+  file-import cancellation does not steal editor focus.
+
+### Security and privacy
+
+- Meeting data remains local by default. This release adds no provider, model,
+  credential flow, telemetry destination, remote control, or network route.
+- Actual-app evidence used a fresh synthetic local WAV and verified private
+  workspace file modes; no real meeting or user material enters the repository
+  or package.
+
+### Compatibility
+
+- SQLite remains at schema v10, GRDB remains pinned at 7.11.1, and no migration
+  or dependency change is included.
+- `MeetingBuddyApp`, `com.meetingbuddy.desktop`, Swift target, database, CLI,
+  MCP, protocol, and serialized compatibility identifiers remain unchanged.
+
+### Release scope
+
+- The GitHub `v0.3.0` Release is source-only with zero uploaded assets.
+- The ad-hoc `BlueMinutes-0.3.0-development` app/ZIP stays in the ignored local
+  `dist/` directory for testing on the build Mac. It is not notarized,
+  installed, uploaded, or authorized for public binary distribution.
+
 ## [0.2.0] - 2026-07-23
 
 Source-only compatibility and safety foundation for future Meeting / Research
@@ -132,6 +193,7 @@ Internal validation milestone only; no Git tag or GitHub Release was created.
 - Installed Apple-model tests remain opt-in and synthetic-only.
 - The internal alpha is not authorized for public binary distribution.
 
-[Unreleased]: https://github.com/crescentln/BlueMinutes/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/crescentln/BlueMinutes/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/crescentln/BlueMinutes/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/crescentln/BlueMinutes/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/crescentln/BlueMinutes/releases/tag/v0.1.0

@@ -1,7 +1,7 @@
 # Release Backup and Rollback
 
-Status: Task 011 internal-alpha procedure
-Applies to: a user-selected MeetingBuddy workspace
+Status: v0.3 local-development procedure with retained Task 011 evidence
+Applies to: a user-selected BlueMinutes workspace
 Safety rule: preserve the newer workspace; restore into a distinct empty path
 
 ## Before changing the application
@@ -54,23 +54,41 @@ Do not treat a copy as a backup until the verifier prints
 
 ## Application update
 
-The initial update policy is manual. Automatic updates are unapproved.
+The update policy remains manual. Automatic updates are unapproved.
 
-For the Task 011 local internal-alpha release set:
+For the v0.3.0 local development release set:
 
 1. Run `script/verify_release_candidate.sh` against
-   `dist/MeetingBuddy-0.1.0-internal-alpha/`.
-2. Retain `release-manifest.json`, `source-files.sha256`, and the ZIP digest
-   together with the app and archive.
-3. Expand the ZIP into a new temporary directory and verify the extracted app
+   `dist/BlueMinutes-0.3.0-development/` in `development` mode.
+2. Confirm the schema-v2 `release-manifest.json` reports
+   `classification: DEVELOPMENT`, `distribution_authorized: false`, version
+   `0.3.0`, build `3`, the expected exact Git head/tree/tag, and the reviewed
+   ad-hoc signature boundary.
+3. Retain `release-manifest.json`, `source-files.sha256`, and the ZIP digest
+   together with `BlueMinutes.app` and
+   `BlueMinutes-0.3.0-development.zip`.
+4. Expand the ZIP into a new temporary directory and verify the extracted app
    if performing an independent manual inspection; the release-set verifier
    already performs this step.
-4. Do not replace an installed application unless the signature identity,
-   notarization ticket, Gatekeeper result, version, and rollback plan meet the
-   intended distribution policy.
+5. Confirm `distribution` mode rejects the package.
+6. Do not install, upload, distribute, or treat this package as an automatic
+   update.
 
-The current archive is ad-hoc signed and not notarized. It is not approved for
-installation or distribution outside this development Mac.
+The v0.3.0 development archive is ad-hoc signed and not notarized. It is
+approved only for local development testing on the build Mac.
+
+The immutable Task 011 audit and release notes retain the historical
+`dist/MeetingBuddy-0.1.0-internal-alpha/` evidence and schema-v1 manifest. Do
+not rename or reinterpret those historical records as v0.3.0 evidence.
+
+For any future distributable application:
+
+1. Preserve the verified development/source evidence separately from the
+   distribution candidate.
+2. Require the selected signature identity, notarization ticket, Gatekeeper
+   result, version, and rollback plan to meet the intended distribution policy.
+3. Complete clean-machine installation and rollback evidence under separate
+   authorization.
 
 ## Safe application rollback
 

@@ -20,6 +20,10 @@ struct PublicBrandPresentationTests {
         #expect(info["CFBundleDisplayName"] as? String == "BlueMinutes")
         #expect(info["CFBundleName"] as? String == "BlueMinutes")
         #expect(info["CFBundleIconFile"] as? String == "BlueMinutes.icns")
+        #expect(info["CFBundleShortVersionString"] as? String == "0.3.0")
+        #expect(info["CFBundleVersion"] as? String == "3")
+        #expect(info["CFBundleExecutable"] as? String == "MeetingBuddyApp")
+        #expect(info["CFBundleIdentifier"] as? String == "com.meetingbuddy.desktop")
 
         let iconURL = repository.appendingPathComponent(
             "Configuration/Branding/BlueMinutes.icns"
@@ -31,16 +35,31 @@ struct PublicBrandPresentationTests {
     @Test
     func visibleBrandChangesPreserveCompatibilityIdentifiers() throws {
         let readme = try source("README.md")
+        let normalizedReadme = readme
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
         #expect(
             readme.contains(
                 "> **For diplomats, multilateral practitioners, and policy researchers"
             )
         )
         #expect(!readme.contains("> **By a diplomat, for diplomats.**"))
-        #expect(readme.contains("The `v0.2.0` milestone is a source release"))
-        #expect(readme.contains("Every related capability remains disabled by default"))
+        #expect(readme.contains("The `v0.3.0` milestone is a source release"))
+        #expect(
+            normalizedReadme.contains(
+                "Every related capability remains disabled by default"
+            )
+        )
         #expect(readme.contains("legacy `MeetingBuddy` identifier"))
         #expect(readme.contains("./script/build_and_run.sh --stage-only"))
+        #expect(
+            readme.contains(
+                "MEETINGBUDDY_SIGN_IDENTITY=- ./script/package_release_candidate.sh"
+            )
+        )
+        #expect(readme.contains("dist/BlueMinutes-0.3.0-development"))
+        #expect(readme.contains("GitHub Releases remain"))
+        #expect(readme.contains("zero maintainer-uploaded app assets"))
         #expect(
             readme.contains("stops an existing development instance")
         )
@@ -48,6 +67,7 @@ struct PublicBrandPresentationTests {
         #expect(!readme.contains("source-only internal alpha"))
 
         let changelog = try source("CHANGELOG.md")
+        #expect(changelog.contains("## [0.3.0] - 2026-07-27"))
         #expect(changelog.contains("## [0.2.0] - 2026-07-23"))
         #expect(changelog.contains("## [0.1.0] - 2026-07-22"))
         #expect(
@@ -62,16 +82,42 @@ struct PublicBrandPresentationTests {
                 "Published `v0.2.0` as a source-only, default-off Meeting / Research"
             )
         )
+        #expect(
+            roadmap.contains(
+                "Published `v0.3.0` as a source-only UI Foundation release"
+            )
+        )
 
-        let currentReleaseNotes = try source("docs/RELEASE_NOTES_0.2.0.md")
+        let currentReleaseNotes = try source("docs/RELEASE_NOTES_0.3.0.md")
+        let normalizedCurrentReleaseNotes = currentReleaseNotes
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
         #expect(
             currentReleaseNotes.contains(
-                "# BlueMinutes v0.2.0 — Default-Off Meeting / Research Foundation"
+                "# BlueMinutes v0.3.0 — Editorial Dossier Foundation"
             )
         )
         #expect(
             currentReleaseNotes.contains(
-                "Task cancellation re-reads and retries bounded optimistic-lock conflicts"
+                "Distribution scope: source code only; zero uploaded assets"
+            )
+        )
+        #expect(
+            normalizedCurrentReleaseNotes.contains(
+                "Current-build VoiceOver spoken wording"
+            )
+        )
+        #expect(
+            normalizedCurrentReleaseNotes.contains(
+                "classification is `DEVELOPMENT`"
+            )
+        )
+        #expect(currentReleaseNotes.contains("`distribution_authorized: false`"))
+
+        let previousReleaseNotes = try source("docs/RELEASE_NOTES_0.2.0.md")
+        #expect(
+            previousReleaseNotes.contains(
+                "# BlueMinutes v0.2.0 — Default-Off Meeting / Research Foundation"
             )
         )
 
@@ -111,6 +157,41 @@ struct PublicBrandPresentationTests {
         let plist = try source("Configuration/MeetingBuddy-Info.plist")
         #expect(plist.contains("<string>com.meetingbuddy.desktop</string>"))
         #expect(plist.contains("<string>MeetingBuddyApp</string>"))
+        #expect(plist.contains("<string>0.3.0</string>"))
+        #expect(plist.contains("<string>3</string>"))
+
+        let packager = try source("script/package_release_candidate.sh")
+        #expect(packager.contains("APP_BUNDLE_NAME=\"$PUBLIC_PRODUCT_NAME.app\""))
+        #expect(
+            packager.contains(
+                "RELEASE_SET_NAME=\"$PUBLIC_PRODUCT_NAME-$BUNDLE_VERSION-development\""
+            )
+        )
+        #expect(packager.contains("schema_version: 2"))
+        #expect(packager.contains("classification: \"DEVELOPMENT\""))
+        #expect(packager.contains("distribution_authorized: false"))
+        #expect(!packager.contains("MeetingBuddy-0.1.0-internal-alpha"))
+
+        let verifier = try source("script/verify_release_candidate.sh")
+        #expect(verifier.contains("development|distribution"))
+        #expect(verifier.contains("distribution verification rejects an ad-hoc signature"))
+        #expect(verifier.contains("source inventory does not cover the exact tracked tree"))
+        #expect(
+            verifier.contains(
+                ".source.package_resolved_sha256 == $package_resolved_sha"
+            )
+        )
+        #expect(
+            verifier.contains(
+                ".signing.team_identifier == $team_identifier"
+            )
+        )
+        #expect(
+            verifier.contains(
+                "archive checksum file is not the exact reviewed record"
+            )
+        )
+        #expect(!verifier.contains("internal-alpha|distribution"))
 
         let scalarValues = try source(
             "Sources/MeetingBuddyDomain/ScalarValues.swift"
