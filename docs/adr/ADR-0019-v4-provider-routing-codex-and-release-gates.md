@@ -164,9 +164,11 @@ checkout success is never entitlement proof.
 
 The update policy defaults to unconfigured and performs no request. A future
 configured feed requires the dedicated unforgeable updater approval, membership
-in the exact update-feed allowlist, and equality between the website handoff and
-`UpdatePolicy`. A configured updater must not download or install during an
-active meeting.
+in both the exact update-feed and service-endpoint allowlists, and equality
+between the website handoff and `UpdatePolicy`. Update actions consume only the
+validated composite `ReleaseIntegrationConfiguration`; a standalone policy
+cannot authorize check, download, or install. A configured updater must not
+download or install during an active meeting.
 Sparkle/appcast keys, Developer ID, notarization, and public distribution remain
 separately gated.
 
