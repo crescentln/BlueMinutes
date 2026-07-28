@@ -118,6 +118,8 @@ LAYOUT
         || fail "bundle layout is not the reviewed closed allowlist"
 
     /usr/bin/plutil -lint "$info_plist" "$privacy_manifest" "$grdb_privacy" >/dev/null
+    /usr/bin/cmp -s "$SOURCE_INFO_PLIST" "$info_plist" \
+        || fail "bundled Info.plist differs from the reviewed source Info.plist"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_plist")" \
         == "$EXPECTED_BUNDLE_IDENTIFIER" ]] || fail "unexpected bundle identifier"
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info_plist")" \
@@ -241,6 +243,8 @@ verify_source_inventory() {
     local git_head
     local git_tree
     local git_tag
+    local exact_tags
+    local exact_tag_count
     local line
     local digest
     local relative
@@ -269,6 +273,19 @@ verify_source_inventory() {
         | /usr/bin/awk '$1 == "120000" { found = 1 } END { exit(found ? 0 : 1) }'; then
         fail "manifest source commit contains a symbolic link"
     fi
+    exact_tags="$(
+        /usr/bin/git -C "$ROOT_DIR" tag --points-at "$git_head" | LC_ALL=C /usr/bin/sort
+    )"
+    exact_tag_count="$(
+        /usr/bin/printf '%s\n' "$exact_tags" \
+            | /usr/bin/sed '/^$/d' \
+            | /usr/bin/wc -l \
+            | /usr/bin/tr -d ' '
+    )"
+    [[ "$exact_tag_count" -le 1 ]] \
+        || fail "manifest source commit has more than one available exact tag"
+    [[ "$git_tag" == "$exact_tags" ]] \
+        || fail "manifest exact tag differs from the available exact tag"
 
     : > "$actual_paths"
     while IFS= read -r line; do
@@ -439,6 +456,9 @@ verify_app "$EXTRACT_ROOT/$APP_BUNDLE_NAME" "extracted"
 [[ "$APP_EXECUTABLE_SHA256" \
     == "$(/usr/bin/jq -r '.artifact.executable_sha256' "$RELEASE_SET/release-manifest.json")" ]] \
     || fail "extracted executable differs from the release manifest"
+[[ "$APP_BUNDLE_SHA256" \
+    == "$(/usr/bin/jq -r '.artifact.app_bundle_sha256' "$RELEASE_SET/release-manifest.json")" ]] \
+    || fail "extracted app bundle differs from the release manifest"
 
 echo "release-set verification: PASS"
 echo "release set: $RELEASE_SET"
