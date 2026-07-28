@@ -123,6 +123,8 @@ Before work starts, BlueMinutes must store:
 - meeting/profile scope;
 - exact workspace ID, meeting ID, meeting revision, and winning scope/profile
   origin;
+- an owner-bound routing-profile scope: global, exact workspace ID, or exact
+  immutable meeting revision; a profile loaded for another owner fails closed;
 - visible authorization evidence where external;
 - policy revisions and classification;
 - resolved timestamp and contract version.
