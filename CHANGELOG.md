@@ -8,7 +8,7 @@ All notable project changes are documented here. The format follows
 
 No notable changes yet.
 
-## [0.3.0] - 2026-07-27
+## [0.3.0] - 2026-07-28
 
 Native Editorial Dossier and local development-package foundation.
 
