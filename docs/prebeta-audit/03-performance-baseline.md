@@ -31,7 +31,7 @@ A second new scratch root validated the uncommitted Issue #60 foundation tree:
 | `swift package dump-package` | Pass |
 | Debug build with `-warnings-as-errors` | Pass, 31.91 s |
 | Release build with `-warnings-as-errors` | Pass, 79.97 s |
-| Provider-routing focus | 12 tests pass |
+| Provider-routing focus | 13 tests pass |
 | Public-brand focus | 4 tests pass |
 | Historical scale shard | 1 test passes; 10,000 positions, 9.77 s rebuild, 0.34 s first page |
 | Remaining synthetic-safe shard | 444 tests in 58 suites pass |

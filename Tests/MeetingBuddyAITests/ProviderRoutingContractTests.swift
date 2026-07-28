@@ -228,6 +228,7 @@ struct ProviderRoutingContractTests {
         let profile = try TaskRoutingProfile(
             identifier: "recommended",
             displayName: "Recommended",
+            scope: .global,
             routes: [route]
         )
         let securityPolicy = try routingSecurityPolicy(
@@ -275,6 +276,7 @@ struct ProviderRoutingContractTests {
         let speechProfile = try TaskRoutingProfile(
             identifier: "speech-repair-filter",
             displayName: "Speech Repair Filter",
+            scope: .global,
             routes: [
                 TaskRoutePreference(
                     task: .speechToTextBatch,
@@ -324,6 +326,7 @@ struct ProviderRoutingContractTests {
         let summaryProfile = try TaskRoutingProfile(
             identifier: "sensitive-repair-filter",
             displayName: "Sensitive Repair Filter",
+            scope: .global,
             routes: [
                 TaskRoutePreference(
                     task: .summaryAndMinutes,
@@ -378,6 +381,7 @@ struct ProviderRoutingContractTests {
         let globalSpeech = try TaskRoutingProfile(
             identifier: "global-speech",
             displayName: "Global Speech",
+            scope: .global,
             routes: [
                 TaskRoutePreference(
                     task: .speechToTextBatch,
@@ -394,6 +398,7 @@ struct ProviderRoutingContractTests {
         let recordOnlyMeeting = try TaskRoutingProfile(
             identifier: "meeting-record-only",
             displayName: "Meeting Record Only",
+            scope: .meeting(meetingRevision: routingMeetingRevision),
             routes: [
                 TaskRoutePreference(
                     task: .speechToTextBatch,
@@ -422,6 +427,7 @@ struct ProviderRoutingContractTests {
         let inheritingMeeting = try TaskRoutingProfile(
             identifier: "meeting-inherit",
             displayName: "Meeting Inherit",
+            scope: .meeting(meetingRevision: routingMeetingRevision),
             routes: [
                 TaskRoutePreference(
                     task: .speechToTextBatch,
@@ -472,6 +478,7 @@ struct ProviderRoutingContractTests {
         let sensitive = try TaskRoutingProfile(
             identifier: "sensitive",
             displayName: "Sensitive Meeting",
+            scope: .global,
             routes: [
                 TaskRoutePreference(
                     task: .meetingChat,
@@ -560,6 +567,7 @@ struct ProviderRoutingContractTests {
         let profile = try TaskRoutingProfile(
             identifier: "exact-model",
             displayName: "Exact Model",
+            scope: .global,
             routes: [
                 TaskRoutePreference(
                     task: .summaryAndMinutes,
@@ -630,6 +638,7 @@ struct ProviderRoutingContractTests {
         let profile = try TaskRoutingProfile(
             identifier: "sensitive-research",
             displayName: "Sensitive Research",
+            scope: .global,
             routes: [
                 TaskRoutePreference(
                     task: .externalResearch,
@@ -678,6 +687,7 @@ struct ProviderRoutingContractTests {
         let profile = try TaskRoutingProfile(
             identifier: "external-policy",
             displayName: "External Policy",
+            scope: .global,
             routes: [
                 TaskRoutePreference(
                     task: .meetingChat,
@@ -751,6 +761,97 @@ struct ProviderRoutingContractTests {
             candidate.routeOrigin
                 == .global(profileIdentifier: "external-policy")
         )
+    }
+
+    @Test
+    func scopeStackRejectsProfilesFromOtherOwnersOrMeetingRevisions() throws {
+        let securityPolicy = try routingSecurityPolicy(noOutboundMode: true)
+        let context = try routingSecurityContext(
+            securityPolicy: securityPolicy
+        )
+        let global = try TaskRoutingProfile(
+            identifier: "scope-global",
+            displayName: "Scope Global",
+            scope: .global,
+            routes: []
+        )
+        let validWorkspace = try TaskRoutingProfile(
+            identifier: "scope-workspace",
+            displayName: "Scope Workspace",
+            scope: .workspace(workspaceID: routingWorkspaceID),
+            routes: []
+        )
+        let validMeeting = try TaskRoutingProfile(
+            identifier: "scope-meeting",
+            displayName: "Scope Meeting",
+            scope: .meeting(meetingRevision: routingMeetingRevision),
+            routes: []
+        )
+        _ = try TaskRoutingScopeStack(
+            securityContext: context,
+            global: global,
+            workspace: validWorkspace,
+            meeting: validMeeting
+        )
+
+        let otherWorkspace = try TaskRoutingProfile(
+            identifier: "other-workspace",
+            displayName: "Other Workspace",
+            scope: .workspace(
+                workspaceID: WorkspaceID(
+                    UUID(
+                        uuidString:
+                            "00000000-0000-0000-0000-000000000699"
+                    )!
+                )
+            ),
+            routes: []
+        )
+        #expect(throws: ProviderRoutingError.self) {
+            _ = try TaskRoutingScopeStack(
+                securityContext: context,
+                global: global,
+                workspace: otherWorkspace
+            )
+        }
+
+        let otherMeetingRevision = try TaskRoutingProfile(
+            identifier: "other-meeting-revision",
+            displayName: "Other Meeting Revision",
+            scope: .meeting(
+                meetingRevision: SemanticRevisionReference(
+                    logicalID: routingMeetingID,
+                    revisionID: RevisionID(
+                        UUID(
+                            uuidString:
+                                "00000000-0000-0000-0000-000000000698"
+                        )!
+                    )
+                )
+            ),
+            routes: []
+        )
+        #expect(throws: ProviderRoutingError.self) {
+            _ = try TaskRoutingScopeStack(
+                securityContext: context,
+                global: global,
+                meeting: otherMeetingRevision
+            )
+        }
+
+        let workspaceUsedAsMeeting = try TaskRoutingProfile(
+            identifier: "wrong-scope-kind",
+            displayName: "Wrong Scope Kind",
+            scope: .workspace(workspaceID: routingWorkspaceID),
+            routes: []
+        )
+        #expect(throws: ProviderRoutingError.self) {
+            _ = try TaskRoutingScopeStack(
+                securityContext: context,
+                global: global,
+                meeting: workspaceUsedAsMeeting
+            )
+        }
     }
 
     @Test
@@ -956,6 +1057,10 @@ private let routingMeetingID = MeetingID(
 )
 private let routingMeetingRevisionID = RevisionID(
     UUID(uuidString: "00000000-0000-0000-0000-000000000613")!
+)
+private let routingMeetingRevision = try! SemanticRevisionReference(
+    logicalID: routingMeetingID,
+    revisionID: routingMeetingRevisionID
 )
 private let routingSensitivityLabelID = SensitivityLabelID(
     UUID(uuidString: "00000000-0000-0000-0000-000000000601")!

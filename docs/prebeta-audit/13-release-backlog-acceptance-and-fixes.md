@@ -72,6 +72,9 @@
 - Apple Speech is truthfully registered as batch, not realtime;
 - meeting/workspace/global routes use explicit inherit/disabled/selection
   semantics, so meeting Record Only cannot inherit global STT;
+- persisted workspace profiles carry their exact workspace owner and meeting
+  profiles carry their exact immutable meeting revision; the route stack
+  rejects cross-owner, cross-revision, and wrong-scope cache entries;
 - missing or explicitly disabled STT resolves to record-only;
 - fallback is a repair suggestion, not an automatic route;
 - external capability/readiness produces an authorization-required candidate,

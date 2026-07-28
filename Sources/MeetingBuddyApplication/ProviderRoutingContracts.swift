@@ -336,14 +336,27 @@ public struct TaskRoutePreference: Hashable, Sendable {
     }
 }
 
+/// Binds a persisted routing profile to the exact scope that owns it.
+///
+/// Meeting profiles use the immutable meeting revision, rather than only a
+/// logical identifier, so a cached profile cannot cross either a meeting or
+/// revision boundary. Workspace profiles are bound to one workspace identity.
+public enum TaskRoutingProfileScope: Hashable, Sendable {
+    case global
+    case workspace(workspaceID: WorkspaceID)
+    case meeting(meetingRevision: SemanticRevisionReference)
+}
+
 public struct TaskRoutingProfile: Hashable, Sendable {
     public let identifier: String
     public let displayName: String
+    public let scope: TaskRoutingProfileScope
     public let routes: [TaskRoutePreference]
 
     public init(
         identifier: String,
         displayName: String,
+        scope: TaskRoutingProfileScope,
         routes: [TaskRoutePreference]
     ) throws {
         let sorted = routes.sorted { $0.task.rawValue < $1.task.rawValue }
@@ -357,6 +370,7 @@ public struct TaskRoutingProfile: Hashable, Sendable {
         }
         self.identifier = identifier
         self.displayName = displayName
+        self.scope = scope
         self.routes = sorted
     }
 
@@ -466,9 +480,19 @@ public struct TaskRoutingScopeStack: Hashable, Sendable {
     ) throws {
         let identifiers = [global, workspace, meeting]
             .compactMap { $0?.identifier }
-        guard Set(identifiers).count == identifiers.count else {
+        guard Set(identifiers).count == identifiers.count,
+              global.scope == .global,
+              workspace?.scope
+                  == .workspace(workspaceID: securityContext.workspaceID)
+                  || workspace == nil,
+              meeting?.scope
+                  == .meeting(
+                      meetingRevision: securityContext.meetingRevision
+                  )
+                  || meeting == nil
+        else {
             throw ProviderRoutingError.invalidConfiguration(
-                "Global, workspace, and meeting routing profiles need distinct identities."
+                "Routing profiles need distinct identities and must match their exact global, workspace, or meeting-revision owner."
             )
         }
         self.workspaceID = securityContext.workspaceID
