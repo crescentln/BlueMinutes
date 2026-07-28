@@ -191,6 +191,21 @@ struct PublicBrandPresentationTests {
                 "archive checksum file is not the exact reviewed record"
             )
         )
+        #expect(
+            verifier.contains(
+                "bundled Info.plist differs from the reviewed source Info.plist"
+            )
+        )
+        #expect(
+            verifier.contains(
+                "manifest exact tag differs from the available exact tag"
+            )
+        )
+        #expect(
+            verifier.contains(
+                "extracted app bundle differs from the release manifest"
+            )
+        )
         #expect(!verifier.contains("internal-alpha|distribution"))
 
         let scalarValues = try source(
