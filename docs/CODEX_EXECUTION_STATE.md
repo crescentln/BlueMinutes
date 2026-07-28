@@ -432,7 +432,7 @@ known_out_of_scope_findings:
   - "no approved UN Web TV media acquisition, browser recording, player/track extraction, redistribution, automation adapter, external/cloud provider, meeting-data upload route, organization telemetry destination, or public binary application distribution exists"
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
-  - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
+  - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this local-development and source-release acceptance"
 next_eligible_task: "there is no next numbered MVP task; complete only the self-relative Issue #58 and PR #59 one-file post-release ledger carrier through exact-head review/CI/CodeQL/conversation, guarded rebase merge, and exact-new-main gates. After that closure, future software testing and functional debugging may build on v0.3.0 under a new bounded command; Developer ID, Team ID, notarization, public binary upload or distribution, installation, updater, deployment, and unrelated product initiatives remain excluded"
-last_updated_at: "2026-07-28T12:19:20Z"
+last_updated_at: "2026-07-28T12:20:47Z"
 ```
