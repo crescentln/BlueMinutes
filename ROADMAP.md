@@ -49,6 +49,26 @@ automatic updater, or deployment is part of this source-release milestone. The
 local development package is not a supported download and is never attached to
 the GitHub Release.
 
+## Current formal-test candidate: application version 0.4.0
+
+- Prepared application version `0.4.0` build `4` as the v4 pre-Beta functional
+  baseline for formal software testing.
+- Added capability-based task routing, explicit Record Only, Sensitive Meeting
+  local-only enforcement, optional Keychain-backed remote STT, and a separate
+  text-only Codex subscription route.
+- Added active-recording close/reopen/recovery behavior, transcript
+  outline/search, lightweight New Meeting coordination, and truthful
+  About/release-service state.
+- Integrated the supplied BlueMinutes logo and icon while retaining the
+  accepted native component and visual language.
+- Kept billing/licensing disabled, the website typed handoff disconnected, and
+  updates unconfigured.
+
+This candidate is intentionally a local ad-hoc DEVELOPMENT package and a draft
+Pull Request for testing. It is not a tagged `v0.4.0` source Release, a signed
+or notarized app, an updater, a deployment, or public binary distribution. U1
+visual redesign remains separately gated.
+
 ## Candidate milestone: public project presentation
 
 - Perform a final professional name and trademark review before distribution;

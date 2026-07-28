@@ -41,7 +41,7 @@ struct BlueMinutesVisualNativeActionContract:
             region:
                 BlueMinutesVisualPixelRegion(
                     x: 24,
-                    y: 205,
+                    y: 511,
                     width: 175,
                     height: 32
                 )
@@ -56,7 +56,7 @@ struct BlueMinutesVisualNativeActionContract:
             region:
                 BlueMinutesVisualPixelRegion(
                     x: 24,
-                    y: 525,
+                    y: 836,
                     width: 150,
                     height: 36
                 )
@@ -71,7 +71,7 @@ struct BlueMinutesVisualNativeActionContract:
             region:
                 BlueMinutesVisualPixelRegion(
                     x: 24,
-                    y: 205,
+                    y: 511,
                     width: 175,
                     height: 32
                 )
@@ -86,7 +86,7 @@ struct BlueMinutesVisualNativeActionContract:
             region:
                 BlueMinutesVisualPixelRegion(
                     x: 24,
-                    y: 525,
+                    y: 836,
                     width: 150,
                     height: 36
                 )
@@ -101,7 +101,7 @@ struct BlueMinutesVisualNativeActionContract:
             region:
                 BlueMinutesVisualPixelRegion(
                     x: 560,
-                    y: 553,
+                    y: 695,
                     width: 180,
                     height: 34
                 )
@@ -116,7 +116,7 @@ struct BlueMinutesVisualNativeActionContract:
             region:
                 BlueMinutesVisualPixelRegion(
                     x: 560,
-                    y: 553,
+                    y: 695,
                     width: 180,
                     height: 34
                 )

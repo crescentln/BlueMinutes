@@ -7,16 +7,44 @@ struct LocalMediaIntakeView: View {
     @Bindable var sceneState: MediaReviewSceneState
     @Environment(\.blueMinutesReadingWidth)
     private var readingWidth
+    let intelligenceStore:
+        IntelligenceConfigurationStore?
 
     let chooseMedia: @MainActor () -> Void
     let requestImport: @MainActor () -> Void
 
+    init(
+        store: MediaReviewStore,
+        sceneState: MediaReviewSceneState,
+        intelligenceStore:
+            IntelligenceConfigurationStore? = nil,
+        chooseMedia:
+            @escaping @MainActor () -> Void,
+        requestImport:
+            @escaping @MainActor () -> Void
+    ) {
+        self.store = store
+        self.sceneState = sceneState
+        self.intelligenceStore =
+            intelligenceStore
+        self.chooseMedia = chooseMedia
+        self.requestImport = requestImport
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
+                newMeetingSection
                 sourceSection
                 if let pending = store.pendingMedia {
                     selectedSourceSection(pending)
+                }
+                if let recovery =
+                        store.sourceReselectionJob
+                {
+                    sourceReselectionSection(
+                        recovery
+                    )
                 }
                 if let source = store.importedSource {
                     managedSourceSection(source)
@@ -27,6 +55,73 @@ struct LocalMediaIntakeView: View {
             }
             .padding(28)
             .frame(maxWidth: readingWidth.points, alignment: .leading)
+        }
+        .onChange(of: sceneState.dataClassification) { _, _ in
+            if !codexTextProcessingIsEligible {
+                sceneState.codexTextProcessingAllowed = false
+                if sceneState
+                    .transcriptionSelection?
+                    .providerIdentifier
+                    != "apple-speech"
+                {
+                    sceneState.transcriptionSelection =
+                        nil
+                    sceneState
+                        .remoteSpeechToTextAllowed =
+                        false
+                }
+            }
+        }
+    }
+
+    private var newMeetingSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            EditorialSectionHeader(
+                "Start a New Meeting",
+                detail:
+                    "Choose the existing BlueMinutes workflow that matches the source. Every path keeps the same meeting policy, STT routing, local storage, and review gates."
+            )
+            HStack {
+                Button("Import Local Media…") {
+                    chooseMedia()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(store.isWorking)
+                .accessibilityIdentifier(
+                    "BlueMinutes.NewMeeting.Import"
+                )
+                Button("Record Live Audio") {
+                    sceneState.requestSection(
+                        .recording
+                    )
+                }
+                .disabled(
+                    sceneState
+                        .isInteractionLocked
+                        || store.isWorking
+                )
+                .accessibilityIdentifier(
+                    "BlueMinutes.NewMeeting.Record"
+                )
+                Button("Use UN Web TV Metadata") {
+                    sceneState.requestSection(
+                        .webMetadata
+                    )
+                }
+                .disabled(
+                    sceneState
+                        .isInteractionLocked
+                        || store.isWorking
+                )
+                .accessibilityIdentifier(
+                    "BlueMinutes.NewMeeting.UNWebTV"
+                )
+            }
+            Text(
+                "This coordinator reuses the current pages; it does not create a second copy of their forms or start any capture, network request, upload, or model task."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -45,7 +140,39 @@ struct LocalMediaIntakeView: View {
                     }
                 }
                 TextField("Language tag (optional)", text: $sceneState.languageTag)
-                LabeledContent("Processing route", value: "Private local workspace only")
+                Toggle(
+                    "Allow explicitly selected transcript text to use Codex",
+                    isOn:
+                        $sceneState
+                        .codexTextProcessingAllowed
+                )
+                .toggleStyle(.checkbox)
+                .disabled(!codexTextProcessingIsEligible)
+                Text(
+                    codexTextProcessingIsEligible
+                        ? "Audio and speech-to-text stay separate. Each Codex request still requires visible authorization."
+                        : "Sensitive and Restricted meetings keep all text processing on this Mac."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                SpeechToTextRoutePicker(
+                    sceneState: sceneState,
+                    intelligenceStore:
+                        intelligenceStore,
+                    existingMeeting: false,
+                    requiresExecutionAuthorization:
+                        false
+                )
+                LabeledContent(
+                    "Audio processing route",
+                    value:
+                        sceneState
+                        .transcriptionSelection?
+                        .providerIdentifier
+                        == "openai-stt"
+                        ? "Local recording; explicit remote STT after canonical processing"
+                        : "Private local workspace"
+                )
             }
             .formStyle(.columns)
 
@@ -206,6 +333,30 @@ struct LocalMediaIntakeView: View {
         }
     }
 
+    private func sourceReselectionSection(
+        _ recovery: MediaJobReview
+    ) -> some View {
+        VStack(
+            alignment: .leading,
+            spacing: 14
+        ) {
+            EditorialSectionHeader(
+                "Source selection required",
+                detail:
+                    "A previous import stopped before the selected file was safely copied into this workspace."
+            )
+            WorkflowStateView(
+                title: "Choose the source again",
+                detail:
+                    recovery.safeFailureSummary
+                    ?? "BlueMinutes does not retain source-file authority across launches. Select the intended local file again to restart the import.",
+                systemImage:
+                    "arrow.clockwise.circle",
+                tone: .warning
+            )
+        }
+    }
+
     private func processingSection(_ job: MediaJobReview) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             EditorialSectionHeader(
@@ -266,6 +417,11 @@ struct LocalMediaIntakeView: View {
             selectedTrack: sceneState.selectedTrack,
             languageTag: sceneState.languageTag
         )
+    }
+
+    private var codexTextProcessingIsEligible: Bool {
+        sceneState.dataClassification.restrictionRank
+            < DataClassification.sensitive.restrictionRank
     }
 
     private var importRequestIsDisabled: Bool {

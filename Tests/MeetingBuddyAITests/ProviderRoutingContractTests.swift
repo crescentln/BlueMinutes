@@ -210,6 +210,47 @@ struct ProviderRoutingContractTests {
     }
 
     @Test
+    func defaultExternalPolicyRetainsUserConfirmationProvenance() throws {
+        let meeting = try routingMeetingProfile(
+            workspaceID: routingWorkspaceID,
+            meetingID: routingMeetingID,
+            classification: .internal,
+            externalProcessingAllowed: true
+        )
+        let bundle = try LocalSecurityPolicyFactory().makeDefault(
+            meeting: meeting,
+            sensitivityLabelID: routingSensitivityLabelID,
+            sensitivityLabelRevisionID:
+                routingSensitivityLabelRevisionID,
+            accessPolicyID: routingAccessPolicyID,
+            accessPolicyRevisionID:
+                routingAccessPolicyRevisionID,
+            createdAt: routingCreatedAt,
+            approvedExternalProviderIdentifiers: [
+                CodexTextExecutionAuthorization
+                    .providerIdentifier
+            ]
+        )
+
+        #expect(bundle.accessPolicy.userConfirmed)
+        #expect(bundle.accessPolicy.reviewStatus == .confirmed)
+        #expect(bundle.accessPolicy.revision.createdBy == .user)
+        #expect(
+            bundle.accessPolicy
+                .approvedExternalProviderIdentifiers
+                == [
+                    CodexTextExecutionAuthorization
+                        .providerIdentifier
+                ]
+        )
+        try SecurityPolicyGraphValidator.validate(
+            meeting: meeting,
+            sensitivityLabel: bundle.sensitivityLabel,
+            accessPolicy: bundle.accessPolicy
+        )
+    }
+
+    @Test
     func routingRequiresReadinessAndNeverSilentlyUsesFallback() throws {
         let registry = try BlueMinutesBuiltInProviders.registry()
         let route = try TaskRoutePreference(
@@ -764,6 +805,187 @@ struct ProviderRoutingContractTests {
     }
 
     @Test
+    func codexAuthorizationBindsExactRouteAndBoundedSelectedTranscriptText() throws {
+        let securityPolicy = try routingSecurityPolicy(
+            externalProviderIdentifiers: [
+                CodexTextExecutionAuthorization.providerIdentifier
+            ]
+        )
+        let profile = try TaskRoutingProfile(
+            identifier: "codex-chat",
+            displayName: "Codex Chat",
+            scope: .global,
+            routes: [
+                TaskRoutePreference(
+                    task: .meetingChat,
+                    routeOverride: .selection(
+                        primary: ProviderModelSelection(
+                            providerIdentifier:
+                                CodexTextExecutionAuthorization
+                                .providerIdentifier,
+                            modelIdentifier: "codex-default"
+                        ),
+                        fallback: nil
+                    )
+                )
+            ]
+        )
+        let resolution = TaskRoutingResolver().resolve(
+            task: .meetingChat,
+            scopeStack: try routingScopeStack(
+                global: profile,
+                securityPolicy: securityPolicy
+            ),
+            registry: try BlueMinutesBuiltInProviders.registry(),
+            runtime: try ProviderRuntimeRegistry(
+                snapshots: [
+                    ProviderRuntimeSnapshot(
+                        providerIdentifier:
+                            CodexTextExecutionAuthorization
+                            .providerIdentifier,
+                        modelIdentifier: "codex-default",
+                        state: .ready
+                    )
+                ]
+            )
+        )
+        guard case let .requiresExecutionAuthorization(candidate) = resolution
+        else {
+            Issue.record("The exact Codex route did not require authorization.")
+            return
+        }
+
+        let request = try ModelRouteRequest(
+            capability: .analysis,
+            dataClassification: .internal,
+            offlineMode: false,
+            organizationAllowsExternalProcessing: true,
+            deploymentEnvironment: .production,
+            destination: .approvedProvider(
+                identifier:
+                    CodexTextExecutionAuthorization.providerIdentifier
+            ),
+            retentionPolicy: .noProviderRetention,
+            dataCategories: [.userPromptText, .transcriptText],
+            visibleUserAuthorization: true,
+            localModelAvailable: false,
+            securityPolicy: securityPolicy
+        )
+        let authorization = try CodexTextExecutionAuthorizationFactory()
+            .authorize(candidate: candidate, request: request)
+        let later = try routingTranscriptSegment(
+            index: 2,
+            startMilliseconds: 2_000,
+            text: "second synthetic segment"
+        )
+        let earlier = try routingTranscriptSegment(
+            index: 1,
+            startMilliseconds: 500,
+            text: "first synthetic segment"
+        )
+        let context = try CodexMeetingTextContextFactory().make(
+            authorization: authorization,
+            selectedSegments: [later, earlier]
+        )
+        #expect(context.workspaceID == routingWorkspaceID)
+        #expect(context.meetingID == routingMeetingID)
+        #expect(context.meetingRevision == routingMeetingRevision)
+        #expect(
+            context.segments.map(\.text)
+                == [
+                    "first synthetic segment",
+                    "second synthetic segment"
+                ]
+        )
+        #expect(
+            context.totalUTF8Bytes
+                == "first synthetic segment".utf8.count
+                    + "second synthetic segment".utf8.count
+        )
+        let turn = try CodexMeetingTurnRequest(
+            authorization: authorization,
+            context: context,
+            prompt: "Summarize the selected synthetic text."
+        )
+        #expect(turn.prompt == "Summarize the selected synthetic text.")
+
+        #expect(throws: CodexIntegrationContractError.self) {
+            _ = try CodexMeetingTextContextFactory().make(
+                authorization: authorization,
+                selectedSegments: [earlier, earlier]
+            )
+        }
+        #expect(throws: CodexIntegrationContractError.self) {
+            _ = try CodexMeetingTextContextFactory().make(
+                authorization: authorization,
+                selectedSegments: [
+                    routingTranscriptSegment(
+                        index: 3,
+                        startMilliseconds: 3_000,
+                        text: String(
+                            repeating: "x",
+                            count:
+                                CodexMeetingTextContext
+                                .maximumSegmentUTF8Bytes + 1
+                        )
+                    )
+                ]
+            )
+        }
+        #expect(throws: CodexIntegrationContractError.self) {
+            _ = try CodexMeetingTextContextFactory().make(
+                authorization: authorization,
+                selectedSegments: [
+                    routingTranscriptSegment(
+                        index: 4,
+                        startMilliseconds: 4_000,
+                        text: "other meeting",
+                        meetingID: MeetingID(
+                            UUID(
+                                uuidString:
+                                    "00000000-0000-0000-0000-000000000699"
+                            )!
+                        )
+                    )
+                ]
+            )
+        }
+        #expect(throws: CodexIntegrationContractError.self) {
+            _ = try CodexMeetingTurnRequest(
+                authorization: authorization,
+                context: context,
+                prompt: "invalid\u{0000}prompt"
+            )
+        }
+        #expect(throws: CodexIntegrationContractError.self) {
+            _ = try CodexTextExecutionAuthorizationFactory().authorize(
+                candidate: candidate,
+                request: ModelRouteRequest(
+                    capability: .analysis,
+                    dataClassification: .internal,
+                    offlineMode: false,
+                    organizationAllowsExternalProcessing: true,
+                    deploymentEnvironment: .production,
+                    destination: .approvedProvider(
+                        identifier:
+                            CodexTextExecutionAuthorization
+                            .providerIdentifier
+                    ),
+                    retentionPolicy: .noProviderRetention,
+                    dataCategories: [
+                        .transcriptText,
+                        .speakerContext,
+                        .evidenceIdentifiers
+                    ],
+                    visibleUserAuthorization: true,
+                    localModelAvailable: false,
+                    securityPolicy: securityPolicy
+                )
+            )
+        }
+    }
+
+    @Test
     func scopeStackRejectsProfilesFromOtherOwnersOrMeetingRevisions() throws {
         let securityPolicy = try routingSecurityPolicy(noOutboundMode: true)
         let context = try routingSecurityContext(
@@ -1106,6 +1328,79 @@ private let routingAccessPolicyRevisionID = RevisionID(
 private let routingCreatedAt = try! UTCInstant(
     millisecondsSinceUnixEpoch: 1_900_000_000_000
 )
+
+private func routingTranscriptSegment(
+    index: Int,
+    startMilliseconds: Int64,
+    text: String,
+    meetingID: MeetingID = routingMeetingID,
+    classification: DataClassification = .internal
+) throws -> TranscriptSegmentV1 {
+    let source = try SemanticRevisionReference(
+        logicalID: SourceAssetID(
+            UUID(
+                uuidString: String(
+                    format:
+                        "00000000-0000-0000-0001-%012d",
+                    index
+                )
+            )!
+        ),
+        revisionID: RevisionID(
+            UUID(
+                uuidString: String(
+                    format:
+                        "00000000-0000-0000-0002-%012d",
+                    index
+                )
+            )!
+        )
+    )
+    let revision = try RevisionEnvelope(
+        logicalID: TranscriptSegmentID(
+            UUID(
+                uuidString: String(
+                    format:
+                        "00000000-0000-0000-0003-%012d",
+                    index
+                )
+            )!
+        ),
+        revisionID: RevisionID(
+            UUID(
+                uuidString: String(
+                    format:
+                        "00000000-0000-0000-0004-%012d",
+                    index
+                )
+            )!
+        ),
+        schemaVersion: .v1,
+        lifecycleStatus: .draft,
+        validationState: .notValidated,
+        createdAt: routingCreatedAt,
+        createdBy: .application,
+        inputRevisions: [source],
+        sourceAssetRevisions: [source],
+        dataClassification: classification
+    )
+    return try TranscriptSegmentV1(
+        revision: revision,
+        meetingID: meetingID,
+        sourceProvenance: .originalSpeakerAudio(
+            sourceAssetRevision: source
+        ),
+        timeRange: MediaTimeRange(
+            startMilliseconds: startMilliseconds,
+            endMilliseconds: startMilliseconds + 1_000
+        ),
+        detectedLanguage: LanguageTag("en"),
+        text: text,
+        confidence: ConfidenceScore(millionths: 900_000),
+        reviewStatus: .unreviewed,
+        userConfirmed: false
+    )
+}
 
 private func routingScopeStack(
     global: TaskRoutingProfile,

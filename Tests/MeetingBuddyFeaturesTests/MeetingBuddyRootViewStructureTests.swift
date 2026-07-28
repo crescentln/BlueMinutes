@@ -5,12 +5,13 @@ import Testing
 @Suite
 struct MeetingBuddyRootViewStructureTests {
     @Test
-    func mediaReviewSectionsRemainTheAcceptedEightCases() {
+    func mediaReviewSectionsIncludeTheAuthorizedAssistantCase() {
         let sections: [MediaReviewSection] = [
             .intake,
             .recording,
             .webMetadata,
             .transcript,
+            .assistant,
             .analysis,
             .briefing,
             .history,
@@ -23,6 +24,7 @@ struct MeetingBuddyRootViewStructureTests {
                 "recording",
                 "web_metadata",
                 "transcript",
+                "assistant",
                 "analysis",
                 "briefing",
                 "history",
@@ -32,7 +34,7 @@ struct MeetingBuddyRootViewStructureTests {
     }
 
     @Test
-    func defaultRootViewKeepsExistingNavigationAndNoResearchSurface() throws {
+    func defaultRootViewAddsOnlyTheAuthorizedAssistantSurface() throws {
         let rootView = try source(
             "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
         )
@@ -43,6 +45,7 @@ struct MeetingBuddyRootViewStructureTests {
                 "recording",
                 "webMetadata",
                 "transcript",
+                "assistant",
                 "analysis",
                 "briefing",
                 "history",
@@ -54,6 +57,7 @@ struct MeetingBuddyRootViewStructureTests {
             "Record Audio",
             "UN Web TV Metadata",
             "Transcript Review",
+            "Codex Assistant",
             "Analysis Review",
             "Briefing",
             "Meeting History",
@@ -64,7 +68,7 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(
             rootView.components(
                 separatedBy: "WorkspaceSidebarRow("
-            ).count - 1 == 9
+            ).count - 1 == 10
         )
         #expect(rootView.contains("Section(\"Workspace\")"))
         #expect(rootView.contains("Section(\"Workflow\")"))
@@ -81,6 +85,7 @@ struct MeetingBuddyRootViewStructureTests {
             "recording",
             "webMetadata",
             "transcript",
+            "assistant",
             "analysis",
             "briefing"
         ] {
@@ -214,9 +219,54 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(
             app.components(
                 separatedBy: "BlueMinutesPresentationRoot {"
-            ).count - 1 == 2
+            ).count - 1 == 3
         )
         #expect(app.contains("Window(\"BlueMinutes\", id: \"main\")"))
+        #expect(
+            app.contains(
+                "\"About BlueMinutes\","
+            )
+        )
+        #expect(
+            app.contains(
+                "ReleaseIntegrationConfiguration"
+            )
+        )
+        #expect(
+            app.contains(
+                ".publicBeta"
+            )
+        )
+        #expect(
+            app.contains(
+                "Disconnected · typed handoff reserved"
+            )
+        )
+        #expect(
+            app.contains(
+                "Not configured for this development build"
+            )
+        )
+        #expect(
+            app.contains(
+                "Copy Sanitized Diagnostics"
+            )
+        )
+        #expect(
+            app.contains(
+                "BlueMinutes.About.CopyDiagnostics"
+            )
+        )
+        #expect(
+            app.contains(
+                "SanitizedDiagnosticsReport("
+            )
+        )
+        #expect(
+            app.contains(
+                ".sanitizedDiagnosticsCopied"
+            )
+        )
         #expect(app.contains(".defaultSize(width: 1_080, height: 720)"))
         #expect(app.contains("SidebarCommands()"))
         #expect(app.contains("BlueMinutesShellCommands()"))
@@ -273,6 +323,68 @@ struct MeetingBuddyRootViewStructureTests {
     }
 
     @Test
+    func activeRecordingUsesAnAppOwnedMenuBarLifecycle() throws {
+        let app = try source(
+            "Sources/MeetingBuddyApp/MeetingBuddyApp.swift"
+        )
+        for requiredContract in [
+            "MenuBarExtra {",
+            "BlueMinutesMenuBarView(",
+            "store.recordingIndicatorIsVisible",
+            "Open Current Meeting",
+            "Stop and Finalize",
+            "Durable audio:",
+            "openWindow(id: \"main\")",
+            "NSApp.activate(",
+        ] {
+            #expect(
+                app.contains(
+                    requiredContract
+                )
+            )
+        }
+        let closeStart = try #require(
+            app.range(
+                of:
+                    "private func shouldCloseMainWindow"
+            )
+        )
+        let terminationStart =
+            try #require(
+                app.range(
+                    of:
+                        "private func beginRecordingTermination",
+                    range:
+                        closeStart.upperBound
+                            ..< app.endIndex
+                )
+            )
+        let closeImplementation =
+            String(
+                app[
+                    closeStart.lowerBound
+                        ..< terminationStart
+                        .lowerBound
+                ]
+            )
+        #expect(
+            closeImplementation.contains(
+                "sceneState.applicationTerminationRequirement"
+            )
+        )
+        #expect(
+            !closeImplementation.contains(
+                "NSApp.terminate"
+            )
+        )
+        #expect(
+            !closeImplementation.contains(
+                "recordingIndicatorIsVisible"
+            )
+        )
+    }
+
+    @Test
     func sidebarHintsKeepPrerequisiteAndTemporaryReasonsExplicit() throws {
         let root = try source(
             "Sources/MeetingBuddyFeatures/Views/MeetingBuddyRootView.swift"
@@ -289,7 +401,7 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(
             root.components(
                 separatedBy: "availability: sidebarAvailability("
-            ).count - 1 == 3
+            ).count - 1 == 4
         )
         #expect(
             root.contains(
@@ -523,6 +635,8 @@ struct MeetingBuddyRootViewStructureTests {
             "web_metadata"
         case .transcript:
             "transcript"
+        case .assistant:
+            "assistant"
         case .analysis:
             "analysis"
         case .briefing:

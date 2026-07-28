@@ -7,6 +7,20 @@ struct RecordingCaptureView: View {
     @Bindable var sceneState: MediaReviewSceneState
     @Environment(\.blueMinutesReadingWidth)
     private var readingWidth
+    let intelligenceStore:
+        IntelligenceConfigurationStore?
+
+    init(
+        store: MediaReviewStore,
+        sceneState: MediaReviewSceneState,
+        intelligenceStore:
+            IntelligenceConfigurationStore? = nil
+    ) {
+        self.store = store
+        self.sceneState = sceneState
+        self.intelligenceStore =
+            intelligenceStore
+    }
 
     var body: some View {
         ScrollView {
@@ -19,6 +33,22 @@ struct RecordingCaptureView: View {
             }
             .padding(28)
             .frame(maxWidth: readingWidth.points, alignment: .leading)
+        }
+        .onChange(of: sceneState.dataClassification) { _, _ in
+            if !codexTextProcessingIsEligible {
+                sceneState.codexTextProcessingAllowed = false
+                if sceneState
+                    .transcriptionSelection?
+                    .providerIdentifier
+                    != "apple-speech"
+                {
+                    sceneState.transcriptionSelection =
+                        nil
+                    sceneState
+                        .remoteSpeechToTextAllowed =
+                        false
+                }
+            }
         }
     }
 
@@ -128,6 +158,29 @@ struct RecordingCaptureView: View {
                     "Language tag (optional)",
                     text: $sceneState.languageTag
                 )
+                Toggle(
+                    "Allow explicitly selected transcript text to use Codex",
+                    isOn:
+                        $sceneState
+                        .codexTextProcessingAllowed
+                )
+                .toggleStyle(.checkbox)
+                .disabled(!codexTextProcessingIsEligible)
+                Text(
+                    codexTextProcessingIsEligible
+                        ? "Audio and speech-to-text remain local and separate. Each Codex text request still requires visible authorization."
+                        : "Sensitive and Restricted meetings keep all text processing on this Mac."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                SpeechToTextRoutePicker(
+                    sceneState: sceneState,
+                    intelligenceStore:
+                        intelligenceStore,
+                    existingMeeting: false,
+                    requiresExecutionAuthorization:
+                        false
+                )
                 Picker("Capture mode", selection: $sceneState.captureMode) {
                     ForEach(CaptureModeChoice.all) { choice in
                         Text(choice.label).tag(choice.value)
@@ -184,7 +237,7 @@ struct RecordingCaptureView: View {
                 .toggleStyle(.checkbox)
                 .fixedSize(horizontal: false, vertical: true)
                 LabeledContent(
-                    "Storage and processing",
+                    "Audio storage and processing",
                     value: "Private local workspace only"
                 )
             }
@@ -238,6 +291,11 @@ struct RecordingCaptureView: View {
             }
         }
         .accessibilityIdentifier("BlueMinutes.Recording.Readiness")
+    }
+
+    private var codexTextProcessingIsEligible: Bool {
+        sceneState.dataClassification.restrictionRank
+            < DataClassification.sensitive.restrictionRank
     }
 
     private func sessionSection(
@@ -339,6 +397,126 @@ struct RecordingCaptureView: View {
                 .font(.callout)
                 .foregroundStyle(.orange)
             }
+            if session.state == .completed {
+                completedRecordingSection(
+                    session
+                )
+            }
+        }
+    }
+
+    private func completedRecordingSection(
+        _ session: RecordingSessionReview
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+            EditorialSectionHeader(
+                "Prepare recorded audio",
+                detail:
+                    "Choose one verified source track for the canonical local-audio workflow. This step does not upload audio or start speech-to-text."
+            )
+            if session.completedTracks.count
+                > 1
+            {
+                Picker(
+                    "Recorded source track",
+                    selection:
+                        $store
+                        .selectedCompletedRecordingTrackID
+                ) {
+                    Text("Select one track")
+                        .tag(
+                            Optional<
+                                RecordingTrackID
+                            >.none
+                        )
+                    ForEach(
+                        session.completedTracks
+                    ) { track in
+                        Text(
+                            completedTrackLabel(
+                                track
+                            )
+                        )
+                        .tag(
+                            Optional(
+                                track.trackID
+                            )
+                        )
+                    }
+                }
+                .accessibilityIdentifier(
+                    "BlueMinutes.Recording.CompletedTrack"
+                )
+            } else if let track =
+                        session
+                        .completedTracks.first
+            {
+                LabeledContent(
+                    "Recorded source track",
+                    value:
+                        completedTrackLabel(
+                            track
+                        )
+                )
+            }
+            Text(
+                "You may change the Speech-to-Text route above before continuing. The exact provider/model is evaluated again only when you explicitly start transcription; None keeps this as record-only audio."
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            HStack {
+                if store
+                    .processedCompletedRecordingSessionID
+                    == session.sessionID,
+                   let job = store.job
+                {
+                    WorkflowStateView(
+                        title:
+                            "Recorded audio preparation \(job.state.rawValue)",
+                        detail:
+                            job.safeFailureSummary
+                            ?? "BlueMinutes is preparing the selected local recording track.",
+                        systemImage:
+                            job.state == .succeeded
+                            ? "checkmark.circle"
+                            : "waveform",
+                        tone:
+                            job.state == .succeeded
+                            ? .success
+                            : job.state.isTerminal
+                                ? .failure
+                                : .working
+                    )
+                } else {
+                    Spacer()
+                    Button(
+                        "Prepare Selected Track"
+                    ) {
+                        Task {
+                            await store
+                                .processCompletedRecording(
+                                    using:
+                                        sceneState
+                                )
+                        }
+                    }
+                    .buttonStyle(
+                        .borderedProminent
+                    )
+                    .disabled(
+                        store
+                            .selectedCompletedRecordingTrackID
+                            == nil
+                    )
+                    .accessibilityIdentifier(
+                        "BlueMinutes.Recording.PrepareTrack"
+                    )
+                    .accessibilityHint(
+                        "Start the local canonical-audio job for the exact selected completed recording track."
+                    )
+                }
+            }
         }
     }
 
@@ -404,6 +582,26 @@ struct RecordingCaptureView: View {
         case .applicationAudio:
             "Selected application audio"
         }
+    }
+
+    private func completedTrackLabel(
+        _ track:
+            CompletedRecordingTrackReview
+    ) -> String {
+        let duration =
+            Double(track.durationFrameCount)
+            / Double(
+                CanonicalAudioProfile.v1
+                    .sampleRateHertz
+            )
+        return String(
+            format:
+                "%@ · %.1f seconds · %@",
+            trackLabel(track.kind),
+            duration,
+            track.speechSourceKind
+                .encodedValue
+        )
     }
 
     private func durationLabel(_ nanoseconds: UInt64) -> String {

@@ -27,9 +27,9 @@ Existing job and coverage contracts already record `ProviderMetadata`,
 retention, and policy revision references.
 
 The v4 routing snapshot adds product-level task, selected capability, provider,
-model, data route, cost owner, and scope. Composition must translate that
-snapshot into the existing model-policy request; it must not bypass the
-application router.
+model, data route, cost owner, and scope. Composition translates that snapshot
+into the existing model-policy request and the exact transcript job plan; it
+does not bypass the application router.
 
 Codex thread identifiers and conversation state are not semantic evidence by
 themselves. A Codex-derived claim must still enter the typed validation and
@@ -51,16 +51,24 @@ macOS Keychain.
 
 ## Official and automatic transcript sources
 
-Future UN automatic transcripts and official records are independent immutable
-source assets with explicit authority/type labels. A local STT transcript is a
-third derivation. None may overwrite another; UI comparison and selection
-create exact references.
+UN automatic transcripts and official records remain a future, separately
+validated ingestion slice. They must become independent immutable source assets
+with explicit authority/type labels. A local STT transcript is a third
+derivation. None may overwrite another; UI comparison and selection must create
+exact references.
 
 ## Migration plan
 
-The current schema is v10. The foundation contracts do not change it.
-Persisting routing profiles, meeting snapshots, Codex thread metadata, or
-official-transcript source types requires an ordered v11 migration with:
+The current schema remains v10. App-wide non-secret provider/routing settings
+use a separate private revisioned JSON repository, credentials remain in
+Keychain, and the optional meeting STT intent is carried inside the existing
+versioned `MeetingProfileV1` payload with backward-compatible decoding.
+Transcript jobs persist their exact execution route in the existing task
+payload. These changes do not fabricate a database migration.
+
+Persisting future workspace-scoped provider tables, durable Codex conversation
+metadata, or official-transcript source types in SQLite requires an ordered v11
+migration with:
 
 1. verified v10 backup and rollback anchor;
 2. additive tables/columns and fail-closed defaults;

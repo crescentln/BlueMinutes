@@ -9,6 +9,13 @@ public final class MediaReviewSceneState {
     public var selectedSection: MediaReviewSection? = .intake
     public var meetingTitle = ""
     public var dataClassification: DataClassification = .internal
+    public var codexTextProcessingAllowed = false
+    public var transcriptionSelection:
+        ProviderModelSelectionRecord?
+    public var remoteSpeechToTextAllowed = false
+    public var remoteAudioUploadAcknowledged = false
+    public var approvedRemoteSTTProviderIdentifier:
+        String?
     public var selectedTrack: MediaTrackIdentifier?
     public var speechSourceKind: SpeechSourceKind = .unknown
     public var languageTag = ""
@@ -431,6 +438,11 @@ public final class MediaReviewSceneState {
         selectedSection = .intake
         meetingTitle = ""
         dataClassification = .internal
+        codexTextProcessingAllowed = false
+        transcriptionSelection = nil
+        remoteSpeechToTextAllowed = false
+        remoteAudioUploadAcknowledged = false
+        approvedRemoteSTTProviderIdentifier = nil
         selectedTrack = nil
         speechSourceKind = .unknown
         languageTag = ""
@@ -476,6 +488,7 @@ public final class MediaReviewSceneState {
         selectedSection = .intake
         transcriptSourceLanguageTag = "en"
         transcriptTargetLanguageTag = ""
+        remoteAudioUploadAcknowledged = false
         manualTranscriptText = ""
         manualTranslationText = ""
         manualCoverageConfirmed = false
@@ -1109,8 +1122,9 @@ private struct MediaReviewDestinationAvailability {
 
     func includes(_ section: MediaReviewSection?) -> Bool {
         switch section {
-        case .transcript:
+        case .transcript, .assistant:
             canonicalJobSucceeded
+                && (section == .transcript || hasTranscriptReview)
         case .analysis:
             canonicalJobSucceeded && hasTranscriptReview
         case .briefing:

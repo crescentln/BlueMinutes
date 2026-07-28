@@ -89,28 +89,141 @@ public struct MediaJobReview: Hashable, Sendable {
     }
 }
 
+/// A bounded application projection of the one media workflow that can be
+/// resumed after reopening a workspace. It contains no source path, credential,
+/// or one-time outbound authorization.
+public struct RestoredMediaWorkflowReview: Sendable {
+    public let meetingTitle: String
+    public let dataClassification: DataClassification
+    public let sourceLanguage: LanguageTag?
+    public let codexTextProcessingAllowed: Bool
+    public let speechToTextRoute:
+        MeetingSpeechToTextRouteV1?
+    public let importedSource: ImportedSourceReview?
+    public let sourceReselectionJob: MediaJobReview?
+    public let canonicalJob: MediaJobReview?
+    public let transcriptJob: MediaJobReview?
+    public let transcriptReview: TranscriptReviewBundle?
+    public let analysisJob: MediaJobReview?
+    public let analysisReview: AnalysisReviewBundle?
+    public let briefingJob: MediaJobReview?
+    public let briefingReview: BriefingReviewBundle?
+
+    public init(
+        meetingTitle: String,
+        dataClassification: DataClassification,
+        sourceLanguage: LanguageTag?,
+        codexTextProcessingAllowed: Bool,
+        speechToTextRoute:
+            MeetingSpeechToTextRouteV1?,
+        importedSource: ImportedSourceReview?,
+        sourceReselectionJob:
+            MediaJobReview? = nil,
+        canonicalJob: MediaJobReview?,
+        transcriptJob: MediaJobReview? = nil,
+        transcriptReview: TranscriptReviewBundle? = nil,
+        analysisJob: MediaJobReview? = nil,
+        analysisReview: AnalysisReviewBundle? = nil,
+        briefingJob: MediaJobReview? = nil,
+        briefingReview: BriefingReviewBundle? = nil
+    ) {
+        self.meetingTitle = meetingTitle
+        self.dataClassification = dataClassification
+        self.sourceLanguage = sourceLanguage
+        self.codexTextProcessingAllowed =
+            codexTextProcessingAllowed
+        self.speechToTextRoute =
+            speechToTextRoute
+        self.importedSource = importedSource
+        self.sourceReselectionJob =
+            sourceReselectionJob
+        self.canonicalJob = canonicalJob
+        self.transcriptJob = transcriptJob
+        self.transcriptReview = transcriptReview
+        self.analysisJob = analysisJob
+        self.analysisReview = analysisReview
+        self.briefingJob = briefingJob
+        self.briefingReview = briefingReview
+    }
+}
+
 public struct TranscriptRouteReview: Hashable, Sendable {
     public let transcription: ModelRouteDecision
     public let translation: ModelRouteDecision?
+    public let selection: ProviderModelSelectionRecord?
+    public let intelligenceConfigurationRevision: UInt64?
+    public let remoteProviderConfiguration:
+        RemoteProviderConfiguration?
 
-    public init(transcription: ModelRouteDecision, translation: ModelRouteDecision?) {
+    public init(
+        transcription: ModelRouteDecision,
+        translation: ModelRouteDecision?,
+        selection: ProviderModelSelectionRecord? = nil,
+        intelligenceConfigurationRevision: UInt64? = nil,
+        remoteProviderConfiguration:
+            RemoteProviderConfiguration? = nil
+    ) {
         self.transcription = transcription
         self.translation = translation
+        self.selection = selection
+        self.intelligenceConfigurationRevision =
+            intelligenceConfigurationRevision
+        self.remoteProviderConfiguration =
+            remoteProviderConfiguration
     }
 
     public var isOnDeviceReady: Bool {
         transcription.route == .appleOnDevice
             && (translation?.route == .appleOnDevice || translation == nil)
     }
+
+    public var isReady: Bool {
+        guard selection != nil else { return false }
+        if remoteProviderConfiguration != nil {
+            return transcription.route == .approvedExternal
+                && transcription.providerIdentifier
+                    == remoteProviderConfiguration?.identifier
+                && remoteProviderConfiguration?
+                    .connectionState == .ready
+                && (
+                    translation == nil
+                        || translation?.route
+                            == .appleOnDevice
+                )
+        }
+        return isOnDeviceReady
+    }
+
+    public var sendsAudioOffDevice: Bool {
+        remoteProviderConfiguration != nil
+    }
 }
 
 public struct TranscriptStartSubmission: Sendable {
     public let sourceLanguage: LanguageTag
     public let targetLanguage: LanguageTag?
+    public let transcriptionSelection:
+        ProviderModelSelectionRecord?
+    public let visibleRemoteAudioAuthorization: Bool
 
-    public init(sourceLanguage: LanguageTag, targetLanguage: LanguageTag?) {
+    public init(
+        sourceLanguage: LanguageTag,
+        targetLanguage: LanguageTag?,
+        transcriptionSelection:
+            ProviderModelSelectionRecord? =
+            ProviderModelSelectionRecord(
+                providerIdentifier: "apple-speech",
+                modelIdentifier:
+                    "speech-analyzer-installed"
+            ),
+        visibleRemoteAudioAuthorization: Bool = false
+    ) {
         self.sourceLanguage = sourceLanguage
         self.targetLanguage = targetLanguage
+        self.transcriptionSelection =
+            transcriptionSelection
+        self.visibleRemoteAudioAuthorization =
+            visibleRemoteAudioAuthorization
     }
 }
 
@@ -166,19 +279,33 @@ public struct MediaImportSubmission: Sendable {
     public let selectedTrack: MediaTrackIdentifier?
     public let speechSourceKind: SpeechSourceKind
     public let language: LanguageTag?
+    public let codexTextProcessingAllowed: Bool
+    public let transcriptionSelection:
+        ProviderModelSelectionRecord?
+    public let remoteSpeechToTextAllowed: Bool
 
     public init(
         meetingTitle: String,
         dataClassification: DataClassification,
         selectedTrack: MediaTrackIdentifier?,
         speechSourceKind: SpeechSourceKind,
-        language: LanguageTag?
+        language: LanguageTag?,
+        codexTextProcessingAllowed: Bool = false,
+        transcriptionSelection:
+            ProviderModelSelectionRecord? = nil,
+        remoteSpeechToTextAllowed: Bool = false
     ) {
         self.meetingTitle = meetingTitle
         self.dataClassification = dataClassification
         self.selectedTrack = selectedTrack
         self.speechSourceKind = speechSourceKind
         self.language = language
+        self.codexTextProcessingAllowed =
+            codexTextProcessingAllowed
+        self.transcriptionSelection =
+            transcriptionSelection
+        self.remoteSpeechToTextAllowed =
+            remoteSpeechToTextAllowed
     }
 }
 
@@ -207,6 +334,10 @@ public struct RecordingStartSubmission: Sendable {
     public let applicationSpeechSourceKind: SpeechSourceKind
     public let language: LanguageTag?
     public let directUserAcknowledgement: Bool
+    public let codexTextProcessingAllowed: Bool
+    public let transcriptionSelection:
+        ProviderModelSelectionRecord?
+    public let remoteSpeechToTextAllowed: Bool
 
     public init(
         meetingTitle: String,
@@ -216,7 +347,11 @@ public struct RecordingStartSubmission: Sendable {
         microphoneSpeechSourceKind: SpeechSourceKind,
         applicationSpeechSourceKind: SpeechSourceKind,
         language: LanguageTag?,
-        directUserAcknowledgement: Bool
+        directUserAcknowledgement: Bool,
+        codexTextProcessingAllowed: Bool = false,
+        transcriptionSelection:
+            ProviderModelSelectionRecord? = nil,
+        remoteSpeechToTextAllowed: Bool = false
     ) {
         self.meetingTitle = meetingTitle
         self.dataClassification = dataClassification
@@ -226,6 +361,12 @@ public struct RecordingStartSubmission: Sendable {
         self.applicationSpeechSourceKind = applicationSpeechSourceKind
         self.language = language
         self.directUserAcknowledgement = directUserAcknowledgement
+        self.codexTextProcessingAllowed =
+            codexTextProcessingAllowed
+        self.transcriptionSelection =
+            transcriptionSelection
+        self.remoteSpeechToTextAllowed =
+            remoteSpeechToTextAllowed
     }
 }
 
@@ -242,6 +383,52 @@ public struct RecordingResumeSubmission: Sendable {
     }
 }
 
+public struct CompletedRecordingTrackReview:
+    Hashable,
+    Identifiable,
+    Sendable
+{
+    public let trackID: RecordingTrackID
+    public let kind: CaptureTrackKind
+    public let sourceRevision:
+        SemanticRevisionReference
+    public let mediaTrackIdentifier:
+        MediaTrackIdentifier
+    public let durationFrameCount: UInt64
+    public let speechSourceKind:
+        SpeechSourceKind
+    public let language: LanguageTag?
+
+    public var id: RecordingTrackID {
+        trackID
+    }
+
+    public init(
+        trackID: RecordingTrackID,
+        kind: CaptureTrackKind,
+        sourceRevision:
+            SemanticRevisionReference,
+        mediaTrackIdentifier:
+            MediaTrackIdentifier,
+        durationFrameCount: UInt64,
+        speechSourceKind:
+            SpeechSourceKind,
+        language: LanguageTag?
+    ) {
+        self.trackID = trackID
+        self.kind = kind
+        self.sourceRevision =
+            sourceRevision
+        self.mediaTrackIdentifier =
+            mediaTrackIdentifier
+        self.durationFrameCount =
+            durationFrameCount
+        self.speechSourceKind =
+            speechSourceKind
+        self.language = language
+    }
+}
+
 public struct RecordingSessionReview: Hashable, Sendable {
     public let sessionID: RecordingSessionID
     public let jobID: JobID
@@ -251,6 +438,8 @@ public struct RecordingSessionReview: Hashable, Sendable {
     public let durableThroughNanoseconds: UInt64?
     public let knownGapCount: UInt32
     public let safeReason: String?
+    public let completedTracks:
+        [CompletedRecordingTrackReview]
 
     public init(
         sessionID: RecordingSessionID,
@@ -260,7 +449,9 @@ public struct RecordingSessionReview: Hashable, Sendable {
         activeTrackKinds: [CaptureTrackKind],
         durableThroughNanoseconds: UInt64?,
         knownGapCount: UInt32,
-        safeReason: String?
+        safeReason: String?,
+        completedTracks:
+            [CompletedRecordingTrackReview] = []
     ) {
         self.sessionID = sessionID
         self.jobID = jobID
@@ -270,6 +461,10 @@ public struct RecordingSessionReview: Hashable, Sendable {
         self.durableThroughNanoseconds = durableThroughNanoseconds
         self.knownGapCount = knownGapCount
         self.safeReason = safeReason
+        self.completedTracks =
+            completedTracks.sorted {
+                $0.trackID < $1.trackID
+            }
     }
 
     public var canStop: Bool { !state.isTerminal && state != .stopping && state != .finalizing }
@@ -279,6 +474,8 @@ public struct RecordingSessionReview: Hashable, Sendable {
 @MainActor
 public protocol MediaReviewWorkflow: AnyObject {
     func restoreWorkspace() async throws -> WorkspaceReview?
+    func restoredMediaReview() async throws
+        -> RestoredMediaWorkflowReview?
     func openOrCreateWorkspace(at selectedDirectory: URL) async throws -> WorkspaceReview
     func inspectSelectedMedia(at sourceURL: URL) async throws -> PendingMediaReview
     func discardPendingMedia()
@@ -291,6 +488,9 @@ public protocol MediaReviewWorkflow: AnyObject {
         canonicalJobID: JobID,
         submission: TranscriptStartSubmission
     ) async throws -> TranscriptRouteReview
+    func meetingSpeechToTextRoute(
+        canonicalJobID: JobID
+    ) async throws -> MeetingSpeechToTextRouteV1?
     func startTranscript(
         canonicalJobID: JobID,
         submission: TranscriptStartSubmission
@@ -408,13 +608,29 @@ public protocol MediaReviewWorkflow: AnyObject {
         submission: RecordingResumeSubmission
     ) async throws -> RecordingSessionReview
     func stopRecording(jobID: JobID) async throws -> RecordingSessionReview
+    func processCompletedRecording(
+        jobID: JobID,
+        trackID: RecordingTrackID
+    ) async throws -> MediaJobReview
     func fetchUNWebTVMetadata(
         url: String,
         explicitNetworkAuthorization: Bool
     ) async throws -> UNWebTVMetadataCandidate
+    func codexTurnRequest(
+        canonicalJobID: JobID,
+        selectedSegmentIDs: [TranscriptSegmentID],
+        prompt: String,
+        visibleUserAuthorization: Bool
+    ) async throws -> CodexMeetingTurnRequest
 }
 
 public extension MediaReviewWorkflow {
+    func restoredMediaReview() async throws
+        -> RestoredMediaWorkflowReview?
+    {
+        nil
+    }
+
     func historicalIndexStatus() async throws -> HistoricalIndexStatus {
         throw HistoricalReviewError.indexRebuildRequired
     }
@@ -513,10 +729,26 @@ public extension MediaReviewWorkflow {
         throw TranscriptWorkflowError.unavailable
     }
 
+    func processCompletedRecording(
+        jobID _: JobID,
+        trackID _: RecordingTrackID
+    ) async throws -> MediaJobReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
     func fetchUNWebTVMetadata(
         url: String,
         explicitNetworkAuthorization: Bool
     ) async throws -> UNWebTVMetadataCandidate {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func codexTurnRequest(
+        canonicalJobID _: JobID,
+        selectedSegmentIDs _: [TranscriptSegmentID],
+        prompt _: String,
+        visibleUserAuthorization _: Bool
+    ) async throws -> CodexMeetingTurnRequest {
         throw TranscriptWorkflowError.unavailable
     }
 
@@ -548,6 +780,12 @@ public extension MediaReviewWorkflow {
         canonicalJobID: JobID,
         submission: TranscriptStartSubmission
     ) async throws -> TranscriptRouteReview {
+        throw TranscriptWorkflowError.unavailable
+    }
+
+    func meetingSpeechToTextRoute(
+        canonicalJobID: JobID
+    ) async throws -> MeetingSpeechToTextRouteV1? {
         throw TranscriptWorkflowError.unavailable
     }
 

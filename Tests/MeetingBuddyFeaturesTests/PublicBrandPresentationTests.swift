@@ -22,8 +22,8 @@ struct PublicBrandPresentationTests {
         #expect(info["CFBundleDisplayName"] as? String == "BlueMinutes")
         #expect(info["CFBundleName"] as? String == "BlueMinutes")
         #expect(info["CFBundleIconFile"] as? String == "BlueMinutes.icns")
-        #expect(info["CFBundleShortVersionString"] as? String == "0.3.0")
-        #expect(info["CFBundleVersion"] as? String == "3")
+        #expect(info["CFBundleShortVersionString"] as? String == "0.4.0")
+        #expect(info["CFBundleVersion"] as? String == "4")
         #expect(info["CFBundleExecutable"] as? String == "MeetingBuddyApp")
         #expect(info["CFBundleIdentifier"] as? String == "com.meetingbuddy.desktop")
 
@@ -100,7 +100,16 @@ struct PublicBrandPresentationTests {
             )
         )
         #expect(!readme.contains("> **By a diplomat, for diplomats.**"))
-        #expect(readme.contains("The `v0.3.0` milestone is a source release"))
+        #expect(
+            readme.contains(
+                "Application version `0.4.0` (build `4`) is the formal software-testing"
+            )
+        )
+        #expect(
+            readme.contains(
+                "the latest public source Release remains `v0.3.0`"
+            )
+        )
         #expect(
             normalizedReadme.contains(
                 "Every related capability remains disabled by default"
@@ -113,7 +122,7 @@ struct PublicBrandPresentationTests {
                 "MEETINGBUDDY_SIGN_IDENTITY=- ./script/package_release_candidate.sh"
             )
         )
-        #expect(readme.contains("dist/BlueMinutes-0.3.0-development"))
+        #expect(readme.contains("dist/BlueMinutes-0.4.0-development"))
         #expect(readme.contains("GitHub Releases remain"))
         #expect(readme.contains("zero maintainer-uploaded app assets"))
         #expect(
@@ -123,6 +132,16 @@ struct PublicBrandPresentationTests {
         #expect(!readme.contains("source-only internal alpha"))
 
         let changelog = try source("CHANGELOG.md")
+        #expect(
+            changelog.contains(
+                "Target application candidate: `0.4.0` (build `4`)"
+            )
+        )
+        #expect(
+            changelog.contains(
+                "The latest public source Release remains `v0.3.0`"
+            )
+        )
         #expect(changelog.contains("## [0.3.0] - 2026-07-28"))
         #expect(changelog.contains("## [0.2.0] - 2026-07-23"))
         #expect(changelog.contains("## [0.1.0] - 2026-07-22"))
@@ -143,6 +162,16 @@ struct PublicBrandPresentationTests {
                 "Published `v0.3.0` as a source-only UI Foundation release"
             )
         )
+        #expect(
+            roadmap.contains(
+                "Current formal-test candidate: application version 0.4.0"
+            )
+        )
+        #expect(
+            roadmap.contains(
+                "Prepared application version `0.4.0` build `4`"
+            )
+        )
 
         let executionLedger = try source("docs/CODEX_EXECUTION_STATE.md")
         #expect(executionLedger.contains("version: \"v0.3.0\""))
@@ -153,9 +182,10 @@ struct PublicBrandPresentationTests {
         )
         #expect(
             executionLedger.contains(
-                "working_tree_status_summary: \"the self-relative Issue #60 foundation carrier"
+                "candidate_version: \"0.4.0\""
             )
         )
+        #expect(executionLedger.contains("candidate_build: \"4\""))
         #expect(executionLedger.contains("current_task: \"v4-prebeta\""))
         #expect(
             executionLedger.contains(
@@ -173,35 +203,51 @@ struct PublicBrandPresentationTests {
             )
         )
 
-        let currentReleaseNotes = try source("docs/RELEASE_NOTES_0.3.0.md")
+        let currentReleaseNotes = try source("docs/RELEASE_NOTES_0.4.0.md")
         let normalizedCurrentReleaseNotes = currentReleaseNotes
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
         #expect(
             currentReleaseNotes.contains(
-                "# BlueMinutes v0.3.0 — Editorial Dossier Foundation"
+                "# BlueMinutes 0.4.0 — v4 Formal Software-Test Candidate"
             )
         )
         #expect(
             currentReleaseNotes.contains(
+                "Source state: untagged branch and draft Pull Request candidate"
+            )
+        )
+        #expect(
+            normalizedCurrentReleaseNotes.contains(
+                "classification: DEVELOPMENT"
+            )
+        )
+        #expect(
+            normalizedCurrentReleaseNotes.contains(
+                "distribution_authorized: false"
+            )
+        )
+        #expect(
+            currentReleaseNotes.contains(
+                "The latest public GitHub source\nRelease remains `v0.3.0`"
+            )
+        )
+
+        let previousReleaseNotes = try source("docs/RELEASE_NOTES_0.3.0.md")
+        #expect(
+            previousReleaseNotes.contains(
+                "# BlueMinutes v0.3.0 — Editorial Dossier Foundation"
+            )
+        )
+        #expect(
+            previousReleaseNotes.contains(
                 "Distribution scope: source code only; zero uploaded assets"
             )
         )
-        #expect(
-            normalizedCurrentReleaseNotes.contains(
-                "Current-build VoiceOver spoken wording"
-            )
-        )
-        #expect(
-            normalizedCurrentReleaseNotes.contains(
-                "classification is `DEVELOPMENT`"
-            )
-        )
-        #expect(currentReleaseNotes.contains("`distribution_authorized: false`"))
 
-        let previousReleaseNotes = try source("docs/RELEASE_NOTES_0.2.0.md")
+        let earlierReleaseNotes = try source("docs/RELEASE_NOTES_0.2.0.md")
         #expect(
-            previousReleaseNotes.contains(
+            earlierReleaseNotes.contains(
                 "# BlueMinutes v0.2.0 — Default-Off Meeting / Research Foundation"
             )
         )
@@ -242,8 +288,8 @@ struct PublicBrandPresentationTests {
         let plist = try source("Configuration/MeetingBuddy-Info.plist")
         #expect(plist.contains("<string>com.meetingbuddy.desktop</string>"))
         #expect(plist.contains("<string>MeetingBuddyApp</string>"))
-        #expect(plist.contains("<string>0.3.0</string>"))
-        #expect(plist.contains("<string>3</string>"))
+        #expect(plist.contains("<string>0.4.0</string>"))
+        #expect(plist.contains("<string>4</string>"))
 
         let packager = try source("script/package_release_candidate.sh")
         #expect(packager.contains("APP_BUNDLE_NAME=\"$PUBLIC_PRODUCT_NAME.app\""))

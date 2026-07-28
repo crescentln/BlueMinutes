@@ -100,6 +100,7 @@ let package = Package(
         .target(
             name: "MeetingBuddyFeatures",
             dependencies: [
+                "MeetingBuddyAI",
                 "MeetingBuddyApplication",
                 "MeetingBuddyDomain"
             ]
@@ -191,6 +192,7 @@ let package = Package(
         .testTarget(
             name: "MeetingBuddyFeaturesTests",
             dependencies: [
+                "MeetingBuddyAI",
                 "MeetingBuddyApplication",
                 "MeetingBuddyDomain",
                 "MeetingBuddyFeatures"

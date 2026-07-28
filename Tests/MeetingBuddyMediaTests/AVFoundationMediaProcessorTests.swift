@@ -131,6 +131,23 @@ struct AVFoundationMediaProcessorTests {
                 canonical
             ) == 0o600
         )
+        let retainedCaptureTracks =
+            try await processor.audioTracks(
+                in: canonical
+            )
+        #expect(
+            retainedCaptureTracks.count == 1
+        )
+        #expect(
+            retainedCaptureTracks.first?
+                .durationFrameCount
+                == result.frameCount
+        )
+        #expect(
+            retainedCaptureTracks.first?
+                .sourceSampleRateHertz
+                == 16_000
+        )
 
         let range = try MediaFrameRange(startFrame: 4_000, endFrame: 12_000)
         try await processor.writeCanonicalChunk(

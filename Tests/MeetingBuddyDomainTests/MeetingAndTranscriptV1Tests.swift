@@ -14,6 +14,101 @@ struct MeetingAndTranscriptV1Tests {
         #expect(decoded.revision.generationMetadata == nil)
         #expect(decoded.organizationOrUNBody == .unresolved(label: "Synthetic Committee"))
         #expect(decoded.cloudProcessingPolicy == .localOnly)
+        #expect(decoded.speechToTextRoute == nil)
+    }
+
+    @Test
+    func meetingStoresOneExactApprovedRemoteSTTRouteWithoutCredentials() throws {
+        let route = try MeetingSpeechToTextRouteV1(
+            kind: .approvedRemote,
+            providerIdentifier: "openai-stt",
+            modelIdentifier: "whisper-1",
+            intelligenceConfigurationRevision: 7
+        )
+        let meeting = try MeetingProfileV1(
+            revision: Task003BFixtures.meetingEnvelope(),
+            title: "Synthetic Remote STT Meeting",
+            sourceLanguages: [LanguageTag("en")],
+            outputLanguage: LanguageTag("en"),
+            cloudProcessingPolicy: .approvedCloudAllowed,
+            speechToTextRoute: route,
+            reviewStatus: .unreviewed,
+            userConfirmed: false
+        )
+
+        let encoded = try CanonicalJSON.encodeValidated(meeting)
+        let decoded = try CanonicalJSON.decodeValidated(
+            MeetingProfileV1.self,
+            from: encoded
+        )
+        let text = String(decoding: encoded, as: UTF8.self)
+
+        #expect(decoded.speechToTextRoute == route)
+        #expect(text.contains(#""provider_identifier":"openai-stt""#))
+        #expect(text.contains(#""model_identifier":"whisper-1""#))
+        #expect(!text.localizedCaseInsensitiveContains("api_key"))
+        #expect(!text.localizedCaseInsensitiveContains("authorization"))
+    }
+
+    @Test
+    func sensitiveMeetingRejectsRemoteSTTRoute() throws {
+        let sensitiveEnvelope:
+            RevisionEnvelope<MeetingIDTag> =
+            try Task003BFixtures.envelope(
+                logicalID:
+                    Task003BFixtures.meetingID,
+                revisionID:
+                    Task003BFixtures
+                    .meetingRevisionID,
+                classification: .sensitive
+            )
+
+        #expect(throws: DomainValidationError.self) {
+            _ = try MeetingProfileV1(
+                revision: sensitiveEnvelope,
+                title: "Sensitive Synthetic Meeting",
+                sourceLanguages: [LanguageTag("en")],
+                outputLanguage: LanguageTag("en"),
+                cloudProcessingPolicy:
+                    .approvedCloudAllowed,
+                speechToTextRoute:
+                    MeetingSpeechToTextRouteV1(
+                        kind: .approvedRemote,
+                        providerIdentifier:
+                            "openai-stt",
+                        modelIdentifier:
+                            "whisper-1",
+                        intelligenceConfigurationRevision:
+                            7
+                    ),
+                reviewStatus: .unreviewed,
+                userConfirmed: false
+            )
+        }
+    }
+
+    @Test
+    func recordOnlyAndLocalSTTRouteShapesFailClosed() throws {
+        #expect(throws: DomainValidationError.self) {
+            _ = try MeetingSpeechToTextRouteV1(
+                kind: .recordOnly,
+                providerIdentifier: "unexpected"
+            )
+        }
+        #expect(throws: DomainValidationError.self) {
+            _ = try MeetingSpeechToTextRouteV1(
+                kind: .local,
+                providerIdentifier: "apple-speech"
+            )
+        }
+        #expect(
+            try MeetingSpeechToTextRouteV1(
+                kind: .local,
+                providerIdentifier: "apple-speech",
+                modelIdentifier:
+                    "speech-analyzer-installed"
+            ).kind == .local
+        )
     }
 
     @Test

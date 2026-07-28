@@ -12,6 +12,7 @@ enum AppWorkflowError: LocalizedError {
     case workspaceAuthorizationFailed
     case workspaceOpenFailed
     case workspaceHealthFailed
+    case workspaceWorkInProgress
     case sourceAuthorizationFailed
     case sourceSelectionExpired
     case sourceInspectionFailed
@@ -19,6 +20,9 @@ enum AppWorkflowError: LocalizedError {
     case jobUnavailable
     case canonicalAudioRequired
     case onDeviceModelUnavailable
+    case speechToTextNotConfigured
+    case speechToTextConfigurationUnavailable
+    case remoteAudioAuthorizationRequired
     case transcriptUnavailable
     case analysisUnavailable
     case briefingUnavailable
@@ -27,6 +31,8 @@ enum AppWorkflowError: LocalizedError {
     case recordingAuthorizationRequired
     case webMetadataUnavailable
     case historicalReviewUnavailable
+    case externalTextAuthorizationUnavailable
+    case codexContextUnavailable
     case reviewFailed
 
     var errorDescription: String? {
@@ -39,6 +45,8 @@ enum AppWorkflowError: LocalizedError {
             "The selected folder is not an empty folder or a valid BlueMinutes workspace."
         case .workspaceHealthFailed:
             "The workspace did not pass its local database and recovery health checks."
+        case .workspaceWorkInProgress:
+            "Finish or cancel the current background job before switching workspaces."
         case .sourceAuthorizationFailed:
             "BlueMinutes could not read the user-selected source file."
         case .sourceSelectionExpired:
@@ -53,6 +61,12 @@ enum AppWorkflowError: LocalizedError {
             "Finish canonical local audio processing before starting transcription."
         case .onDeviceModelUnavailable:
             "The requested on-device model is unavailable. Use the manual local fallback or install the model in system settings."
+        case .speechToTextNotConfigured:
+            "Speech-to-text is not configured. Keep the recording, import a transcript, or choose a verified STT route."
+        case .speechToTextConfigurationUnavailable:
+            "The selected speech-to-text provider/model is no longer ready. No audio was sent."
+        case .remoteAudioAuthorizationRequired:
+            "Remote speech-to-text requires a visible authorization for this meeting and again immediately before audio upload."
         case .transcriptUnavailable:
             "No published transcript review is available for this meeting."
         case .analysisUnavailable:
@@ -69,10 +83,245 @@ enum AppWorkflowError: LocalizedError {
             "The official UN Web TV page metadata could not be read safely. Open the page and enter metadata manually."
         case .historicalReviewUnavailable:
             "Meeting History is unavailable until its local index and exact policy graph are current."
+        case .externalTextAuthorizationUnavailable:
+            "Codex text processing requires a Public or Internal meeting with explicit visible authorization."
+        case .codexContextUnavailable:
+            "Select a current transcript segment from a meeting that explicitly allows Codex text processing."
         case .reviewFailed:
             "The review change failed without replacing accepted content."
         }
     }
+}
+
+private actor WorkspaceRemoteTranscriptionPolicyAuthority {
+    private let workspaceID: WorkspaceID
+    private let store: SQLitePersistenceStore
+    private let intelligenceRepository:
+        any IntelligenceConfigurationRepository
+
+    init(
+        workspaceID: WorkspaceID,
+        store: SQLitePersistenceStore,
+        intelligenceRepository:
+            any IntelligenceConfigurationRepository
+    ) {
+        self.workspaceID = workspaceID
+        self.store = store
+        self.intelligenceRepository =
+            intelligenceRepository
+    }
+
+    func authorize(
+        plan: TranscriptPipelineJobPlan
+    ) async throws
+        -> ExternalModelExecutionAuthorization
+    {
+        guard let expectedConfiguration =
+                plan.remoteProviderConfiguration,
+              let expectedRevision =
+                plan
+                .intelligenceConfigurationRevision
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "Remote transcription authority is absent, stale, or belongs to another attempt."
+                )
+        }
+
+        let configurationState =
+            try intelligenceRepository.load()
+        let expectedMeetingRoute =
+            try MeetingSpeechToTextRouteV1(
+                kind: .approvedRemote,
+                providerIdentifier:
+                    expectedConfiguration
+                    .identifier,
+                modelIdentifier:
+                    expectedConfiguration
+                    .modelIdentifier,
+                intelligenceConfigurationRevision:
+                    expectedRevision
+            )
+        guard configurationState.revision
+                == expectedRevision,
+              configurationState.providers
+                .contains(
+                    expectedConfiguration
+                ),
+              expectedConfiguration
+                .connectionState == .ready,
+              expectedConfiguration
+                .capabilities.contains(
+                    .speechToTextBatch
+                ),
+              let meeting =
+                try activeMeeting(
+                    plan.meetingID
+                ),
+              meeting.workspaceID
+                == workspaceID,
+              meeting.revision
+                .dataClassification
+                == plan.dataClassification,
+              meeting.speechToTextRoute
+                == expectedMeetingRoute,
+              let securityPolicy =
+                try activeSecurityPolicy(
+                    meetingID:
+                        plan.meetingID
+                )
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "Current meeting policy or provider configuration no longer authorizes remote transcription."
+                )
+        }
+
+        let persisted =
+            plan.transcriptionRoute.request
+        guard persisted.capability
+                == .transcription,
+              persisted.dataClassification
+                == plan.dataClassification,
+              persisted.deploymentEnvironment
+                == .production,
+              persisted.destination
+                == .approvedProvider(
+                    identifier:
+                        expectedConfiguration
+                        .identifier
+                ),
+              persisted.retentionPolicy
+                == .approvedProviderRetention,
+              persisted.dataCategories
+                == [.canonicalAudio],
+              persisted.visibleUserAuthorization,
+              !persisted.offlineMode,
+              !persisted.localModelAvailable
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "The persisted remote route does not match the exact bounded audio request."
+                )
+        }
+
+        let currentRequest =
+            try ModelRouteRequest(
+                capability: .transcription,
+                dataClassification:
+                    plan.dataClassification,
+                offlineMode: false,
+                organizationAllowsExternalProcessing:
+                    securityPolicy
+                    .externalProcessingAllowed,
+                deploymentEnvironment:
+                    .production,
+                destination:
+                    .approvedProvider(
+                        identifier:
+                            expectedConfiguration
+                            .identifier
+                    ),
+                retentionPolicy:
+                    .approvedProviderRetention,
+                dataCategories:
+                    [.canonicalAudio],
+                visibleUserAuthorization: true,
+                localModelAvailable: false,
+                securityPolicy:
+                    securityPolicy
+            )
+        let authorization =
+            try ModelPolicyRouter()
+            .authorizeExternal(
+                currentRequest,
+                expectedProviderIdentifier:
+                    expectedConfiguration
+                    .identifier
+            )
+        return authorization
+    }
+
+    private func activeMeeting(
+        _ meetingID: MeetingID
+    ) throws -> MeetingProfileV1? {
+        if let active =
+            try store.activeRevisionState(
+                MeetingProfileV1.self,
+                logicalID: meetingID
+            )?.revision
+        {
+            return active
+        }
+        let revisions = try store.revisions(
+            MeetingProfileV1.self,
+            logicalID: meetingID
+        )
+        guard revisions.count <= 1 else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "The meeting profile has no unambiguous active revision."
+                )
+        }
+        return revisions.first
+    }
+
+    private func activeSecurityPolicy(
+        meetingID: MeetingID
+    ) throws -> ModelSecurityPolicySnapshot? {
+        let labelID =
+            try SensitivityLabelID(
+                validating:
+                    meetingID
+                    .canonicalString
+            )
+        let policyID =
+            try AccessPolicyID(
+                validating:
+                    meetingID
+                    .canonicalString
+            )
+        guard let label =
+                try store
+                .activeRevisionState(
+                    SensitivityLabelV1.self,
+                    logicalID: labelID
+                )?.revision,
+              let policy =
+                try store
+                .activeRevisionState(
+                    AccessPolicyV1.self,
+                    logicalID: policyID
+                )?.revision
+        else { return nil }
+        let labelReference =
+            try SemanticRevisionReference(
+                logicalID:
+                    label.labelID,
+                revisionID:
+                    label.revision
+                    .revisionID
+            )
+        guard label.meetingID == meetingID,
+              policy.meetingID == meetingID,
+              policy
+                .sensitivityLabelRevision
+                == labelReference,
+              policy.effectiveClassification
+                == label
+                .effectiveClassification
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "The active meeting security policy is inconsistent."
+                )
+        }
+        return try LocalSecurityPolicyBundle(
+            sensitivityLabel: label,
+            accessPolicy: policy
+        ).modelSnapshot
+    }
+
 }
 
 private final class WorkspaceRuntime: @unchecked Sendable {
@@ -93,6 +342,8 @@ private final class WorkspaceRuntime: @unchecked Sendable {
     let captureProvider: MacOSAudioCaptureProvider
     let captureRegistry: TransientRecordingCaptureRegistry
     let metadataSource: URLSessionUNWebTVMetadataSource
+    let remoteTranscriptionAuthorization:
+        EphemeralExternalTranscriptionAuthorizationBroker
     let transcriptionProvider: (any TranscriptionProvider)?
     let translationProvider: (any TranslationProvider)?
     let analysisProvider: (any AnalysisProvider)?
@@ -101,7 +352,10 @@ private final class WorkspaceRuntime: @unchecked Sendable {
 
     init(
         descriptor: LocalWorkspaceDescriptor,
-        capabilities: AppCapabilities
+        capabilities: AppCapabilities,
+        intelligenceRepository:
+            any IntelligenceConfigurationRepository,
+        secretStore: any SecretStore
     ) throws {
         self.descriptor = descriptor
         self.capabilities = capabilities
@@ -130,6 +384,21 @@ private final class WorkspaceRuntime: @unchecked Sendable {
         captureProvider = MacOSAudioCaptureProvider()
         captureRegistry = TransientRecordingCaptureRegistry()
         metadataSource = URLSessionUNWebTVMetadataSource()
+        let remotePolicyAuthority =
+            WorkspaceRemoteTranscriptionPolicyAuthority(
+                workspaceID:
+                    descriptor.manifest
+                    .workspaceID,
+                store: store,
+                intelligenceRepository:
+                    intelligenceRepository
+            )
+        remoteTranscriptionAuthorization =
+            EphemeralExternalTranscriptionAuthorizationBroker {
+                plan in
+                try await remotePolicyAuthority
+                    .authorize(plan: plan)
+            }
         let intakeExecutor = LocalMediaIntakeJobExecutor(
             intake: intake,
             sources: transientSources
@@ -171,7 +440,13 @@ private final class WorkspaceRuntime: @unchecked Sendable {
                     processor: processor,
                     catalog: store,
                     fileAccess: fileAccess,
-                    repository: store
+                    repository: store,
+                    externalProviderBuilder:
+                        OpenAIRemoteTranscriptionProviderFactory(
+                            secretStore: secretStore
+                        ),
+                    externalExecutionAuthorizer:
+                        remoteTranscriptionAuthorization
                 )
             )
             executors.append(
@@ -191,6 +466,23 @@ private final class WorkspaceRuntime: @unchecked Sendable {
             translationProvider = nil
             analysisProvider = nil
             briefingProvider = nil
+            executors.append(
+                TranscriptPipelineJobExecutor(
+                    transcriptionProvider:
+                        UnavailableLocalTranscriptionProvider(),
+                    translationProvider: nil,
+                    processor: processor,
+                    catalog: store,
+                    fileAccess: fileAccess,
+                    repository: store,
+                    externalProviderBuilder:
+                        OpenAIRemoteTranscriptionProviderFactory(
+                            secretStore: secretStore
+                        ),
+                    externalExecutionAuthorizer:
+                        remoteTranscriptionAuthorization
+                )
+            )
         }
         manager = try LocalTaskManager(
             repository: SQLiteJobRepository(store: store),
@@ -222,6 +514,13 @@ private final class WorkspaceRuntime: @unchecked Sendable {
         else {
             throw AppWorkflowError.workspaceHealthFailed
         }
+        // A queued record proves persistence completed, but not that the
+        // pre-crash process still held its transient source, capture handle,
+        // or visible outbound authorization. Move every such record to an
+        // actionable terminal state instead of silently replaying it or
+        // leaving the workspace permanently blocked.
+        _ = try await manager
+            .cancelPersistedQueuedJobs()
         _ = await telemetry.record(
             try ContentFreeTelemetryEvent(
                 name: .workspaceHealthChecked,
@@ -234,6 +533,9 @@ private final class WorkspaceRuntime: @unchecked Sendable {
 @MainActor
 final class AppMediaReviewWorkflow: MediaReviewWorkflow {
     private let capabilities: AppCapabilities
+    private let intelligenceRepository:
+        any IntelligenceConfigurationRepository
+    private let secretStore: any SecretStore
     private let workspaceService = LocalWorkspaceService()
     private let workspaceSecurityScope = WorkspaceSecurityScope()
 
@@ -243,8 +545,16 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
     private var pendingSourceDidStartScope = false
     private var pendingInspection: MediaInspection?
 
-    init(capabilities: AppCapabilities) {
+    init(
+        capabilities: AppCapabilities,
+        intelligenceRepository:
+            any IntelligenceConfigurationRepository,
+        secretStore: any SecretStore
+    ) {
         self.capabilities = capabilities
+        self.intelligenceRepository =
+            intelligenceRepository
+        self.secretStore = secretStore
     }
 
     deinit {
@@ -259,7 +569,10 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             let descriptor = try workspaceService.openWorkspace(at: url)
             let nextRuntime = try WorkspaceRuntime(
                 descriptor: descriptor,
-                capabilities: capabilities
+                capabilities: capabilities,
+                intelligenceRepository:
+                    intelligenceRepository,
+                secretStore: secretStore
             )
             try await nextRuntime.recover()
             runtime = nextRuntime
@@ -277,11 +590,472 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         }
     }
 
-    func openOrCreateWorkspace(at selectedDirectory: URL) async throws -> WorkspaceReview {
-        if let runtime, !(try await runtime.store.nonterminalSessions()).isEmpty {
-            throw AppWorkflowError.recordingInProgress
+    func restoredMediaReview() async throws
+        -> RestoredMediaWorkflowReview?
+    {
+        guard let runtime else {
+            throw AppWorkflowError.workspaceRequired
         }
-        let authorizedURL = try workspaceSecurityScope.activate(selectedDirectory)
+        let records = try await runtime.manager.jobs()
+        let pipelineTypes: Set<JobType> = [
+            MediaJobTypes.canonicalAudio,
+            TranscriptJobTypes.pipeline,
+            AnalysisJobTypes.pipeline,
+            BriefingJobTypes.pipeline,
+        ]
+        let pipelineRecords = records.filter {
+            pipelineTypes.contains($0.jobType)
+        }
+        let activeRecords = pipelineRecords.filter {
+            !$0.state.isTerminal
+        }
+        var activeMeetingIDs = Set<MeetingID>()
+        for record in activeRecords {
+            guard let meetingID = record.meetingID else {
+                throw AppWorkflowError.workspaceHealthFailed
+            }
+            activeMeetingIDs.insert(meetingID)
+        }
+        guard activeMeetingIDs.count <= 1 else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+
+        let canonicalRecords = pipelineRecords.filter {
+            $0.jobType == MediaJobTypes.canonicalAudio
+        }
+        guard canonicalRecords.allSatisfy({
+            $0.meetingID != nil
+        }) else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+        let intakeRecords = records.filter {
+            $0.jobType
+                == MediaJobTypes.localIntake
+        }
+        guard intakeRecords.allSatisfy({
+            $0.meetingID != nil
+        }) else {
+            throw AppWorkflowError
+                .workspaceHealthFailed
+        }
+        let canonicalMeetingIDs =
+            Set(
+                canonicalRecords
+                    .compactMap(\.meetingID)
+            )
+        let orphanIntake =
+            newestRecord(
+                in:
+                    intakeRecords.filter {
+                        guard let meetingID =
+                                $0.meetingID
+                        else { return false }
+                        return !canonicalMeetingIDs
+                            .contains(meetingID)
+                    }
+            )
+        let latestCanonical =
+            newestRecord(
+                in: canonicalRecords
+            )
+        let orphanIntakeIsLatest: Bool
+        if let orphanIntake {
+            if let latestCanonical {
+                orphanIntakeIsLatest =
+                    orphanIntake.createdAt
+                        > latestCanonical.createdAt
+                    || (
+                        orphanIntake.createdAt
+                            == latestCanonical.createdAt
+                            && orphanIntake.jobID
+                                > latestCanonical.jobID
+                    )
+            } else {
+                orphanIntakeIsLatest = true
+            }
+        } else {
+            orphanIntakeIsLatest = false
+        }
+        if activeRecords.isEmpty,
+           orphanIntakeIsLatest,
+           var intakeRecord = orphanIntake
+        {
+            if !intakeRecord.state.isTerminal {
+                intakeRecord = try await runtime
+                    .manager.cancel(
+                        jobID:
+                            intakeRecord.jobID
+                    )
+            }
+            let plan =
+                try LocalMediaIntakeJobPlan
+                .decode(
+                    from:
+                        intakeRecord
+                        .inputPayload
+                )
+            guard intakeRecord.meetingID
+                    == plan.meetingID,
+                  intakeRecord
+                    .dataClassification
+                    == plan.dataClassification,
+                  intakeRecord.privacyRoute
+                    == .localOnly
+            else {
+                throw AppWorkflowError
+                    .workspaceHealthFailed
+            }
+            let meeting =
+                try restoredMeetingProfile(
+                    meetingID:
+                        plan.meetingID,
+                    runtime: runtime
+                )
+            guard meeting.revision
+                    .dataClassification
+                    == plan.dataClassification
+            else {
+                throw AppWorkflowError
+                    .workspaceHealthFailed
+            }
+            let securityPolicy =
+                try securityPolicySnapshot(
+                    meetingID:
+                        plan.meetingID
+                )
+            let codexAllowed =
+                securityPolicy?
+                .approvedExternalProviderIdentifiers
+                .contains(
+                    CodexTextExecutionAuthorization
+                        .providerIdentifier
+                ) == true
+
+            if intakeRecord.state
+                == .succeeded
+            {
+                guard intakeRecord
+                        .outputRevisionIDs
+                        == [
+                            try plan
+                                .outputRevision
+                        ],
+                      let sourceAsset =
+                        try runtime.store
+                        .sourceAsset(
+                            revisionID:
+                                plan
+                                .sourceRevisionID
+                        )
+                else {
+                    throw AppWorkflowError
+                        .workspaceHealthFailed
+                }
+                let selectedTrack =
+                    try plan.initialInspection
+                    .requireTrack(
+                        plan.selectedTrack
+                    )
+                let sourceReference =
+                    try SemanticRevisionReference(
+                        logicalID:
+                            sourceAsset.assetID,
+                        revisionID:
+                            sourceAsset.revision
+                            .revisionID
+                    )
+                let canonicalPlan =
+                    try CanonicalAudioJobPlan(
+                        sourceRevision:
+                            sourceReference,
+                        selectedTrack:
+                            plan.selectedTrack,
+                        speechSourceKind:
+                            plan.speechSourceKind,
+                        meetingID:
+                            plan.meetingID,
+                        createdAt:
+                            try currentInstant(),
+                        dataClassification:
+                            plan.dataClassification,
+                        language:
+                            plan.language
+                                ?? selectedTrack
+                                .language,
+                        expectedDurationFrames:
+                            plan.initialInspection
+                            .durationFrameCount
+                    )
+                let canonicalRecord =
+                    try await runtime.manager
+                    .enqueue(
+                        CanonicalAudioJobFactory()
+                            .request(
+                                plan:
+                                    canonicalPlan,
+                                requestedBy:
+                                    JobRequester(
+                                        "meetingbuddy-app"
+                                    )
+                            )
+                    )
+                return RestoredMediaWorkflowReview(
+                    meetingTitle:
+                        meeting.title,
+                    dataClassification:
+                        plan.dataClassification,
+                    sourceLanguage:
+                        plan.language,
+                    codexTextProcessingAllowed:
+                        codexAllowed,
+                    speechToTextRoute:
+                        meeting
+                        .speechToTextRoute,
+                    importedSource:
+                        ImportedSourceReview(
+                            assetID:
+                                sourceAsset
+                                .assetID,
+                            revisionID:
+                                sourceAsset
+                                .revision
+                                .revisionID,
+                            sourceHash:
+                                sourceAsset
+                                .sourceContentHash,
+                            byteSize:
+                                sourceAsset
+                                .byteSize,
+                            format:
+                                plan
+                                .initialInspection
+                                .format,
+                            durationFrameCount:
+                                plan
+                                .initialInspection
+                                .durationFrameCount,
+                            selectedTrack:
+                                plan
+                                .selectedTrack,
+                            speechSourceKind:
+                                plan
+                                .speechSourceKind
+                        ),
+                    canonicalJob:
+                        MediaJobReview(
+                            record:
+                                canonicalRecord
+                        )
+                )
+            }
+
+            return RestoredMediaWorkflowReview(
+                meetingTitle: meeting.title,
+                dataClassification:
+                    plan.dataClassification,
+                sourceLanguage:
+                    plan.language,
+                codexTextProcessingAllowed:
+                    codexAllowed,
+                speechToTextRoute:
+                    meeting.speechToTextRoute,
+                importedSource: nil,
+                sourceReselectionJob:
+                    MediaJobReview(
+                        record:
+                            intakeRecord
+                    ),
+                canonicalJob: nil
+            )
+        }
+        guard !canonicalRecords.isEmpty else {
+            guard activeRecords.isEmpty else {
+                throw AppWorkflowError
+                    .workspaceHealthFailed
+            }
+            return nil
+        }
+
+        let selectedMeetingID: MeetingID
+        if let activeMeetingID = activeMeetingIDs.first {
+            selectedMeetingID = activeMeetingID
+        } else {
+            guard let latestCanonical =
+                    newestRecord(in: canonicalRecords),
+                  let meetingID = latestCanonical.meetingID
+            else {
+                throw AppWorkflowError.workspaceHealthFailed
+            }
+            selectedMeetingID = meetingID
+        }
+        let meetingCanonicalRecords = canonicalRecords.filter {
+            $0.meetingID == selectedMeetingID
+        }
+        guard meetingCanonicalRecords.count == 1,
+              let canonicalRecord =
+                meetingCanonicalRecords.first
+        else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+        let meetingRecords = pipelineRecords.filter {
+            $0.meetingID == selectedMeetingID
+        }
+        guard meetingRecords.filter({
+            !$0.state.isTerminal
+        }).count <= 1 else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+
+        let plan = try CanonicalAudioJobPlan.decode(
+            from: canonicalRecord.inputPayload
+        )
+        let expectedCanonicalReference =
+            try SemanticRevisionReference(
+                logicalID: plan.outputAssetID,
+                revisionID: plan.outputRevisionID
+            )
+        guard canonicalRecord.meetingID == plan.meetingID,
+              canonicalRecord.inputRevisionIDs
+                  == [plan.sourceRevision],
+              canonicalRecord.dataClassification
+                  == plan.dataClassification,
+              canonicalRecord.privacyRoute == .localOnly,
+              canonicalRecord.state != .succeeded
+                  || canonicalRecord.outputRevisionIDs
+                      == [expectedCanonicalReference]
+        else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+
+        let meeting = try restoredMeetingProfile(
+            meetingID: selectedMeetingID,
+            runtime: runtime
+        )
+        guard meeting.revision.dataClassification
+                == plan.dataClassification
+        else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+        let importedSource = try restoredImportedSource(
+            plan: plan,
+            runtime: runtime
+        )
+        let transcriptRecord = newestRecord(
+            in: meetingRecords.filter {
+                $0.jobType == TranscriptJobTypes.pipeline
+            }
+        )
+        let analysisRecord = newestRecord(
+            in: meetingRecords.filter {
+                $0.jobType == AnalysisJobTypes.pipeline
+            }
+        )
+        let briefingRecord = newestRecord(
+            in: meetingRecords.filter {
+                $0.jobType == BriefingJobTypes.pipeline
+            }
+        )
+        if transcriptRecord != nil
+            || analysisRecord != nil
+            || briefingRecord != nil
+        {
+            guard canonicalRecord.state == .succeeded else {
+                throw AppWorkflowError.workspaceHealthFailed
+            }
+        }
+        if let transcriptRecord {
+            guard transcriptRecord.inputRevisionIDs
+                    == canonicalRecord.outputRevisionIDs
+            else {
+                throw AppWorkflowError.workspaceHealthFailed
+            }
+        }
+
+        let transcriptReview =
+            canonicalRecord.state == .succeeded
+            ? try runtime.store.activeTranscriptReview(
+                meetingID: selectedMeetingID
+            )
+            : nil
+        let analysisReview =
+            canonicalRecord.state == .succeeded
+            ? try runtime.store.activeAnalysisReview(
+                meetingID: selectedMeetingID
+            )
+            : nil
+        let briefingReview =
+            canonicalRecord.state == .succeeded
+            ? try runtime.store.activeBriefingReview(
+                meetingID: selectedMeetingID
+            )
+            : nil
+        guard transcriptRecord?.state != .succeeded
+                || transcriptReview != nil,
+              analysisRecord?.state != .succeeded
+                || analysisReview != nil,
+              briefingRecord?.state != .succeeded
+                || briefingReview != nil,
+              analysisReview == nil
+                || transcriptReview != nil,
+              briefingReview == nil
+                || analysisReview != nil
+        else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+
+        let securityPolicy = try securityPolicySnapshot(
+            meetingID: selectedMeetingID
+        )
+        return RestoredMediaWorkflowReview(
+            meetingTitle: meeting.title,
+            dataClassification:
+                meeting.revision.dataClassification,
+            sourceLanguage: plan.language,
+            codexTextProcessingAllowed:
+                securityPolicy?
+                .approvedExternalProviderIdentifiers
+                .contains(
+                    CodexTextExecutionAuthorization
+                        .providerIdentifier
+                ) == true,
+            speechToTextRoute:
+                meeting.speechToTextRoute,
+            importedSource: importedSource,
+            canonicalJob:
+                MediaJobReview(record: canonicalRecord),
+            transcriptJob:
+                transcriptRecord.map(MediaJobReview.init),
+            transcriptReview: transcriptReview,
+            analysisJob:
+                analysisRecord.map(MediaJobReview.init),
+            analysisReview: analysisReview,
+            briefingJob:
+                briefingRecord.map(MediaJobReview.init),
+            briefingReview: briefingReview
+        )
+    }
+
+    func openOrCreateWorkspace(at selectedDirectory: URL) async throws -> WorkspaceReview {
+        if let runtime {
+            guard (try await runtime.store
+                .nonterminalSessions()).isEmpty
+            else {
+                throw AppWorkflowError
+                    .recordingInProgress
+            }
+            guard try await runtime.manager
+                .jobs()
+                .allSatisfy(\.state.isTerminal)
+            else {
+                throw AppWorkflowError
+                    .workspaceWorkInProgress
+            }
+        }
+        let candidateScope =
+            try workspaceSecurityScope
+            .prepare(selectedDirectory)
+        let authorizedURL =
+            candidateScope.url
         do {
             let descriptor: LocalWorkspaceDescriptor
             do {
@@ -295,9 +1069,14 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             }
             let nextRuntime = try WorkspaceRuntime(
                 descriptor: descriptor,
-                capabilities: capabilities
+                capabilities: capabilities,
+                intelligenceRepository:
+                    intelligenceRepository,
+                secretStore: secretStore
             )
             try await nextRuntime.recover()
+            workspaceSecurityScope
+                .commit(candidateScope)
             releasePendingSource()
             runtime = nextRuntime
             workspaceDisplayName = displayName(for: authorizedURL)
@@ -306,10 +1085,12 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
                 displayName: workspaceDisplayName
             )
         } catch let error as AppWorkflowError {
-            workspaceSecurityScope.forget()
+            workspaceSecurityScope
+                .discard(candidateScope)
             throw error
         } catch {
-            workspaceSecurityScope.forget()
+            workspaceSecurityScope
+                .discard(candidateScope)
             throw AppWorkflowError.workspaceOpenFailed
         }
     }
@@ -353,11 +1134,30 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         defer { releasePendingSource() }
         do {
             let createdAt = try currentInstant()
+            let approvals =
+                try meetingProviderApprovals(
+                    codexTextProcessingAllowed:
+                        submission
+                        .codexTextProcessingAllowed,
+                    transcriptionSelection:
+                        submission
+                        .transcriptionSelection,
+                    remoteSpeechToTextAllowed:
+                        submission
+                        .remoteSpeechToTextAllowed,
+                    classification:
+                        submission.dataClassification
+                )
             let meeting = try meetingProfile(
                 title: submission.meetingTitle,
                 classification: submission.dataClassification,
                 language: submission.language,
                 workspaceID: runtime.descriptor.manifest.workspaceID,
+                approvedExternalProviderIdentifiers:
+                    approvals
+                    .approvedExternalProviderIdentifiers,
+                speechToTextRoute:
+                    approvals.speechToTextRoute,
                 createdAt: createdAt
             )
             let meetingUUID = try requiredUUID(meeting.meetingID.canonicalString)
@@ -367,7 +1167,10 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
                 sensitivityLabelRevisionID: RevisionID(UUID()),
                 accessPolicyID: AccessPolicyID(meetingUUID),
                 accessPolicyRevisionID: RevisionID(UUID()),
-                createdAt: createdAt
+                createdAt: createdAt,
+                approvedExternalProviderIdentifiers:
+                    approvals
+                    .approvedExternalProviderIdentifiers
             )
             let selectedTrack = try inspection.requireTrack(submission.selectedTrack)
             let expectedSourceByteSize = try sourceByteSize(sourceURL)
@@ -480,7 +1283,28 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
 
     func retry(jobID: JobID) async throws -> MediaJobReview {
         guard let runtime else { throw AppWorkflowError.workspaceRequired }
-        return MediaJobReview(record: try await runtime.manager.retry(jobID: jobID))
+        if let record =
+                try await runtime.manager
+                .job(id: jobID),
+           record.jobType
+                == TranscriptJobTypes.pipeline,
+           let plan =
+                try? TranscriptPipelineJobPlan
+                .decode(
+                    from:
+                        record.inputPayload
+                ),
+           plan.remoteProviderConfiguration
+                != nil
+        {
+            throw AppWorkflowError
+                .remoteAudioAuthorizationRequired
+        }
+        return MediaJobReview(
+            record:
+                try await runtime.manager
+                .retry(jobID: jobID)
+        )
     }
 
     func transcriptRoute(
@@ -488,31 +1312,134 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         submission: TranscriptStartSubmission
     ) async throws -> TranscriptRouteReview {
         let context = try await canonicalContext(jobID: canonicalJobID)
-        let speechInstalled = await runtime?.transcriptionProvider?.isModelInstalled(
-            for: submission.sourceLanguage
-        ) ?? false
-        let speechRequest = try routeRequest(
-            meetingID: context.plan.meetingID,
-            capability: .transcription,
-            classification: context.plan.dataClassification,
-            categories: [.canonicalAudio],
-            localModelAvailable: speechInstalled
-        )
-        let speechDecision = try ModelPolicyRouter().decide(speechRequest)
+        guard let selection =
+                submission.transcriptionSelection
+        else {
+            let decision = try ModelPolicyRouter()
+                .decide(
+                    routeRequest(
+                        meetingID:
+                            context.plan.meetingID,
+                        capability: .transcription,
+                        classification:
+                            context.plan
+                            .dataClassification,
+                        categories: [.canonicalAudio],
+                        localModelAvailable: false
+                    )
+                )
+            return TranscriptRouteReview(
+                transcription: decision,
+                translation: nil,
+                selection: nil
+            )
+        }
+        let speechDecision: ModelRouteDecision
+        let remoteConfiguration:
+            RemoteProviderConfiguration?
+        let intelligenceRevision: UInt64?
+        if selection.providerIdentifier
+            == "apple-speech"
+        {
+            guard selection.modelIdentifier
+                    == "speech-analyzer-installed"
+            else {
+                throw AppWorkflowError
+                    .speechToTextConfigurationUnavailable
+            }
+            let speechInstalled =
+                await runtime?.transcriptionProvider?
+                .isModelInstalled(
+                    for: submission.sourceLanguage
+                ) ?? false
+            speechDecision = try ModelPolicyRouter()
+                .decide(
+                    routeRequest(
+                        meetingID:
+                            context.plan.meetingID,
+                        capability: .transcription,
+                        classification:
+                            context.plan
+                            .dataClassification,
+                        categories: [.canonicalAudio],
+                        localModelAvailable:
+                            speechInstalled
+                    )
+                )
+            remoteConfiguration = nil
+            intelligenceRevision = nil
+        } else {
+            let resolved =
+                try remoteSpeechConfiguration(
+                    selection: selection
+                )
+            let securityPolicy =
+                try securityPolicySnapshot(
+                    meetingID:
+                        context.plan.meetingID
+                )
+            guard let securityPolicy else {
+                throw AppWorkflowError
+                    .remoteAudioAuthorizationRequired
+            }
+            let request = try ModelRouteRequest(
+                capability: .transcription,
+                dataClassification:
+                    context.plan.dataClassification,
+                offlineMode: false,
+                organizationAllowsExternalProcessing:
+                    securityPolicy
+                    .externalProcessingAllowed,
+                deploymentEnvironment:
+                    .production,
+                destination: .approvedProvider(
+                    identifier:
+                        resolved.configuration
+                        .identifier
+                ),
+                retentionPolicy:
+                    .approvedProviderRetention,
+                dataCategories: [.canonicalAudio],
+                visibleUserAuthorization:
+                    submission
+                    .visibleRemoteAudioAuthorization,
+                localModelAvailable: false,
+                securityPolicy: securityPolicy
+            )
+            if submission
+                .visibleRemoteAudioAuthorization
+            {
+                speechDecision = try ModelPolicyRouter()
+                    .authorizeExternal(
+                        request,
+                        expectedProviderIdentifier:
+                            resolved.configuration
+                            .identifier
+                    ).decision
+            } else {
+                speechDecision =
+                    try ModelPolicyRouter()
+                    .decide(request)
+            }
+            remoteConfiguration =
+                resolved.configuration
+            intelligenceRevision =
+                resolved.revision
+        }
         let translationDecision: ModelRouteDecision?
         if let target = submission.targetLanguage {
             let translationInstalled = await runtime?.translationProvider?.isModelInstalled(
                     source: submission.sourceLanguage,
                     target: target
                 ) ?? false
-            let installed = speechDecision.route == .appleOnDevice && translationInstalled
             translationDecision = try ModelPolicyRouter().decide(
                 routeRequest(
                     meetingID: context.plan.meetingID,
                     capability: .translation,
                     classification: context.plan.dataClassification,
                     categories: [.transcriptText],
-                    localModelAvailable: installed
+                    localModelAvailable:
+                        translationInstalled
                 )
             )
         } else {
@@ -520,8 +1447,40 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         }
         return TranscriptRouteReview(
             transcription: speechDecision,
-            translation: translationDecision
+            translation: translationDecision,
+            selection: selection,
+            intelligenceConfigurationRevision:
+                intelligenceRevision,
+            remoteProviderConfiguration:
+                remoteConfiguration
         )
+    }
+
+    func meetingSpeechToTextRoute(
+        canonicalJobID: JobID
+    ) async throws -> MeetingSpeechToTextRouteV1? {
+        guard let runtime else {
+            throw AppWorkflowError.workspaceRequired
+        }
+        let context = try await canonicalContext(
+            jobID: canonicalJobID
+        )
+        if let active = try runtime.store
+            .activeRevisionState(
+                MeetingProfileV1.self,
+                logicalID: context.plan.meetingID
+            )?.revision
+        {
+            return active.speechToTextRoute
+        }
+        let revisions = try runtime.store.revisions(
+            MeetingProfileV1.self,
+            logicalID: context.plan.meetingID
+        )
+        guard revisions.count == 1 else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+        return revisions[0].speechToTextRoute
     }
 
     func startTranscript(
@@ -534,10 +1493,18 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             canonicalJobID: canonicalJobID,
             submission: submission
         )
-        guard route.isOnDeviceReady,
-              runtime.transcriptionProvider != nil,
+        guard route.isReady,
+              let selection = route.selection,
+              route.remoteProviderConfiguration != nil
+                || runtime.transcriptionProvider != nil,
               submission.targetLanguage == nil || runtime.translationProvider != nil
-        else { throw AppWorkflowError.onDeviceModelUnavailable }
+        else {
+            throw route.selection == nil
+                ? AppWorkflowError
+                    .speechToTextNotConfigured
+                : AppWorkflowError
+                    .onDeviceModelUnavailable
+        }
         let plan = try TranscriptPipelineJobPlan(
             meetingID: context.plan.meetingID,
             canonicalSourceRevision: context.canonicalReference,
@@ -548,15 +1515,57 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             dataClassification: context.plan.dataClassification,
             createdAt: try currentInstant(),
             transcriptionRoute: route.transcription,
+            transcriptionSelection: selection,
+            remoteProviderConfiguration:
+                route.remoteProviderConfiguration,
+            intelligenceConfigurationRevision:
+                route.intelligenceConfigurationRevision,
             translationRoute: route.translation
         )
-        let record = try await runtime.manager.enqueue(
-            TranscriptPipelineJobFactory().request(
+        let jobID = JobID(UUID())
+        let request =
+            try TranscriptPipelineJobFactory()
+            .request(
                 plan: plan,
-                requestedBy: JobRequester("meetingbuddy-app")
+                jobID: jobID,
+                requestedBy:
+                    JobRequester(
+                        "meetingbuddy-app"
+                    ),
+                maximumRetryCount:
+                    plan.remoteProviderConfiguration
+                        == nil
+                    ? 2
+                    : 0
             )
-        )
-        return MediaJobReview(record: record)
+        if plan.remoteProviderConfiguration
+            != nil
+        {
+            try await runtime
+                .remoteTranscriptionAuthorization
+                .register(
+                    jobID: jobID,
+                    plan: plan
+                )
+        }
+        do {
+            let record =
+                try await runtime.manager
+                .enqueue(request)
+            if record.jobID != jobID {
+                await runtime
+                    .remoteTranscriptionAuthorization
+                    .finish(jobID: jobID)
+            }
+            return MediaJobReview(
+                record: record
+            )
+        } catch {
+            await runtime
+                .remoteTranscriptionAuthorization
+                .finish(jobID: jobID)
+            throw error
+        }
     }
 
     func publishManualTranscript(
@@ -1211,7 +2220,23 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         } else {
             recoveredSession = nil
         }
-        let visibleSession = sessions.first ?? recoveredSession
+        let completedAwaitingProcessing:
+            RecordingSessionSnapshot?
+        if sessions.first == nil,
+           recoveredSession == nil
+        {
+            completedAwaitingProcessing =
+                try await latestCompletedRecordingAwaitingProcessing(
+                    runtime: runtime
+                )
+        } else {
+            completedAwaitingProcessing =
+                nil
+        }
+        let visibleSession =
+            sessions.first
+            ?? recoveredSession
+            ?? completedAwaitingProcessing
         let recoverable: RecordingSessionReview?
         if let session = visibleSession {
             recoverable = try await recordingReview(snapshot: session, runtime: runtime)
@@ -1223,6 +2248,80 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             microphones: try await runtime.captureProvider.microphones(),
             recoverableSession: recoverable
         )
+    }
+
+    private func latestCompletedRecordingAwaitingProcessing(
+        runtime: WorkspaceRuntime
+    ) async throws -> RecordingSessionSnapshot? {
+        let records =
+            try await runtime.manager.jobs()
+        let canonicalMeetingIDs =
+            Set(
+                records.compactMap {
+                    $0.jobType
+                        == MediaJobTypes
+                        .canonicalAudio
+                        ? $0.meetingID
+                        : nil
+                }
+            )
+        let completedRecordingJobs =
+            records.filter {
+                $0.jobType
+                    == MediaJobTypes
+                    .recordingCapture
+                    && $0.state == .succeeded
+                    && !$0.outputRevisionIDs
+                        .isEmpty
+                    && $0.meetingID.map {
+                        !canonicalMeetingIDs
+                            .contains($0)
+                    } == true
+            }
+        var candidates:
+            [(JobRecord, RecordingSessionSnapshot)] = []
+        candidates.reserveCapacity(
+            completedRecordingJobs.count
+        )
+        for record in completedRecordingJobs {
+            let plan =
+                try RecordingCaptureJobPlan
+                .decode(
+                    from: record.inputPayload
+                )
+            guard
+                record.jobID
+                    == plan.intent.jobID,
+                record.meetingID
+                    == plan.intent.meetingID,
+                record.outputRevisionIDs
+                    == (try plan
+                        .completedOutputRevisions),
+                let snapshot =
+                    try await runtime.store
+                    .session(
+                        plan.intent.sessionID
+                    ),
+                snapshot.intent == plan.intent,
+                snapshot.state == .completed
+            else {
+                throw AppWorkflowError
+                    .workspaceHealthFailed
+            }
+            candidates.append(
+                (record, snapshot)
+            )
+        }
+        return candidates.max {
+            if $0.0.createdAt
+                != $1.0.createdAt
+            {
+                return $0.0.createdAt
+                    < $1.0.createdAt
+            }
+            return $0.0.jobID
+                < $1.0.jobID
+        }?.1
     }
 
     func startRecording(
@@ -1339,17 +2438,39 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         )
 
         let createdAt = try currentInstant()
+        let approvals =
+            try meetingProviderApprovals(
+                codexTextProcessingAllowed:
+                    submission
+                    .codexTextProcessingAllowed,
+                transcriptionSelection:
+                    submission
+                    .transcriptionSelection,
+                remoteSpeechToTextAllowed:
+                    submission
+                    .remoteSpeechToTextAllowed,
+                classification:
+                    submission.dataClassification
+            )
         let meeting = try meetingProfile(
             title: title,
             classification: submission.dataClassification,
             language: submission.language,
             workspaceID: runtime.descriptor.manifest.workspaceID,
+            approvedExternalProviderIdentifiers:
+                approvals
+                .approvedExternalProviderIdentifiers,
+            speechToTextRoute:
+                approvals.speechToTextRoute,
             createdAt: createdAt
         )
         let policy = try persistMeetingAndDefaultPolicy(
             meeting,
             createdAt: createdAt,
-            runtime: runtime
+            runtime: runtime,
+            approvedExternalProviderIdentifiers:
+                approvals
+                .approvedExternalProviderIdentifiers
         )
         let policySnapshot = try RecordingPolicySnapshot(
             sensitivityLabelRevision: semanticReference(policy.sensitivityLabel),
@@ -1611,6 +2732,113 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         throw AppWorkflowError.recordingUnavailable
     }
 
+    func processCompletedRecording(
+        jobID: JobID,
+        trackID: RecordingTrackID
+    ) async throws -> MediaJobReview {
+        guard let runtime else {
+            throw AppWorkflowError.workspaceRequired
+        }
+        guard let snapshot =
+                try await runtime.store.session(
+                    jobID: jobID
+                ),
+              snapshot.state == .completed
+        else {
+            throw AppWorkflowError
+                .recordingUnavailable
+        }
+        let tracks =
+            try await completedRecordingTracks(
+                snapshot: snapshot,
+                runtime: runtime
+            )
+        guard let selected =
+                tracks.first(where: {
+                    $0.trackID == trackID
+                })
+        else {
+            throw AppWorkflowError
+                .recordingUnavailable
+        }
+
+        let existing = try await runtime
+            .manager.jobs()
+            .filter {
+                $0.jobType
+                    == MediaJobTypes
+                    .canonicalAudio
+                    && $0.meetingID
+                        == snapshot
+                        .intent.meetingID
+            }
+        guard existing.count <= 1 else {
+            throw AppWorkflowError
+                .workspaceHealthFailed
+        }
+        if let record = existing.first {
+            let plan =
+                try CanonicalAudioJobPlan.decode(
+                    from: record.inputPayload
+                )
+            guard
+                plan.meetingID
+                    == snapshot.intent.meetingID,
+                plan.sourceRevision
+                    == selected.sourceRevision,
+                plan.selectedTrack
+                    == selected
+                    .mediaTrackIdentifier,
+                plan.speechSourceKind
+                    == selected
+                    .speechSourceKind,
+                plan.expectedDurationFrames
+                    == selected
+                    .durationFrameCount,
+                plan.dataClassification
+                    == snapshot.intent.policy
+                    .dataClassification
+            else {
+                throw AppWorkflowError
+                    .workspaceHealthFailed
+            }
+            return MediaJobReview(
+                record: record
+            )
+        }
+
+        let plan = try CanonicalAudioJobPlan(
+            sourceRevision:
+                selected.sourceRevision,
+            selectedTrack:
+                selected.mediaTrackIdentifier,
+            speechSourceKind:
+                selected.speechSourceKind,
+            meetingID:
+                snapshot.intent.meetingID,
+            createdAt: try currentInstant(),
+            dataClassification:
+                snapshot.intent.policy
+                .dataClassification,
+            language: selected.language,
+            expectedDurationFrames:
+                selected.durationFrameCount
+        )
+        return MediaJobReview(
+            record:
+                try await runtime.manager.enqueue(
+                    CanonicalAudioJobFactory()
+                        .request(
+                            plan: plan,
+                            requestedBy:
+                                JobRequester(
+                                    "meetingbuddy-app"
+                                )
+                        )
+                )
+        )
+    }
+
     func fetchUNWebTVMetadata(
         url: String,
         explicitNetworkAuthorization: Bool
@@ -1627,6 +2855,168 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         } catch {
             throw AppWorkflowError.webMetadataUnavailable
         }
+    }
+
+    func codexTurnRequest(
+        canonicalJobID: JobID,
+        selectedSegmentIDs: [TranscriptSegmentID],
+        prompt: String,
+        visibleUserAuthorization: Bool
+    ) async throws -> CodexMeetingTurnRequest {
+        guard let runtime else {
+            throw AppWorkflowError.workspaceRequired
+        }
+        let canonical = try await canonicalContext(
+            jobID: canonicalJobID
+        )
+        let meetingID = canonical.plan.meetingID
+        guard let transcript = try runtime.store
+            .activeTranscriptReview(meetingID: meetingID),
+              transcript.manifest.status == .published,
+              !selectedSegmentIDs.isEmpty,
+              Set(selectedSegmentIDs).count
+                  == selectedSegmentIDs.count
+        else {
+            throw AppWorkflowError.codexContextUnavailable
+        }
+        let selected = transcript.transcriptSegments.filter {
+            selectedSegmentIDs.contains($0.segmentID)
+        }
+        guard selected.count == selectedSegmentIDs.count else {
+            throw AppWorkflowError.codexContextUnavailable
+        }
+
+        let meetingState = try runtime.store.activeRevisionState(
+            MeetingProfileV1.self,
+            logicalID: meetingID
+        )
+        let meeting: MeetingProfileV1
+        if let meetingState {
+            meeting = meetingState.revision
+        } else {
+            let revisions = try runtime.store.revisions(
+                MeetingProfileV1.self,
+                logicalID: meetingID
+            )
+            guard revisions.count == 1,
+                  let only = revisions.first
+            else {
+                throw AppWorkflowError.codexContextUnavailable
+            }
+            meeting = only
+        }
+        let labelID = try SensitivityLabelID(
+            validating: meetingID.canonicalString
+        )
+        let policyID = try AccessPolicyID(
+            validating: meetingID.canonicalString
+        )
+        guard let sensitivityLabel = try runtime.store
+            .activeRevisionState(
+                SensitivityLabelV1.self,
+                logicalID: labelID
+            )?.revision,
+              let accessPolicy = try runtime.store
+                .activeRevisionState(
+                    AccessPolicyV1.self,
+                    logicalID: policyID
+                )?.revision,
+              let securityPolicy = try securityPolicySnapshot(
+                meetingID: meetingID
+              )
+        else {
+            throw AppWorkflowError.codexContextUnavailable
+        }
+        let routingContext = try TaskRoutingSecurityContext(
+            meeting: meeting,
+            sensitivityLabel: sensitivityLabel,
+            accessPolicy: accessPolicy,
+            securityPolicy: securityPolicy
+        )
+        let selection = try ProviderModelSelection(
+            providerIdentifier:
+                CodexTextExecutionAuthorization
+                .providerIdentifier,
+            modelIdentifier: "codex-default"
+        )
+        let profile = try TaskRoutingProfile(
+            identifier: "v4-codex-text",
+            displayName: "Codex Text",
+            scope: .global,
+            routes: [
+                TaskRoutePreference(
+                    task: .meetingChat,
+                    routeOverride: .selection(
+                        primary: selection,
+                        fallback: nil
+                    )
+                )
+            ]
+        )
+        let resolution = TaskRoutingResolver().resolve(
+            task: .meetingChat,
+            scopeStack: try TaskRoutingScopeStack(
+                securityContext: routingContext,
+                global: profile
+            ),
+            registry: try BlueMinutesBuiltInProviders.registry(),
+            runtime: try ProviderRuntimeRegistry(
+                snapshots: [
+                    ProviderRuntimeSnapshot(
+                        providerIdentifier:
+                            CodexTextExecutionAuthorization
+                            .providerIdentifier,
+                        modelIdentifier: "codex-default",
+                        state: .ready
+                    )
+                ]
+            )
+        )
+        guard case let .requiresExecutionAuthorization(candidate) =
+            resolution
+        else {
+            throw AppWorkflowError.codexContextUnavailable
+        }
+        let routeRequest = try ModelRouteRequest(
+            capability: .analysis,
+            dataClassification:
+                securityPolicy.effectiveClassification,
+            offlineMode: false,
+            organizationAllowsExternalProcessing:
+                accessPolicy
+                .organizationAllowsExternalProcessing,
+            deploymentEnvironment: .production,
+            destination: .approvedProvider(
+                identifier:
+                    CodexTextExecutionAuthorization
+                    .providerIdentifier
+            ),
+            retentionPolicy: .noProviderRetention,
+            dataCategories: [
+                .userPromptText,
+                .transcriptText,
+                .evidenceIdentifiers
+            ],
+            visibleUserAuthorization:
+                visibleUserAuthorization,
+            localModelAvailable: false,
+            securityPolicy: securityPolicy
+        )
+        let authorization =
+            try CodexTextExecutionAuthorizationFactory()
+            .authorize(
+                candidate: candidate,
+                request: routeRequest
+            )
+        let context = try CodexMeetingTextContextFactory().make(
+            authorization: authorization,
+            selectedSegments: selected
+        )
+        return try CodexMeetingTurnRequest(
+            authorization: authorization,
+            context: context,
+            prompt: prompt
+        )
     }
 
     private func recordingReview(
@@ -1650,6 +3040,13 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         } else {
             safeReason = nil
         }
+        let completedTracks =
+            snapshot.state == .completed
+            ? try await completedRecordingTracks(
+                snapshot: snapshot,
+                runtime: runtime
+            )
+            : []
         return RecordingSessionReview(
             sessionID: snapshot.intent.sessionID,
             jobID: snapshot.intent.jobID,
@@ -1661,14 +3058,245 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             durableThroughNanoseconds: checkpoint?.tracks
                 .map(\.lastCoveredMediaRange.endNanoseconds).max(),
             knownGapCount: gapCount,
-            safeReason: safeReason
+            safeReason: safeReason,
+            completedTracks:
+                completedTracks
         )
+    }
+
+    private func completedRecordingTracks(
+        snapshot: RecordingSessionSnapshot,
+        runtime: WorkspaceRuntime
+    ) async throws
+        -> [CompletedRecordingTrackReview]
+    {
+        guard snapshot.state == .completed
+        else {
+            return []
+        }
+        let publication =
+            snapshot.intent.publicationPlan
+        let manifestReference =
+            try publication.manifest
+            .revisionReference
+        guard
+            let manifestSource =
+                try runtime.store.sourceAsset(
+                    revisionID:
+                        publication.manifest
+                        .revisionID
+                ),
+            manifestSource.assetID
+                == publication.manifest
+                .assetID,
+            manifestSource.meetingID
+                == snapshot.intent.meetingID,
+            manifestSource.assetType
+                == .document,
+            manifestSource.originType
+                == .generated,
+            manifestSource.revision
+                .lifecycleStatus
+                == .published,
+            manifestSource.revision
+                .validationState
+                == .valid,
+            manifestSource.byteSize
+                <= 16 * 1_024 * 1_024,
+            let manifestStorage =
+                manifestSource
+                .managedStorageReference
+        else {
+            throw AppWorkflowError
+                .workspaceHealthFailed
+        }
+        let manifestURL =
+            try runtime.fileAccess
+            .verifiedFileURL(
+                for: manifestStorage
+            )
+        let manifestPayload =
+            try Data(
+                contentsOf: manifestURL,
+                options: .mappedIfSafe
+            )
+        let manifest =
+            try JSONDecoder().decode(
+                CaptureManifestV1.self,
+                from: manifestPayload
+            )
+        guard
+            manifestPayload
+                == (try manifest
+                    .canonicalPayload()),
+            manifest.sessionID
+                == snapshot.intent.sessionID,
+            manifest.meetingID
+                == snapshot.intent.meetingID,
+            manifest.terminalState
+                == .completed,
+            manifest.captureMode
+                == snapshot.intent.mode,
+            manifest.tracks.count
+                == snapshot.intent
+                .requestedTracks.count
+        else {
+            throw AppWorkflowError
+                .workspaceHealthFailed
+        }
+
+        var reviews:
+            [CompletedRecordingTrackReview] = []
+        reviews.reserveCapacity(
+            manifest.tracks.count
+        )
+        for request in
+            snapshot.intent.requestedTracks
+        {
+            guard
+                let trackPlan =
+                    publication.tracks
+                    .first(where: {
+                        $0.trackID
+                            == request.trackID
+                    }),
+                let manifestTrack =
+                    manifest.tracks
+                    .first(where: {
+                        $0.trackID
+                            == request.trackID
+                    }),
+                manifestTrack.kind
+                    == request.kind,
+                manifestTrack
+                    .speechSourceKind
+                    == request
+                    .speechSourceKind,
+                manifestTrack.language
+                    == request.language,
+                manifestTrack
+                    .finalFrameCount > 0,
+                let source =
+                    try runtime.store
+                    .sourceAsset(
+                        revisionID:
+                            trackPlan.asset
+                            .revisionID
+                    ),
+                source.assetID
+                    == trackPlan.asset
+                    .assetID,
+                source.meetingID
+                    == snapshot.intent
+                    .meetingID,
+                source.assetType == .audio,
+                source.originType
+                    == .authorizedCapture,
+                source.revision
+                    .lifecycleStatus
+                    == .published,
+                source.revision
+                    .validationState
+                    == .valid,
+                source.revision
+                    .sourceAssetRevisions
+                    == [manifestReference],
+                source.sourceContentHash
+                    == manifestTrack
+                    .finalContentHash,
+                source.byteSize
+                    == manifestTrack
+                    .finalByteSize,
+                source.media?
+                    .speechSourceKind
+                    == request
+                    .speechSourceKind,
+                source.media?
+                    .languageTrack
+                    == request.language,
+                let storage =
+                    source
+                    .managedStorageReference
+            else {
+                throw AppWorkflowError
+                    .workspaceHealthFailed
+            }
+            let sourceURL =
+                try runtime.fileAccess
+                .verifiedFileURL(
+                    for: storage
+                )
+            let mediaTracks =
+                try await runtime.processor
+                .audioTracks(in: sourceURL)
+            guard mediaTracks.count == 1,
+                  let mediaTrack =
+                    mediaTracks.first,
+                  mediaTrack
+                    .durationFrameCount > 0,
+                  mediaTrack
+                    .sourceSampleRateHertz
+                    .map({
+                        $0
+                            == manifestTrack
+                            .format
+                            .sampleRateHertz
+                    }) ?? true,
+                  mediaTrack
+                    .sourceChannelCount
+                    .map({
+                        $0
+                            == manifestTrack
+                            .format
+                            .channelCount
+                    }) ?? true
+            else {
+                throw AppWorkflowError
+                    .workspaceHealthFailed
+            }
+            reviews.append(
+                CompletedRecordingTrackReview(
+                    trackID:
+                        request.trackID,
+                    kind: request.kind,
+                    sourceRevision:
+                        try trackPlan.asset
+                        .revisionReference,
+                    mediaTrackIdentifier:
+                        mediaTrack
+                        .trackIdentifier,
+                    durationFrameCount:
+                        mediaTrack
+                        .durationFrameCount,
+                    speechSourceKind:
+                        request
+                        .speechSourceKind,
+                    language:
+                        request.language
+                )
+            )
+        }
+        guard Set(reviews.map(\.trackID))
+                == Set(
+                    snapshot.intent
+                        .requestedTracks
+                        .map(\.trackID)
+                )
+        else {
+            throw AppWorkflowError
+                .workspaceHealthFailed
+        }
+        return reviews.sorted {
+            $0.trackID < $1.trackID
+        }
     }
 
     private func persistMeetingAndDefaultPolicy(
         _ meeting: MeetingProfileV1,
         createdAt: UTCInstant,
-        runtime: WorkspaceRuntime
+        runtime: WorkspaceRuntime,
+        approvedExternalProviderIdentifiers:
+            [String]
     ) throws -> LocalSecurityPolicyBundle {
         try runtime.store.insert(meeting)
         let meetingUUID = try requiredUUID(meeting.meetingID.canonicalString)
@@ -1678,7 +3306,9 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             sensitivityLabelRevisionID: RevisionID(UUID()),
             accessPolicyID: AccessPolicyID(meetingUUID),
             accessPolicyRevisionID: RevisionID(UUID()),
-            createdAt: createdAt
+            createdAt: createdAt,
+            approvedExternalProviderIdentifiers:
+                approvedExternalProviderIdentifiers
         )
         try runtime.store.insert(policy.sensitivityLabel)
         _ = try runtime.store.activate(
@@ -1743,6 +3373,91 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         pendingSourceURL = nil
         pendingSourceDidStartScope = false
         pendingInspection = nil
+    }
+
+    private func newestRecord(
+        in records: [JobRecord]
+    ) -> JobRecord? {
+        records.max { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.jobID < rhs.jobID
+        }
+    }
+
+    private func restoredMeetingProfile(
+        meetingID: MeetingID,
+        runtime: WorkspaceRuntime
+    ) throws -> MeetingProfileV1 {
+        if let active = try runtime.store
+            .activeRevisionState(
+                MeetingProfileV1.self,
+                logicalID: meetingID
+            )?
+            .revision
+        {
+            return active
+        }
+        let revisions = try runtime.store.revisions(
+            MeetingProfileV1.self,
+            logicalID: meetingID
+        )
+        guard revisions.count == 1,
+              let only = revisions.first
+        else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+        return only
+    }
+
+    private func restoredImportedSource(
+        plan: CanonicalAudioJobPlan,
+        runtime: WorkspaceRuntime
+    ) throws -> ImportedSourceReview? {
+        guard let sourceAsset = try runtime.store
+            .sourceAsset(
+                revisionID:
+                    plan.sourceRevision.revisionID
+            ),
+              sourceAsset.assetID
+                .canonicalString
+                == plan.sourceRevision.logicalID
+                .canonicalString,
+              sourceAsset.revision.revisionID
+                == plan.sourceRevision.revisionID,
+              sourceAsset.meetingID == plan.meetingID,
+              let media = sourceAsset.media,
+              media.speechSourceKind
+                == plan.speechSourceKind
+        else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+        guard sourceAsset.originType == .localImport else {
+            return nil
+        }
+        guard let formatIdentifier =
+                media.containerFormat,
+              let format = ApprovedMediaFormat(
+                  rawValue: formatIdentifier
+              ),
+              format.assetType == sourceAsset.assetType
+        else {
+            throw AppWorkflowError.workspaceHealthFailed
+        }
+        return ImportedSourceReview(
+            assetID: sourceAsset.assetID,
+            revisionID:
+                sourceAsset.revision.revisionID,
+            sourceHash: sourceAsset.sourceContentHash,
+            byteSize: sourceAsset.byteSize,
+            format: format,
+            durationFrameCount:
+                plan.expectedDurationFrames,
+            selectedTrack: plan.selectedTrack,
+            speechSourceKind:
+                plan.speechSourceKind
+        )
     }
 
     private func currentInstant() throws -> UTCInstant {
@@ -2064,9 +3779,25 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         classification: DataClassification,
         language: LanguageTag?,
         workspaceID: WorkspaceID,
+        approvedExternalProviderIdentifiers:
+            [String],
+        speechToTextRoute:
+            MeetingSpeechToTextRouteV1,
         createdAt: UTCInstant
     ) throws -> MeetingProfileV1 {
-        try MeetingProfileV1(
+        let providers =
+            approvedExternalProviderIdentifiers
+            .sorted()
+        guard Set(providers).count == providers.count,
+              providers.isEmpty
+                || classification.restrictionRank
+                    < DataClassification.sensitive
+                    .restrictionRank
+        else {
+            throw AppWorkflowError
+                .externalTextAuthorizationUnavailable
+        }
+        return try MeetingProfileV1(
             revision: RevisionEnvelope(
                 logicalID: MeetingID(UUID()),
                 revisionID: RevisionID(UUID()),
@@ -2080,10 +3811,169 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             title: title,
             sourceLanguages: language.map { [$0] } ?? [],
             outputLanguage: language ?? LanguageTag("en"),
-            cloudProcessingPolicy: .localOnly,
+            cloudProcessingPolicy:
+                !providers.isEmpty
+                ? .approvedCloudAllowed
+                : .localOnly,
+            speechToTextRoute:
+                speechToTextRoute,
             workspaceID: workspaceID,
             reviewStatus: .unreviewed,
             userConfirmed: false
+        )
+    }
+
+    private struct MeetingProviderApprovals {
+        let approvedExternalProviderIdentifiers:
+            [String]
+        let speechToTextRoute:
+            MeetingSpeechToTextRouteV1
+    }
+
+    private func meetingProviderApprovals(
+        codexTextProcessingAllowed: Bool,
+        transcriptionSelection:
+            ProviderModelSelectionRecord?,
+        remoteSpeechToTextAllowed: Bool,
+        classification: DataClassification
+    ) throws -> MeetingProviderApprovals {
+        var identifiers: [String] = []
+        if codexTextProcessingAllowed {
+            identifiers.append(
+                CodexTextExecutionAuthorization
+                    .providerIdentifier
+            )
+        }
+        guard let selection =
+                transcriptionSelection
+        else {
+            return try MeetingProviderApprovals(
+                approvedExternalProviderIdentifiers:
+                    identifiers.sorted(),
+                speechToTextRoute:
+                    MeetingSpeechToTextRouteV1(
+                        kind: .recordOnly
+                    )
+            )
+        }
+        if selection.providerIdentifier
+            == "apple-speech"
+        {
+            guard selection.modelIdentifier
+                    == "speech-analyzer-installed"
+            else {
+                throw AppWorkflowError
+                    .speechToTextConfigurationUnavailable
+            }
+            return try MeetingProviderApprovals(
+                approvedExternalProviderIdentifiers:
+                    identifiers.sorted(),
+                speechToTextRoute:
+                    MeetingSpeechToTextRouteV1(
+                        kind: .local,
+                        providerIdentifier:
+                            selection
+                            .providerIdentifier,
+                        modelIdentifier:
+                            selection
+                            .modelIdentifier
+                    )
+            )
+        }
+        guard remoteSpeechToTextAllowed,
+              classification.restrictionRank
+                  < DataClassification.sensitive
+                  .restrictionRank
+        else {
+            throw AppWorkflowError
+                .remoteAudioAuthorizationRequired
+        }
+        let state: IntelligenceConfigurationState
+        do {
+            state = try intelligenceRepository.load()
+        } catch {
+            throw AppWorkflowError
+                .speechToTextConfigurationUnavailable
+        }
+        guard let provider = state.providers.first(
+            where: {
+                $0.identifier
+                    == selection.providerIdentifier
+                    && $0.modelIdentifier
+                        == selection.modelIdentifier
+            }
+        ),
+            provider.purpose == .speechToText,
+            provider.connectionState == .ready,
+            provider.capabilities.contains(
+                .speechToTextBatch
+            ),
+            try secretStore.read(
+                provider.secretIdentifier
+            ) != nil
+        else {
+            throw AppWorkflowError
+                .speechToTextConfigurationUnavailable
+        }
+        identifiers.append(provider.identifier)
+        return try MeetingProviderApprovals(
+            approvedExternalProviderIdentifiers:
+                Array(Set(identifiers))
+                .sorted(),
+            speechToTextRoute:
+                MeetingSpeechToTextRouteV1(
+                    kind: .approvedRemote,
+                    providerIdentifier:
+                        provider.identifier,
+                    modelIdentifier:
+                        provider.modelIdentifier,
+                    intelligenceConfigurationRevision:
+                        state.revision
+                )
+        )
+    }
+
+    private func remoteSpeechConfiguration(
+        selection: ProviderModelSelectionRecord
+    ) throws -> (
+        configuration: RemoteProviderConfiguration,
+        revision: UInt64
+    ) {
+        let state: IntelligenceConfigurationState
+        do {
+            state = try intelligenceRepository.load()
+        } catch {
+            throw AppWorkflowError
+                .speechToTextConfigurationUnavailable
+        }
+        guard let configuration =
+                state.providers.first(
+                    where: {
+                        $0.identifier
+                            == selection
+                            .providerIdentifier
+                            && $0.modelIdentifier
+                                == selection
+                                .modelIdentifier
+                    }
+                ),
+              configuration.purpose
+                  == .speechToText,
+              configuration.connectionState
+                  == .ready,
+              configuration.capabilities.contains(
+                  .speechToTextBatch
+              ),
+              try secretStore.read(
+                  configuration.secretIdentifier
+              ) != nil
+        else {
+            throw AppWorkflowError
+                .speechToTextConfigurationUnavailable
+        }
+        return (
+            configuration,
+            state.revision
         )
     }
 

@@ -125,6 +125,125 @@ public struct AgendaItem: Codable, Hashable, Sendable, Comparable, DomainValidat
     }
 }
 
+public enum MeetingSpeechToTextRouteKind:
+    String,
+    Codable,
+    Hashable,
+    Sendable
+{
+    case recordOnly = "record_only"
+    case local
+    case approvedRemote = "approved_remote"
+}
+
+/// Meeting-owned STT intent. Credentials and one-time upload authorization are
+/// deliberately excluded; this stores only the exact route identity needed to
+/// explain and restore the meeting workflow.
+public struct MeetingSpeechToTextRouteV1:
+    Codable,
+    Hashable,
+    Sendable,
+    DomainValidatable
+{
+    public let kind: MeetingSpeechToTextRouteKind
+    public let providerIdentifier: String?
+    public let modelIdentifier: String?
+    public let intelligenceConfigurationRevision: UInt64?
+
+    public init(
+        kind: MeetingSpeechToTextRouteKind,
+        providerIdentifier: String? = nil,
+        modelIdentifier: String? = nil,
+        intelligenceConfigurationRevision: UInt64? = nil
+    ) throws {
+        self.kind = kind
+        self.providerIdentifier = providerIdentifier
+        self.modelIdentifier = modelIdentifier
+        self.intelligenceConfigurationRevision =
+            intelligenceConfigurationRevision
+        try validate()
+    }
+
+    public func validationIssues() -> [ValidationIssue] {
+        let hasProvider = providerIdentifier.map(Self.isOpaqueIdentifier) ?? false
+        let hasModel = modelIdentifier.map(Self.isOpaqueIdentifier) ?? false
+        let validShape = switch kind {
+        case .recordOnly:
+            providerIdentifier == nil
+                && modelIdentifier == nil
+                && intelligenceConfigurationRevision == nil
+        case .local:
+            hasProvider
+                && hasModel
+                && intelligenceConfigurationRevision == nil
+        case .approvedRemote:
+            hasProvider
+                && hasModel
+                && (intelligenceConfigurationRevision ?? 0) > 0
+        }
+        guard validShape else {
+            return [
+                ValidationIssue(
+                    code: .inconsistentValue,
+                    path: "speech_to_text_route",
+                    message:
+                        "A meeting STT route must be record-only, one exact local provider/model, or one exact approved remote provider/model and configuration revision."
+                )
+            ]
+        }
+        return []
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(
+            keyedBy: CodingKeys.self
+        )
+        try self.init(
+            kind: container.decode(
+                MeetingSpeechToTextRouteKind.self,
+                forKey: .kind
+            ),
+            providerIdentifier:
+                container.decodeIfPresent(
+                    String.self,
+                    forKey: .providerIdentifier
+                ),
+            modelIdentifier:
+                container.decodeIfPresent(
+                    String.self,
+                    forKey: .modelIdentifier
+                ),
+            intelligenceConfigurationRevision:
+                container.decodeIfPresent(
+                    UInt64.self,
+                    forKey:
+                        .intelligenceConfigurationRevision
+                )
+        )
+    }
+
+    private static func isOpaqueIdentifier(
+        _ value: String
+    ) -> Bool {
+        value == value.meetingBuddyTrimmed
+            && !value.isEmpty
+            && value.utf8.count <= 128
+            && !value.meetingBuddyContainsControlCharacter
+            && !value.contains("/")
+            && !value.contains("\\")
+            && !value.contains(" ")
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case providerIdentifier =
+            "provider_identifier"
+        case modelIdentifier = "model_identifier"
+        case intelligenceConfigurationRevision =
+            "intelligence_configuration_revision"
+    }
+}
+
 /// MeetingProfile.v1 supports deterministic, AI-free meeting intake.
 public struct MeetingProfileV1: SemanticRevisionContract {
     public let revision: RevisionEnvelope<MeetingIDTag>
@@ -138,6 +257,8 @@ public struct MeetingProfileV1: SemanticRevisionContract {
     public let priorityActorIDs: [ActorID]
     public let briefingTemplateID: BriefingTemplateID?
     public let cloudProcessingPolicy: MeetingCloudProcessingPolicy
+    public let speechToTextRoute:
+        MeetingSpeechToTextRouteV1?
     public let workspaceID: WorkspaceID?
     public let reviewStatus: ReviewStatus
     public let userConfirmed: Bool
@@ -154,6 +275,8 @@ public struct MeetingProfileV1: SemanticRevisionContract {
         priorityActorIDs: [ActorID] = [],
         briefingTemplateID: BriefingTemplateID? = nil,
         cloudProcessingPolicy: MeetingCloudProcessingPolicy,
+        speechToTextRoute:
+            MeetingSpeechToTextRouteV1? = nil,
         workspaceID: WorkspaceID? = nil,
         reviewStatus: ReviewStatus,
         userConfirmed: Bool
@@ -169,6 +292,7 @@ public struct MeetingProfileV1: SemanticRevisionContract {
         self.priorityActorIDs = priorityActorIDs
         self.briefingTemplateID = briefingTemplateID
         self.cloudProcessingPolicy = cloudProcessingPolicy
+        self.speechToTextRoute = speechToTextRoute
         self.workspaceID = workspaceID
         self.reviewStatus = reviewStatus
         self.userConfirmed = userConfirmed
@@ -199,6 +323,7 @@ public struct MeetingProfileV1: SemanticRevisionContract {
                 priorityActorIDs: priorityActorIDs,
                 briefingTemplateID: briefingTemplateID,
                 cloudProcessingPolicy: cloudProcessingPolicy,
+                speechToTextRoute: speechToTextRoute,
                 reviewStatus: reviewStatus,
                 userConfirmed: userConfirmed
             )
@@ -236,6 +361,41 @@ public struct MeetingProfileV1: SemanticRevisionContract {
         if !cloudProcessingPolicy.isKnown {
             issues.append(Self.issue(.unsupportedValue, "cloud_processing_policy", "The meeting cloud-processing policy is not supported by this contract version."))
         }
+        if let speechToTextRoute {
+            issues.append(
+                contentsOf:
+                    speechToTextRoute
+                    .validationIssues()
+            )
+            if speechToTextRoute.kind
+                == .approvedRemote
+            {
+                if revision.dataClassification
+                    .restrictionRank
+                    >= DataClassification.sensitive
+                    .restrictionRank
+                {
+                    issues.append(
+                        Self.issue(
+                            .inconsistentValue,
+                            "speech_to_text_route.kind",
+                            "Sensitive and Restricted meetings cannot store a remote STT route."
+                        )
+                    )
+                }
+                if cloudProcessingPolicy
+                    != .approvedCloudAllowed
+                {
+                    issues.append(
+                        Self.issue(
+                            .inconsistentValue,
+                            "cloud_processing_policy",
+                            "An approved remote STT route requires the meeting cloud-processing policy to allow approved providers."
+                        )
+                    )
+                }
+            }
+        }
         issues.append(contentsOf: reviewConfirmationIssues(reviewStatus: reviewStatus, userConfirmed: userConfirmed))
         if userConfirmed, revision.createdBy != .user {
             issues.append(Self.issue(.inconsistentValue, "revision.created_by", "A user-confirmed meeting revision must be created by the user."))
@@ -257,6 +417,11 @@ public struct MeetingProfileV1: SemanticRevisionContract {
         priorityActorIDs = try container.decodeIfPresent([ActorID].self, forKey: .priorityActorIDs) ?? []
         briefingTemplateID = try container.decodeIfPresent(BriefingTemplateID.self, forKey: .briefingTemplateID)
         cloudProcessingPolicy = try container.decode(MeetingCloudProcessingPolicy.self, forKey: .cloudProcessingPolicy)
+        speechToTextRoute =
+            try container.decodeIfPresent(
+                MeetingSpeechToTextRouteV1.self,
+                forKey: .speechToTextRoute
+            )
         workspaceID = try container.decodeIfPresent(WorkspaceID.self, forKey: .workspaceID)
         reviewStatus = try container.decode(ReviewStatus.self, forKey: .reviewStatus)
         userConfirmed = try container.decode(Bool.self, forKey: .userConfirmed)
@@ -284,6 +449,8 @@ public struct MeetingProfileV1: SemanticRevisionContract {
         let priorityActorIDs: [ActorID]
         let briefingTemplateID: BriefingTemplateID?
         let cloudProcessingPolicy: MeetingCloudProcessingPolicy
+        let speechToTextRoute:
+            MeetingSpeechToTextRouteV1?
         let reviewStatus: ReviewStatus
         let userConfirmed: Bool
 
@@ -304,6 +471,8 @@ public struct MeetingProfileV1: SemanticRevisionContract {
             case priorityActorIDs = "priority_actor_ids"
             case briefingTemplateID = "briefing_template_id"
             case cloudProcessingPolicy = "cloud_processing_policy"
+            case speechToTextRoute =
+                "speech_to_text_route"
             case reviewStatus = "review_status"
             case userConfirmed = "user_confirmed"
         }
@@ -321,6 +490,8 @@ public struct MeetingProfileV1: SemanticRevisionContract {
         case priorityActorIDs = "priority_actor_ids"
         case briefingTemplateID = "briefing_template_id"
         case cloudProcessingPolicy = "cloud_processing_policy"
+        case speechToTextRoute =
+            "speech_to_text_route"
         case workspaceID = "workspace_id"
         case reviewStatus = "review_status"
         case userConfirmed = "user_confirmed"

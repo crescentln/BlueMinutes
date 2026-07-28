@@ -196,12 +196,14 @@ public enum TranscriptSemanticFactory {
         text: String,
         confidence: ConfidenceScore,
         provider: ProviderMetadata,
+        privacyRoute: PrivacyRoute,
         createdAt: UTCInstant,
         classification: DataClassification
     ) throws -> TranscriptSegmentV1 {
         let generation = try generationMetadata(
             provider: provider,
             component: "transcription-provider-output",
+            privacyRoute: privacyRoute,
             createdAt: createdAt
         )
         let draft = try transcript(
@@ -322,6 +324,7 @@ public enum TranscriptSemanticFactory {
         translatedText: String,
         confidence: ConfidenceScore,
         provider: ProviderMetadata,
+        privacyRoute: PrivacyRoute,
         createdAt: UTCInstant,
         classification: DataClassification
     ) throws -> TranslationSegmentV1 {
@@ -332,6 +335,7 @@ public enum TranscriptSemanticFactory {
         let generation = try generationMetadata(
             provider: provider,
             component: "translation-provider-output",
+            privacyRoute: privacyRoute,
             createdAt: createdAt
         )
         let draft = try translation(
@@ -1084,6 +1088,7 @@ public enum TranscriptSemanticFactory {
     private static func generationMetadata(
         provider: ProviderMetadata,
         component: String,
+        privacyRoute: PrivacyRoute,
         createdAt: UTCInstant
     ) throws -> GenerationMetadata {
         try GenerationMetadata(
@@ -1092,7 +1097,7 @@ public enum TranscriptSemanticFactory {
             outputSchemaVersion: .v1,
             templateVersion: "task005b-v1",
             generatedAt: createdAt,
-            privacyRoute: .localOnly
+            privacyRoute: privacyRoute
         )
     }
 

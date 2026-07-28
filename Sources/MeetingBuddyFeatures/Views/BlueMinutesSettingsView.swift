@@ -4,6 +4,7 @@ import SwiftUI
 enum BlueMinutesSettingsTab: Hashable {
     case general
     case appearance
+    case intelligence
     case learnedPreferences
 }
 
@@ -17,10 +18,15 @@ public struct BlueMinutesSettingsView: View {
 
     private let defaults: UserDefaults
     private let store: MediaReviewStore?
+    private let codexStore: CodexConnectionStore?
+    private let intelligenceStore:
+        IntelligenceConfigurationStore?
 
     public init(defaults: UserDefaults = .standard) {
         self.init(
             store: nil,
+            codexStore: nil,
+            intelligenceStore: nil,
             defaults: defaults,
             initialTab: .general
         )
@@ -28,10 +34,15 @@ public struct BlueMinutesSettingsView: View {
 
     public init(
         store: MediaReviewStore,
+        codexStore: CodexConnectionStore? = nil,
+        intelligenceStore:
+            IntelligenceConfigurationStore? = nil,
         defaults: UserDefaults = .standard
     ) {
         self.init(
             store: store,
+            codexStore: codexStore,
+            intelligenceStore: intelligenceStore,
             defaults: defaults,
             initialTab: .general
         )
@@ -43,6 +54,8 @@ public struct BlueMinutesSettingsView: View {
     ) {
         self.init(
             store: nil,
+            codexStore: nil,
+            intelligenceStore: nil,
             defaults: defaults,
             initialTab: initialTab
         )
@@ -50,11 +63,16 @@ public struct BlueMinutesSettingsView: View {
 
     init(
         store: MediaReviewStore?,
+        codexStore: CodexConnectionStore? = nil,
+        intelligenceStore:
+            IntelligenceConfigurationStore? = nil,
         defaults: UserDefaults,
         initialTab: BlueMinutesSettingsTab
     ) {
         self.defaults = defaults
         self.store = store
+        self.codexStore = codexStore
+        self.intelligenceStore = intelligenceStore
         _selectedTab = State(initialValue: initialTab)
         _preferenceEditor = State(
             initialValue:
@@ -105,6 +123,26 @@ public struct BlueMinutesSettingsView: View {
                     )
             }
             .tag(BlueMinutesSettingsTab.appearance)
+
+            if let codexStore,
+               let intelligenceStore
+            {
+                CodexIntelligenceSettingsPane(
+                    codexStore: codexStore,
+                    intelligenceStore:
+                        intelligenceStore
+                )
+                .tabItem {
+                    Label(
+                        "Intelligence",
+                        systemImage: "sparkles"
+                    )
+                    .accessibilityIdentifier(
+                        "blueminutes.settings.tab.intelligence"
+                    )
+                }
+                .tag(BlueMinutesSettingsTab.intelligence)
+            }
 
             if let store {
                 LearnedPreferencesSettingsPane(

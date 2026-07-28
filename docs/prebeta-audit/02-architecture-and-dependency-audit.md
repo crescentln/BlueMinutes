@@ -9,16 +9,17 @@
 | `MeetingBuddyPersistence` | GRDB repositories, workspace files, migration, recovery, export |
 | `MeetingBuddyTasks` | Single task manager, checkpoints, cancellation, retry |
 | `MeetingBuddyMedia` | Native import, capture, canonical audio, exact-host UN metadata |
-| `MeetingBuddyAI` | Apple providers, pipeline jobs, validation, Keychain secret store |
-| `MeetingBuddyFeatures` | SwiftUI presentation, scene state, stores, existing design system |
+| `MeetingBuddyAI` | Apple providers, OpenAI batch STT, Codex app-server transport/session, pipeline jobs, validation, Keychain secret store |
+| `MeetingBuddyFeatures` | SwiftUI presentation, scene state, provider/Codex stores, existing design system |
 | `MeetingBuddyAutomation` | Typed local command boundary, CLI/MCP adapters |
 | `MeetingBuddyApp` | Composition root and application lifecycle |
 
 The boundaries match the modular-monolith invariant. New provider profiles,
 release gates, and routing resolution belong in `MeetingBuddyApplication`.
-Codex transport belongs behind a new application protocol with its concrete
-process implementation in `MeetingBuddyAI`. UI must not start `Process`, query
-SQLite, or handle credentials.
+Codex transport remains behind application contracts with its concrete process
+implementation in `MeetingBuddyAI`. The composition root owns the service;
+SwiftUI observes bounded stores and does not start `Process`, query SQLite, or
+handle credential bytes.
 
 ## Dependency inventory
 
@@ -51,6 +52,22 @@ The Codex vertical slice does not need a new Swift package: Foundation
 app-server protocol are sufficient. A new dependency requires the controller's
 license, privacy, size, update, removal, and rollback note.
 
+## Local diagnostics boundary
+
+The current functional tree uses Apple's existing Unified Logging framework;
+it adds no dependency or outbound telemetry service. Eight fixed categories
+cover Audio Capture, STT, Import, Storage, AI Provider, Licensing, Update, and
+Windowing. Callers can emit only a closed enum of fixed event codes: the logger
+API accepts no meeting title, transcript, identifier, path, URL, credential,
+provider output, or arbitrary text field.
+
+The About window's user-initiated diagnostic copy is a separate bounded report.
+It accepts only length- and character-constrained build/OS metadata plus the
+validated release modes, states explicitly that content, audio metadata,
+credentials, URLs, and paths are absent, and fails closed on unsafe metadata.
+The existing local telemetry policy remains disabled and no-outbound; local
+content-free lifecycle logs do not create a network route.
+
 ## Dead code and duplication
 
 No tracked production target is proven dead by the current static pass.
@@ -70,20 +87,29 @@ Potential duplication to avoid:
 ## Resource and lifecycle findings
 
 - Recording persistence and recovery are strong and extensively tested.
-- Closing the only main window during active recording currently enters
-  termination, conflicting with v4 background-meeting behavior.
-- Apple Speech consumes verified chunks after capture; it is not realtime STT.
-- Provider and long-running work already use async/task boundaries; new process
-  streams require bounded buffering, cancellation, and actor isolation.
+- Active recording now belongs to the app-scoped store. Closing the main window
+  preserves it, and the menu-bar item can reopen or stop/finalize the same
+  session.
+- Verified completed recording tracks can enter the existing canonical-audio
+  and transcript workflow; dual tracks require exact selection.
+- Apple Speech and the optional OpenAI adapter consume verified chunks after
+  capture; neither is labelled realtime STT.
+- Codex and provider streams use bounded queues, cancellation, typed process
+  loss, and actor isolation.
+- Core request and window lifecycle boundaries now emit fixed content-free
+  local diagnostics, and the staged-app smoke confirmed the expected
+  start/window/quit events without opening a socket.
 
 ## Refactoring guidance
 
-1. Bridge product routing to existing execution contracts in composition.
-2. Add persistence only after the routing value model is frozen.
-3. Implement Codex transport behind a fakeable protocol and keep process
-   lifecycle out of SwiftUI.
-4. Move active meeting lifetime to an app-owned controller before adding a
-   menu-bar surface.
+1. Keep product routing bridged to existing execution contracts in composition.
+2. Preserve the revisioned non-secret configuration repository and Keychain
+   separation; do not move provider secrets into workspace schema.
+3. Keep Codex transport behind its fakeable protocol and process lifecycle out
+   of SwiftUI.
+4. Extend the app-owned recording lifecycle only with explicit source-epoch and
+   recovery contracts.
 5. Measure before splitting modules or introducing dependencies.
 
-No dependency was added by the foundation slice.
+No external dependency was added by either the foundation or current functional
+slice.

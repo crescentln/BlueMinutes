@@ -8,6 +8,7 @@ enum BlueMinutesIconRole: CaseIterable, Sendable {
     case recording
     case webMetadata
     case transcript
+    case assistant
     case analysis
     case briefing
     case history
@@ -34,6 +35,8 @@ enum BlueMinutesIconRole: CaseIterable, Sendable {
             "link.badge.plus"
         case .transcript:
             "text.bubble"
+        case .assistant:
+            "sparkles"
         case .analysis:
             "checklist.checked"
         case .briefing:
@@ -67,6 +70,8 @@ enum BlueMinutesIconRole: CaseIterable, Sendable {
             "link"
         case .transcript:
             "text.alignleft"
+        case .assistant:
+            "bubble.left"
         case .analysis, .success:
             "checkmark.circle"
         case .briefing:

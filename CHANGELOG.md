@@ -6,7 +6,86 @@ All notable project changes are documented here. The format follows
 
 ## [Unreleased]
 
-No notable changes yet.
+Target application candidate: `0.4.0` (build `4`). This is not yet a tagged
+GitHub Release.
+
+### Added
+
+- Capability-based Intelligence configuration with separate provider profiles,
+  task routing, workspace and meeting overrides, explicit Record Only, and
+  immutable meeting-route snapshots.
+- A bounded Codex subscription text-assistance vertical slice using a
+  compatible user-installed official app-server runtime, selected transcript
+  text, account/quota state, ephemeral thread lifecycle, and one
+  application-owned read-only transcript search tool.
+- Independent Apple local and optional OpenAI remote batch STT routes, with
+  Keychain-backed BYOK metadata, connection testing, exact capability checks,
+  and visible per-meeting audio-egress authorization.
+- Recording-to-canonical-audio handoff, app-owned active-session recovery,
+  close/reopen and menu-bar controls, a lightweight New Meeting readiness
+  coordinator, transcript outline/search, and a truthful About surface.
+- The reviewed BlueMinutes logo and application icon supplied for this
+  pre-Beta round, with deterministic hash-bound asset generation.
+
+### Changed
+
+- Advanced the local application and Codex client identity to version `0.4.0`
+  (build `4`) while retaining compatibility-sensitive executable, bundle,
+  database, CLI, MCP, protocol, and serialized identifiers.
+- Reused the existing native components and visual language for every new
+  surface. The separately gated U1 visual redesign remains unstarted.
+- Made missing or disabled STT resolve honestly to Record Only; provider repair
+  suggestions never activate a different data route or cost owner silently.
+
+### Fixed
+
+- Closing the main window no longer discards an active recording session;
+  supported reopen, stop, quit, retained-track, and restart-recovery states are
+  explicit.
+- Transcript outline and bounded search preserve stable selection and evidence
+  references across long documents.
+- Fixed application logs use content-free event codes, and copied diagnostics
+  fail closed against meeting content, credentials, URLs, and filesystem paths.
+- Persistence test workspaces now receive per-run identities so an interrupted
+  test cannot leak prior active-revision pointers into a later run.
+- Failed workspace candidates no longer revoke the active workspace scope or
+  replace its restorable bookmark before recovery succeeds.
+- Persisted queued work no longer replays or strands transient source,
+  capture, or outbound authority after restart.
+
+### Security and privacy
+
+- Sensitive Meetings and no-outbound policy reject Codex, remote STT, remote
+  BYOK text, external research, and cloud fallback in the central resolver.
+- Codex remains text-only, receives no audio or arbitrary path, and runs in an
+  isolated app-owned home with shell, file-change, web, Apps, plugins, MCP,
+  memory, multi-agent, and permission-escalation surfaces disabled.
+- Codex history persistence is disabled; disconnect waits for any in-flight
+  connection, requires confirmed process exit, and fails closed until private
+  runtime state is purged.
+- BYOK secret bytes remain in macOS Keychain. Codex subscription credentials
+  remain under the official runtime's control.
+- Remote-STT authorization is in-memory, exact-job/plan scoped, expires before
+  first processing, is revalidated against current policy before every chunk,
+  and cannot be reused by retry or restart.
+- Billing/licensing stays disabled, the website handoff stays disconnected,
+  and updates stay unconfigured with no production service endpoint.
+
+### Compatibility
+
+- SQLite remains at schema v10, GRDB remains pinned at 7.11.1, and no package
+  dependency or migration is included.
+- macOS 15 remains the declared minimum, while the implemented Apple Speech
+  route requires macOS 26 and installed local assets; that support-policy gap
+  remains a formal-test decision.
+
+### Candidate scope
+
+- `BlueMinutes-0.4.0-development` is an ad-hoc, Hardened Runtime local package
+  for formal testing on the build Mac only.
+- This task does not create a `v0.4.0` tag or GitHub Release, attach a binary,
+  merge the Pull Request, deploy the website, notarize, install, or authorize
+  public distribution. The latest public source Release remains `v0.3.0`.
 
 ## [0.3.0] - 2026-07-28
 

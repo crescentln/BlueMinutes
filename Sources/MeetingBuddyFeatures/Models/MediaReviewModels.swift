@@ -6,6 +6,7 @@ public enum MediaReviewSection: Hashable, Sendable {
     case recording
     case webMetadata
     case transcript
+    case assistant
     case analysis
     case briefing
     case history

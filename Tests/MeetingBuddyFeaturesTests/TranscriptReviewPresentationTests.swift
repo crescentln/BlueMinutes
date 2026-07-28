@@ -103,6 +103,104 @@ struct TranscriptReviewPresentationTests {
     }
 
     @Test
+    func transcriptSearchAndFiveMinuteOutlineStayDeterministicAtScale()
+        throws
+    {
+        let presentation =
+            TranscriptReviewPresentation(
+                review:
+                    try makeScaleReview(
+                        segmentCount: 360
+                    )
+            )
+
+        let sourceMatches =
+            presentation.segments(
+                matching:
+                    "SYNTHETIC 359",
+                scope: .all
+            )
+        #expect(sourceMatches.count == 1)
+        #expect(
+            sourceMatches.first?.text
+                == "Synthetic segment 359"
+        )
+        let translationMatches =
+            presentation.segments(
+                matching:
+                    "traduction 75359",
+                scope: .all
+            )
+        #expect(
+            translationMatches.map(\.segmentID)
+                == sourceMatches.map(\.segmentID)
+        )
+        #expect(
+            presentation.segments(
+                matching: "10770",
+                scope: .all
+            ).map(\.segmentID)
+                == sourceMatches.map(\.segmentID)
+        )
+        #expect(
+            presentation.segments(
+                matching:
+                    "synthetic absent-token",
+                scope: .all
+            ).isEmpty
+        )
+        #expect(
+            presentation.segments(
+                matching: "",
+                scope: .speakerReview
+            ).count == 360
+        )
+        #expect(
+            presentation.segments(
+                matching: "",
+                scope: .needsReview
+            ).isEmpty
+        )
+        #expect(
+            presentation.segments(
+                matching: "",
+                scope: .humanEdited
+            ).isEmpty
+        )
+        #expect(
+            presentation.segments(
+                matching:
+                    String(
+                        repeating: "x",
+                        count:
+                            TranscriptReviewPresentation
+                            .maximumSearchQueryUTF8Bytes
+                            + 1
+                    ),
+                scope: .all
+            ).isEmpty
+        )
+
+        #expect(
+            presentation.outlineAnchors.count
+                == 36
+        )
+        #expect(
+            presentation.outlineAnchors.first?
+                .label == "00:00"
+        )
+        #expect(
+            presentation.outlineAnchors[
+                1
+            ].label == "05:00"
+        )
+        #expect(
+            presentation.outlineAnchors.last?
+                .label == "02:55:00"
+        )
+    }
+
+    @Test
     func logicalSelectionResolvesTheReplacementRevision() throws {
         let original = try makeScaleReview(segmentCount: 1)
         let prior = try #require(
@@ -538,6 +636,8 @@ struct TranscriptReviewPresentationTests {
             physicalRange: chunkPlan.physicalRange,
             disposition: .transcribed,
             attemptCount: 1,
+            provider: try transcriptionProviderMetadata(),
+            machineSegmentRevision: secondReference,
             reviewedSegmentRevision: secondReference,
             translationRevision: translationReference
         )
@@ -667,6 +767,7 @@ struct TranscriptReviewPresentationTests {
             physicalRange: plan.physicalRange,
             disposition: .noSpeech,
             attemptCount: 1,
+            provider: try transcriptionProviderMetadata(),
             noSpeechConfirmation: includesConfirmation
                 ? try TranscriptNoSpeechConfirmation(
                     verifiedCoreRange: plan.coreRange
@@ -755,6 +856,10 @@ struct TranscriptReviewPresentationTests {
                     physicalRange: plan.physicalRange,
                     disposition: .transcribed,
                     attemptCount: 1,
+                    provider:
+                        try transcriptionProviderMetadata(),
+                    machineSegmentRevision:
+                        segmentReference,
                     reviewedSegmentRevision:
                         segmentReference,
                     translationRevision:
@@ -907,6 +1012,16 @@ struct TranscriptReviewPresentationTests {
                 visibleUserAuthorization: true,
                 localModelAvailable: true
             )
+        )
+    }
+
+    private func transcriptionProviderMetadata()
+        throws -> ProviderMetadata
+    {
+        try ProviderMetadata(
+            providerIdentifier:
+                "meetingbuddy-deterministic-transcription",
+            modelIdentifier: "fixture-v1"
         )
     }
 

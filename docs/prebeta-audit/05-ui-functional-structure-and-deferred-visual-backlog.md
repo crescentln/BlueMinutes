@@ -26,29 +26,41 @@ not a second source of test truth.
 - stable accessibility identifiers and keyboard commands;
 - compact/standard density and reading-width preferences.
 
-## Current P0/P1 functional UI issues
+## Current P0/P1 functional UI status
 
-1. Intelligence/Codex/STT/BYOK/Task Routing surfaces are absent.
-2. Closing the main window during recording enters termination rather than
-   background continuation.
-3. Record-only and unavailable STT are not a first-class setup state.
-4. Transcript has no dedicated outline/top search for long meetings.
-5. Codex Assistant, connection state, quota, streaming, and cancel UI are absent.
-6. Start New Meeting inputs are split across destinations without one readiness
-   review.
-7. About/update readiness is absent.
-8. New surfaces still require Light/Dark, 860×600, keyboard, VoiceOver, Dynamic
-   Type, overflow, and resize proof.
+1. Intelligence now has four ordered Codex, STT, BYOK, and Task Routing
+   sections with explicit route, destination, cost owner, readiness, and repair
+   controls.
+2. Closing the main window leaves the app-owned recording session active. The
+   menu-bar item can reopen the meeting or stop and finalize it; true Quit
+   retains the existing stop/finalize failure guard.
+3. Record-only, unavailable local STT, installed Apple STT, and authorized
+   OpenAI remote STT are distinct visible states.
+4. Transcript Review now has deterministic five-minute outline anchors plus
+   bounded text, translation, speaker, and timestamp search while preserving
+   exact selection.
+5. Codex Assistant shows runtime/account/quota state and supports selected-text
+   authorization, streaming, stop, retry, and isolated thread reset.
+6. Start a New Meeting is a lightweight coordinator over the existing import,
+   recording, and UN metadata pages. It intentionally does not duplicate their
+   exact policy forms.
+7. The About window shows the supplied icon, version, unlocked Beta state,
+   disconnected website handoff, honest unconfigured updater state, and an
+   explicit Copy Sanitized Diagnostics action.
+8. The CI-shaped current-tree gate passes 12 isolated native-window tests and
+   the 11-test visual-contract shard. A staged-app smoke also verified the
+   About surface and close/reopen menu lifecycle. New-control Light/Dark,
+   860×600, keyboard, spoken VoiceOver, overflow, resize, and real-device
+   performance evidence remains open.
 
 ## UI performance comparison status
 
-The foundation branch adds contracts, documentation, and reviewed brand assets
-but no new runtime SwiftUI feature surface. A before/after Instruments,
-main-thread-hang, hitch, resize, scroll, CPU, and stable-memory comparison is
-therefore **not yet run** and must not be inferred from the visual fixtures.
-Each later Intelligence, routing, active-meeting, outline/search, and Assistant
-surface must record its own pre-integration baseline and post-integration result
-before the phase can close.
+The current branch adds runtime SwiftUI surfaces and bounded model tests, but a
+before/after Instruments, main-thread-hang, hitch, resize, scroll, CPU, and
+stable-memory comparison is **not yet run** and must not be inferred from source
+assertions or visual fixtures. Intelligence, routing, active-meeting,
+outline/search, and Assistant still need the real-app performance and
+accessibility matrix before public Beta distribution.
 
 ## Integration rules
 

@@ -9,16 +9,24 @@ public struct MeetingBuddyRootView: View {
     @State private var fileImporterPurpose = LocalFileImporterPurpose.workspace
     @State private var showFileImporter = false
     @FocusState private var sidebarIsFocused: Bool
+    private let codexStore: CodexConnectionStore?
+    private let intelligenceStore:
+        IntelligenceConfigurationStore?
     private let onSceneStateAvailable:
         @MainActor (MediaReviewSceneState) -> Void
 
     public init(
         store: MediaReviewStore,
+        codexStore: CodexConnectionStore? = nil,
+        intelligenceStore:
+            IntelligenceConfigurationStore? = nil,
         onSceneStateAvailable:
             @escaping @MainActor (MediaReviewSceneState) -> Void = { _ in }
     ) {
         _store = Bindable(wrappedValue: store)
         _sceneState = State(initialValue: MediaReviewSceneState())
+        self.codexStore = codexStore
+        self.intelligenceStore = intelligenceStore
         self.onSceneStateAvailable = onSceneStateAvailable
     }
 
@@ -77,6 +85,20 @@ public struct MeetingBuddyRootView: View {
                         .tag(MediaReviewSection.transcript)
                         .disabled(
                             !sceneState.isDestinationAvailable(.transcript)
+                        )
+                    WorkspaceSidebarRow(
+                        title: "Codex Assistant",
+                        icon: .assistant,
+                        enabledHint: "Open the text-only Codex Assistant.",
+                        availability: sidebarAvailability(
+                            for: .assistant,
+                            prerequisiteReason:
+                            "Available after a published transcript is loaded."
+                        )
+                    )
+                        .tag(MediaReviewSection.assistant)
+                        .disabled(
+                            !sceneState.isDestinationAvailable(.assistant)
                         )
                     WorkspaceSidebarRow(
                         title: "Analysis Review",
@@ -173,6 +195,7 @@ public struct MeetingBuddyRootView: View {
         )
         .onAppear {
             onSceneStateAvailable(sceneState)
+            seedSpeechRouteIfNeeded()
         }
         .task {
             await store.restoreWorkspace(using: sceneState)
@@ -186,6 +209,9 @@ public struct MeetingBuddyRootView: View {
                 case .transcript:
                     await store.loadTranscriptReview()
                     await store.refreshTranscriptRoute(using: sceneState)
+                case .assistant:
+                    await store.loadTranscriptReview()
+                    reconcileEditorDrafts()
                 case .analysis:
                     await store.loadAnalysisReview()
                     await store.refreshAnalysisRoute()
@@ -201,7 +227,36 @@ public struct MeetingBuddyRootView: View {
                 }
             }
         }
-        .onChange(of: store.job?.state) { _, _ in reconcileDestination() }
+        .onChange(
+            of: sceneState.dataClassification
+        ) { _, classification in
+            guard classification.restrictionRank
+                    >= DataClassification.sensitive
+                    .restrictionRank,
+                  sceneState
+                    .transcriptionSelection?
+                    .providerIdentifier
+                    != "apple-speech"
+            else { return }
+            sceneState.transcriptionSelection = nil
+            sceneState.remoteSpeechToTextAllowed =
+                false
+            sceneState
+                .remoteAudioUploadAcknowledged =
+                false
+        }
+        .onChange(of: store.job?.state) { _, state in
+            reconcileDestination()
+            guard state == .succeeded else {
+                return
+            }
+            Task {
+                await store
+                    .restoreMeetingSpeechToTextRoute(
+                        using: sceneState
+                    )
+            }
+        }
         .onChange(of: store.transcriptReview?.manifest.manifestID) { _, _ in
             reconcileDestination()
         }
@@ -325,6 +380,8 @@ public struct MeetingBuddyRootView: View {
                 LocalMediaIntakeView(
                     store: store,
                     sceneState: sceneState,
+                    intelligenceStore:
+                        intelligenceStore,
                     chooseMedia: {
                         presentFileImporter(.media)
                     },
@@ -335,11 +392,37 @@ public struct MeetingBuddyRootView: View {
                     }
                 )
             case .recording:
-                RecordingCaptureView(store: store, sceneState: sceneState)
+                RecordingCaptureView(
+                    store: store,
+                    sceneState: sceneState,
+                    intelligenceStore:
+                        intelligenceStore
+                )
             case .webMetadata:
                 UNWebTVMetadataView(store: store, sceneState: sceneState)
             case .transcript:
-                TranscriptReviewView(store: store, sceneState: sceneState)
+                TranscriptReviewView(
+                    store: store,
+                    sceneState: sceneState,
+                    intelligenceStore:
+                        intelligenceStore
+                )
+            case .assistant:
+                if let codexStore {
+                    CodexAssistantView(
+                        mediaStore: store,
+                        sceneState: sceneState,
+                        codexStore: codexStore
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "Codex Assistant Unavailable",
+                        systemImage: "sparkles",
+                        description: Text(
+                            "Open the production app session to connect the isolated Codex runtime."
+                        )
+                    )
+                }
             case .analysis:
                 AnalysisReviewView(store: store, sceneState: sceneState)
             case .briefing:
@@ -379,6 +462,7 @@ public struct MeetingBuddyRootView: View {
         case .recording: "Record Audio"
         case .webMetadata: "UN Web TV Metadata"
         case .transcript: "Transcript Review"
+        case .assistant: "Codex Assistant"
         case .analysis: "Analysis Review"
         case .briefing: "Briefing"
         case .history: "Meeting History"
@@ -507,6 +591,18 @@ public struct MeetingBuddyRootView: View {
             return "Temporarily unavailable while BlueMinutes completes the current operation."
         }
         return nil
+    }
+
+    private func seedSpeechRouteIfNeeded() {
+        guard sceneState.transcriptionSelection
+                == nil,
+              let selection =
+                intelligenceStore?.state?
+                .route(for: .speechToTextBatch)
+                .selection
+        else { return }
+        sceneState.transcriptionSelection =
+            selection
     }
 
 }

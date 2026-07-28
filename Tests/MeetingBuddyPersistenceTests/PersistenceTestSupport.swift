@@ -14,8 +14,12 @@ final class DisposableMeetingBuddyWorkspace: @unchecked Sendable {
         suffix: String = UUID().uuidString.lowercased(),
         workspaceID: WorkspaceID = PersistenceFixtures.workspaceID
     ) throws {
+        let runID = UUID().uuidString.lowercased()
         container = FileManager.default.temporaryDirectory
-            .appendingPathComponent("meetingbuddy-task004a-\(suffix)", isDirectory: true)
+            .appendingPathComponent(
+                "meetingbuddy-task004a-\(suffix)-\(runID)",
+                isDirectory: true
+            )
         root = container.appendingPathComponent("workspace", isDirectory: true)
         sourceFile = container.appendingPathComponent("authorized-source.bin")
         try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)

@@ -110,6 +110,441 @@ struct TranscriptPipelineIntegrationTests {
     }
 
     @Test
+    func approvedRemotePipelineUsesOnlyThePinnedProviderAndWAVChunks() async throws {
+        let workspace = try AIWorkspace()
+        defer { workspace.cleanup() }
+        let source = try workspace.installCanonicalSource(totalFrames: 600_000)
+        let localSpeech = DeterministicSpeechProvider()
+        let remoteSpeech = DeterministicRemoteSpeechProvider(
+            providerIdentifier: "openai-stt",
+            modelIdentifier: "whisper-1"
+        )
+        let processor = SyntheticTranscriptMediaProcessor()
+        let remoteConfiguration = try readyRemoteSpeechConfiguration()
+        let plan = try remoteTranscriptPlan(
+            workspace: workspace,
+            source: source,
+            totalFrames: 600_000,
+            configuration: remoteConfiguration
+        )
+        let jobID = aiID(36, JobID.self)
+        let executionAuthority =
+            ExternalExecutionAuthorizationProbe(
+                plan: plan,
+                jobID: jobID
+            )
+        let manager = try workspace.manager(
+            executor: TranscriptPipelineJobExecutor(
+                transcriptionProvider: localSpeech,
+                translationProvider: nil,
+                processor: processor,
+                catalog: workspace.store,
+                fileAccess: workspace.fileAccess,
+                repository: workspace.store,
+                externalProviderBuilder: DeterministicExternalSpeechProviderBuilder(
+                    expectedConfiguration: remoteConfiguration,
+                    provider: remoteSpeech
+                ),
+                externalExecutionAuthorizer:
+                    executionAuthority
+            )
+        )
+        let request = try TranscriptPipelineJobFactory().request(
+            plan: plan,
+            jobID: jobID,
+            requestedBy: JobRequester("v4-remote-stt-integration")
+        )
+
+        _ = try await manager.enqueue(request)
+        let succeeded = try await waitForAITerminalJob(manager, request.jobID)
+        guard succeeded.state == .succeeded else {
+            throw AIProviderContractError.invalidResponse(
+                "The remote integration job ended as \(succeeded.state.rawValue): "
+                    + (succeeded.errorRecord?.safeSummary ?? "no safe summary")
+            )
+        }
+        let review = try #require(
+            try workspace.store.activeTranscriptReview(meetingID: workspace.meetingID)
+        )
+
+        #expect(succeeded.privacyRoute == .approvedCloud)
+        #expect(succeeded.providerUsage.count == 1)
+        #expect(succeeded.providerUsage.first?.provider.providerIdentifier == "openai-stt")
+        #expect(succeeded.providerUsage.first?.provider.modelIdentifier == "whisper-1")
+        #expect(review.manifest.transcriptionRoute == plan.transcriptionRoute)
+        #expect(review.manifest.chunks.count == 2)
+        #expect(
+            review.manifest.chunks.allSatisfy {
+                $0.provider?.providerIdentifier == "openai-stt"
+                    && $0.provider?.modelIdentifier == "whisper-1"
+            }
+        )
+        #expect(
+            review.transcriptSegments.allSatisfy {
+                $0.transcriptionProvider?.providerIdentifier == "openai-stt"
+                    && $0.transcriptionProvider?.modelIdentifier == "whisper-1"
+                    && $0.revision.generationMetadata?.privacyRoute == .approvedCloud
+            }
+        )
+        #expect(review.transcriptSegments.map(\.text) == ["remote-0-speech", "remote-1-speech"])
+        #expect(await remoteSpeech.callCount(index: 0) == 1)
+        #expect(await remoteSpeech.callCount(index: 1) == 1)
+        #expect(await localSpeech.callCount(index: 0) == 0)
+        #expect(await localSpeech.callCount(index: 1) == 0)
+        #expect(await processor.destinationExtensions == ["wav", "wav"])
+        #expect(await executionAuthority.authorizationCount == 3)
+        #expect(await executionAuthority.finishCount == 1)
+    }
+
+    @Test
+    func remoteRetryCannotReuseThePriorVisibleAudioAuthorization()
+        async throws
+    {
+        let workspace = try AIWorkspace()
+        defer { workspace.cleanup() }
+        let source =
+            try workspace.installCanonicalSource(
+                totalFrames: 300_000
+            )
+        let localSpeech =
+            DeterministicSpeechProvider()
+        let remoteSpeech =
+            DeterministicRemoteSpeechProvider(
+                providerIdentifier:
+                    "openai-stt",
+                modelIdentifier:
+                    "whisper-1",
+                failOnceIndices: [0]
+            )
+        let processor =
+            SyntheticTranscriptMediaProcessor()
+        let remoteConfiguration =
+            try readyRemoteSpeechConfiguration()
+        let plan = try remoteTranscriptPlan(
+            workspace: workspace,
+            source: source,
+            totalFrames: 300_000,
+            configuration:
+                remoteConfiguration
+        )
+        let jobID = aiID(37, JobID.self)
+        let executionAuthority =
+            ExternalExecutionAuthorizationProbe(
+                plan: plan,
+                jobID: jobID
+            )
+        let manager = try workspace.manager(
+            executor:
+                TranscriptPipelineJobExecutor(
+                    transcriptionProvider:
+                        localSpeech,
+                    translationProvider: nil,
+                    processor: processor,
+                    catalog: workspace.store,
+                    fileAccess:
+                        workspace.fileAccess,
+                    repository:
+                        workspace.store,
+                    externalProviderBuilder:
+                        DeterministicExternalSpeechProviderBuilder(
+                            expectedConfiguration:
+                                remoteConfiguration,
+                            provider:
+                                remoteSpeech
+                        ),
+                    externalExecutionAuthorizer:
+                        executionAuthority
+                )
+        )
+        let request =
+            try TranscriptPipelineJobFactory()
+            .request(
+                plan: plan,
+                jobID: jobID,
+                requestedBy:
+                    JobRequester(
+                        "v4-remote-auth-replay"
+                    )
+            )
+
+        _ = try await manager.enqueue(request)
+        let first =
+            try await waitForAIJob(
+                manager,
+                jobID,
+                state: .failed
+            )
+        #expect(
+            first.errorRecord?.code
+                == "provider_output_invalid"
+        )
+        #expect(
+            await remoteSpeech.callCount(
+                index: 0
+            ) == 1
+        )
+
+        _ = try await manager.retry(
+            jobID: jobID
+        )
+        let second =
+            try await waitForAIJob(
+                manager,
+                jobID,
+                state: .failed
+            )
+        #expect(
+            second.errorRecord?.code
+                == "model_route_denied"
+        )
+        #expect(
+            second.errorRecord?.retryable
+                == false
+        )
+        #expect(
+            await remoteSpeech.callCount(
+                index: 0
+            ) == 1
+        )
+        #expect(
+            await localSpeech.callCount(
+                index: 0
+            ) == 0
+        )
+        #expect(
+            await executionAuthority
+                .finishCount == 2
+        )
+    }
+
+    @Test
+    func ephemeralRemoteAuthorizationRejectsAbsentExpiredMismatchedFinishedAndRetriedAttempts()
+        async throws
+    {
+        let workspace = try AIWorkspace()
+        defer { workspace.cleanup() }
+        let source =
+            try workspace.installCanonicalSource(
+                totalFrames: 300_000
+            )
+        let configuration =
+            try readyRemoteSpeechConfiguration()
+        let plan = try remoteTranscriptPlan(
+            workspace: workspace,
+            source: source,
+            totalFrames: 300_000,
+            configuration: configuration
+        )
+        let mismatchedPlan =
+            try remoteTranscriptPlan(
+                workspace: workspace,
+                source: source,
+                totalFrames: 600_000,
+                configuration: configuration
+            )
+        let jobID = aiID(38, JobID.self)
+        let request =
+            try TranscriptPipelineJobFactory()
+            .request(
+                plan: plan,
+                jobID: jobID,
+                requestedBy:
+                    JobRequester(
+                        "v4-ephemeral-remote-auth"
+                    ),
+                maximumRetryCount: 1
+            )
+        let lease = try TaskDirectoryLease(
+            jobID: jobID,
+            relativePath:
+                WorkspaceRelativePath(
+                    ".tasks/\(jobID.canonicalString)"
+                ),
+            diskBudgetBytes:
+                request.diskBudgetBytes
+        )
+        let queued = try JobRecord(
+            request: request,
+            lease: lease,
+            createdAt:
+                aiInstant(
+                    1_900_000_000_030
+                )
+        )
+        let running =
+            try queued.transitioning(
+                to: .running,
+                at:
+                    aiInstant(
+                        1_900_000_000_031
+                    )
+            )
+        let clock =
+            RemoteAuthorizationTestClock(
+                milliseconds: 1_000
+            )
+        let currentAuthority =
+            CurrentRemoteAuthorizationProbe()
+        let broker =
+            EphemeralExternalTranscriptionAuthorizationBroker(
+                startWindowMilliseconds: 100,
+                nowMilliseconds: {
+                    clock.milliseconds
+                },
+                currentStateAuthorizer: {
+                    requestedPlan in
+                    try await currentAuthority
+                        .authorize(
+                            requestedPlan
+                        )
+                }
+            )
+
+        await #expect(
+            throws:
+                AIProviderContractError.self
+        ) {
+            _ = try await broker.authorize(
+                plan: plan,
+                job: running
+            )
+        }
+        #expect(
+            await currentAuthority.callCount
+                == 0
+        )
+
+        try await broker.register(
+            jobID: jobID,
+            plan: plan
+        )
+        await #expect(
+            throws:
+                AIProviderContractError.self
+        ) {
+            _ = try await broker.authorize(
+                plan: mismatchedPlan,
+                job: running
+            )
+        }
+        #expect(
+            await currentAuthority.callCount
+                == 0
+        )
+
+        clock.milliseconds = 1_101
+        await #expect(
+            throws:
+                AIProviderContractError.self
+        ) {
+            _ = try await broker.authorize(
+                plan: plan,
+                job: running
+            )
+        }
+        #expect(
+            await currentAuthority.callCount
+                == 0
+        )
+
+        try await broker.register(
+            jobID: jobID,
+            plan: plan
+        )
+        _ = try await broker.authorize(
+            plan: plan,
+            job: running
+        )
+        _ = try await broker.authorize(
+            plan: plan,
+            job: running
+        )
+        #expect(
+            await currentAuthority.callCount
+                == 2
+        )
+
+        await currentAuthority.setAllowed(false)
+        await #expect(
+            throws:
+                AIProviderContractError.self
+        ) {
+            _ = try await broker.authorize(
+                plan: plan,
+                job: running
+            )
+        }
+        #expect(
+            await currentAuthority.callCount
+                == 3
+        )
+
+        await broker.finish(jobID: jobID)
+        await currentAuthority.setAllowed(true)
+        await #expect(
+            throws:
+                AIProviderContractError.self
+        ) {
+            _ = try await broker.authorize(
+                plan: plan,
+                job: running
+            )
+        }
+        #expect(
+            await currentAuthority.callCount
+                == 3
+        )
+
+        try await broker.register(
+            jobID: jobID,
+            plan: plan
+        )
+        let failed =
+            try running.transitioning(
+                to: .failed,
+                at:
+                    aiInstant(
+                        1_900_000_000_032
+                    ),
+                failure:
+                    JobFailureRecord(
+                        code:
+                            "remote_failed",
+                        safeSummary:
+                            "The synthetic remote attempt failed.",
+                        retryable: true,
+                        occurredAt:
+                            aiInstant(
+                                1_900_000_000_032
+                            )
+                    )
+            )
+        let retried =
+            try failed.retrying()
+            .transitioning(
+                to: .running,
+                at:
+                    aiInstant(
+                        1_900_000_000_033
+                    )
+            )
+        await #expect(
+            throws:
+                AIProviderContractError.self
+        ) {
+            _ = try await broker.authorize(
+                plan: plan,
+                job: retried
+            )
+        }
+        #expect(
+            await currentAuthority.callCount
+                == 3
+        )
+        await broker.finish(jobID: jobID)
+    }
+
+    @Test
     func retryReusesVerifiedChunkArtifactsAndStableSegmentIDs() async throws {
         let workspace = try AIWorkspace()
         defer { workspace.cleanup() }
@@ -839,6 +1274,7 @@ final class AIWorkspace: @unchecked Sendable {
 
 private actor SyntheticTranscriptMediaProcessor: NativeMediaProcessing {
     private(set) var callCount = 0
+    private(set) var destinationExtensions: [String] = []
 
     func inspect(_ sourceURL: URL) async throws -> MediaInspection {
         throw MediaContractError.unreadableMedia
@@ -861,6 +1297,7 @@ private actor SyntheticTranscriptMediaProcessor: NativeMediaProcessing {
         to destinationURL: URL
     ) async throws {
         callCount += 1
+        destinationExtensions.append(destinationURL.pathExtension)
         try Data(repeating: UInt8(truncatingIfNeeded: range.startFrame / 16_000), count: 256)
             .write(to: destinationURL, options: [.atomic])
     }
@@ -917,6 +1354,192 @@ private actor DeterministicSpeechProvider: TranscriptionProvider {
     }
 
     func callCount(index: UInt32) -> Int { calls[index, default: 0] }
+}
+
+private actor DeterministicRemoteSpeechProvider: TranscriptionProvider {
+    nonisolated let metadata: ProviderMetadata
+    nonisolated let route: ModelExecutionRoute = .approvedExternal
+    private var calls: [UInt32: Int] = [:]
+    private let failOnceIndices:
+        Set<UInt32>
+
+    init(
+        providerIdentifier: String,
+        modelIdentifier: String,
+        failOnceIndices: Set<UInt32> = []
+    ) {
+        metadata = try! ProviderMetadata(
+            providerIdentifier: providerIdentifier,
+            modelIdentifier: modelIdentifier,
+            clientVersion: "blueminutes-remote-fixture-v1"
+        )
+        self.failOnceIndices =
+            failOnceIndices
+    }
+
+    func isModelInstalled(for language: LanguageTag) async -> Bool { true }
+
+    func transcribe(_ request: TranscriptionRequest) async throws -> TranscriptionChunkResult {
+        let index = request.audio.plan.index
+        calls[index, default: 0] += 1
+        if failOnceIndices.contains(index),
+           calls[index] == 1
+        {
+            throw AIProviderContractError
+                .invalidResponse(
+                    "Synthetic first remote attempt failed."
+                )
+        }
+        let relativeCoreStart = Int64(
+            (request.audio.plan.coreRange.startFrame
+                - request.audio.plan.physicalRange.startFrame) / 16
+        )
+        return try TranscriptionChunkResult(
+            validatingSpans: [
+                TranscriptionSpan(
+                    startMilliseconds: relativeCoreStart + 100,
+                    endMilliseconds: relativeCoreStart + 700,
+                    text: "remote-\(index)-speech",
+                    confidence: ConfidenceScore(millionths: 920_000)
+                )
+            ]
+        )
+    }
+
+    func callCount(index: UInt32) -> Int { calls[index, default: 0] }
+}
+
+private actor ExternalExecutionAuthorizationProbe:
+    ExternalTranscriptionExecutionAuthorizing
+{
+    let plan: TranscriptPipelineJobPlan
+    let jobID: JobID
+    private(set) var authorizationCount = 0
+    private(set) var finishCount = 0
+    private var active = true
+
+    init(
+        plan: TranscriptPipelineJobPlan,
+        jobID: JobID
+    ) {
+        self.plan = plan
+        self.jobID = jobID
+    }
+
+    func authorize(
+        plan: TranscriptPipelineJobPlan,
+        job: JobRecord
+    ) throws
+        -> ExternalModelExecutionAuthorization
+    {
+        guard active,
+              plan == self.plan,
+              job.jobID == jobID,
+              job.retryCount == 0,
+              let configuration =
+                plan.remoteProviderConfiguration
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "The synthetic remote execution permit is unavailable."
+                )
+        }
+        authorizationCount += 1
+        return try ModelPolicyRouter()
+            .authorizeExternal(
+                plan.transcriptionRoute
+                    .request,
+                expectedProviderIdentifier:
+                    configuration.identifier
+            )
+    }
+
+    func finish(jobID: JobID) {
+        guard jobID == self.jobID
+        else { return }
+        finishCount += 1
+        active = false
+    }
+}
+
+private final class RemoteAuthorizationTestClock:
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var storedMilliseconds: Int64
+
+    init(milliseconds: Int64) {
+        storedMilliseconds = milliseconds
+    }
+
+    var milliseconds: Int64 {
+        get {
+            lock.withLock {
+                storedMilliseconds
+            }
+        }
+        set {
+            lock.withLock {
+                storedMilliseconds = newValue
+            }
+        }
+    }
+}
+
+private actor CurrentRemoteAuthorizationProbe {
+    private(set) var callCount = 0
+    private var allowed = true
+
+    func setAllowed(_ allowed: Bool) {
+        self.allowed = allowed
+    }
+
+    func authorize(
+        _ plan: TranscriptPipelineJobPlan
+    ) throws
+        -> ExternalModelExecutionAuthorization
+    {
+        callCount += 1
+        guard allowed,
+              let configuration =
+                plan.remoteProviderConfiguration
+        else {
+            throw AIProviderContractError
+                .routeDenied(
+                    "Current synthetic policy revoked remote transcription."
+                )
+        }
+        return try ModelPolicyRouter()
+            .authorizeExternal(
+                plan.transcriptionRoute
+                    .request,
+                expectedProviderIdentifier:
+                    configuration.identifier
+            )
+    }
+}
+
+private struct DeterministicExternalSpeechProviderBuilder:
+    ExternalTranscriptionProviderBuilding
+{
+    let expectedConfiguration: RemoteProviderConfiguration
+    let provider: DeterministicRemoteSpeechProvider
+
+    func makeProvider(
+        configuration: RemoteProviderConfiguration,
+        authorization: ExternalModelExecutionAuthorization
+    ) throws -> any TranscriptionProvider {
+        guard configuration == expectedConfiguration,
+              authorization.decision.route == .approvedExternal,
+              authorization.decision.providerIdentifier == configuration.identifier,
+              authorization.decision.request.visibleUserAuthorization
+        else {
+            throw AIProviderContractError.routeDenied(
+                "The integration fixture received an unapproved provider snapshot."
+            )
+        }
+        return provider
+    }
 }
 
 private actor BoundaryOverlapSpeechProvider: TranscriptionProvider {
@@ -1039,6 +1662,76 @@ private func transcriptPlan(
     )
 }
 
+private func remoteTranscriptPlan(
+    workspace: AIWorkspace,
+    source: SemanticRevisionReference,
+    totalFrames: UInt64,
+    configuration: RemoteProviderConfiguration
+) throws -> TranscriptPipelineJobPlan {
+    let policy = try ModelSecurityPolicySnapshot(
+        sensitivityLabelRevision: SemanticRevisionReference(
+            logicalID: aiID(61, SensitivityLabelID.self),
+            revisionID: aiID(62, RevisionID.self)
+        ),
+        accessPolicyRevision: SemanticRevisionReference(
+            logicalID: aiID(63, AccessPolicyID.self),
+            revisionID: aiID(64, RevisionID.self)
+        ),
+        effectiveClassification: .internal,
+        noOutboundMode: false,
+        localProcessingAllowed: true,
+        manualLocalReviewAllowed: true,
+        externalProcessingAllowed: true,
+        approvedExternalProviderIdentifiers: [configuration.identifier],
+        approvedDeploymentEnvironments: [.production],
+        approvedRetentionPolicies: [.approvedProviderRetention]
+    )
+    let request = try ModelRouteRequest(
+        capability: .transcription,
+        dataClassification: .internal,
+        offlineMode: false,
+        organizationAllowsExternalProcessing: true,
+        deploymentEnvironment: .production,
+        destination: .approvedProvider(identifier: configuration.identifier),
+        retentionPolicy: .approvedProviderRetention,
+        dataCategories: [.canonicalAudio],
+        visibleUserAuthorization: true,
+        localModelAvailable: false,
+        securityPolicy: policy
+    )
+    let authorization = try ModelPolicyRouter().authorizeExternal(
+        request,
+        expectedProviderIdentifier: configuration.identifier
+    )
+    return try TranscriptPipelineJobPlan(
+        meetingID: workspace.meetingID,
+        canonicalSourceRevision: source,
+        canonicalFrameCount: totalFrames,
+        speechSourceKind: .originalSpeakerAudio,
+        sourceLanguage: LanguageTag("en"),
+        targetLanguage: nil,
+        dataClassification: .internal,
+        createdAt: aiInstant(1_900_000_000_021),
+        transcriptionRoute: authorization.decision,
+        transcriptionSelection: ProviderModelSelectionRecord(
+            providerIdentifier: configuration.identifier,
+            modelIdentifier: configuration.modelIdentifier
+        ),
+        remoteProviderConfiguration: configuration,
+        intelligenceConfigurationRevision: 7,
+        translationRoute: nil
+    )
+}
+
+private func readyRemoteSpeechConfiguration() throws -> RemoteProviderConfiguration {
+    try RemoteProviderConfiguration.openAISpeechToText(
+        modelIdentifier: "whisper-1"
+    ).recordingConnectionResult(
+        .ready,
+        testedAt: aiInstant(1_900_000_000_019)
+    )
+}
+
 private func waitForAIJob(
     _ manager: LocalTaskManager,
     _ jobID: JobID,
@@ -1046,6 +1739,21 @@ private func waitForAIJob(
 ) async throws -> JobRecord {
     for _ in 0..<500 {
         if let record = try await manager.job(id: jobID), record.state == state {
+            return record
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    throw JobContractError.jobNotFound(jobID)
+}
+
+private func waitForAITerminalJob(
+    _ manager: LocalTaskManager,
+    _ jobID: JobID
+) async throws -> JobRecord {
+    for _ in 0..<500 {
+        if let record = try await manager.job(id: jobID),
+           record.state.isTerminal
+        {
             return record
         }
         try await Task.sleep(for: .milliseconds(10))

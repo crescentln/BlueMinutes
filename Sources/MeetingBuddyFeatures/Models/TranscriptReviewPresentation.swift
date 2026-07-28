@@ -1,5 +1,70 @@
+import Foundation
 import MeetingBuddyApplication
 import MeetingBuddyDomain
+
+enum TranscriptOutlineScope:
+    String,
+    CaseIterable,
+    Identifiable,
+    Sendable
+{
+    case all
+    case needsReview = "needs_review"
+    case speakerReview = "speaker_review"
+    case humanEdited = "human_edited"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all:
+            "All Segments"
+        case .needsReview:
+            "Needs Review"
+        case .speakerReview:
+            "Speaker Review"
+        case .humanEdited:
+            "Human Edited"
+        }
+    }
+}
+
+struct TranscriptOutlineAnchor:
+    Hashable,
+    Identifiable,
+    Sendable
+{
+    let segmentID: TranscriptSegmentID
+    let startMilliseconds: Int64
+
+    var id: TranscriptSegmentID {
+        segmentID
+    }
+
+    var label: String {
+        let totalSeconds =
+            max(startMilliseconds, 0) / 1_000
+        let hours = totalSeconds / 3_600
+        let minutes =
+            (totalSeconds % 3_600) / 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(
+                format:
+                    "%02lld:%02lld:%02lld",
+                hours,
+                minutes,
+                seconds
+            )
+        }
+        return String(
+            format:
+                "%02lld:%02lld",
+            minutes,
+            seconds
+        )
+    }
+}
 
 struct TranscriptNavigationIndex: Sendable {
     let orderedSegmentIDs: [TranscriptSegmentID]
@@ -48,8 +113,15 @@ struct TranscriptNavigationIndex: Sendable {
 }
 
 struct TranscriptReviewPresentation: Sendable {
+    static let maximumSearchQueryUTF8Bytes =
+        512
+    static let outlineIntervalMilliseconds:
+        Int64 = 5 * 60 * 1_000
+
     let segments: [TranscriptSegmentV1]
     let navigation: TranscriptNavigationIndex
+    let outlineAnchors:
+        [TranscriptOutlineAnchor]
     let uncertainSpeakerCount: Int
     let noSpeechChunks: [TranscriptChunkCoverage]
     let verifiedNoSpeechChunkCount: Int
@@ -64,6 +136,8 @@ struct TranscriptReviewPresentation: Sendable {
         [SemanticRevisionReference: EvidenceRefV1]
     private let coverageByReviewedRevision:
         [SemanticRevisionReference: [TranscriptChunkCoverage]]
+    private let normalizedSearchTextBySegmentID:
+        [TranscriptSegmentID: String]
 
     init(review: TranscriptReviewBundle) {
         let orderedSegments = review.transcriptSegments.sorted {
@@ -79,6 +153,28 @@ struct TranscriptReviewPresentation: Sendable {
         navigation = TranscriptNavigationIndex(
             orderedSegmentIDs: orderedSegments.map(\.segmentID)
         )
+        var anchors:
+            [TranscriptOutlineAnchor] = []
+        var lastBucket: Int64?
+        for segment in orderedSegments {
+            let bucket =
+                segment.timeRange
+                .startMilliseconds
+                / Self.outlineIntervalMilliseconds
+            if bucket != lastBucket {
+                anchors.append(
+                    TranscriptOutlineAnchor(
+                        segmentID:
+                            segment.segmentID,
+                        startMilliseconds:
+                            segment.timeRange
+                            .startMilliseconds
+                    )
+                )
+                lastBucket = bucket
+            }
+        }
+        outlineAnchors = anchors
         var segmentsByID:
             [TranscriptSegmentID: TranscriptSegmentV1] = [:]
         var ambiguousSegmentIDs: Set<TranscriptSegmentID> = []
@@ -180,6 +276,42 @@ struct TranscriptReviewPresentation: Sendable {
             return !(assignments[reference] ?? [])
                 .contains(where: Self.isConfirmedAssignment)
         }.count
+        var searchableText:
+            [TranscriptSegmentID: String] = [:]
+        searchableText.reserveCapacity(
+            orderedSegments.count
+        )
+        for segment in orderedSegments {
+            let reference =
+                Self.reference(for: segment)
+            let translation =
+                reference.flatMap {
+                    translations[$0]
+                }
+            let values = [
+                segment.text,
+                translation?.translatedText,
+                segment.detectedLanguage.value,
+                segment.reviewStatus.encodedValue,
+                segment.speechSourceKind
+                    .encodedValue,
+                segment.revision.createdBy
+                    .encodedValue,
+                String(
+                    segment.timeRange
+                        .startMilliseconds
+                        / 1_000
+                ),
+            ]
+                .compactMap { $0 }
+                .joined(separator: "\n")
+            searchableText[segment.segmentID] =
+                Self.normalizeSearchText(
+                    values
+                )
+        }
+        normalizedSearchTextBySegmentID =
+            searchableText
     }
 
     func segment(
@@ -248,6 +380,84 @@ struct TranscriptReviewPresentation: Sendable {
             return []
         }
         return coverageByReviewedRevision[reference] ?? []
+    }
+
+    func segments(
+        matching query: String,
+        scope: TranscriptOutlineScope
+    ) -> [TranscriptSegmentV1] {
+        guard query.utf8.count
+                <= Self.maximumSearchQueryUTF8Bytes
+        else {
+            return []
+        }
+        let normalizedQuery =
+            Self.normalizeSearchText(
+                query.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+            )
+        let tokens = normalizedQuery
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+        return segments.filter { segment in
+            guard matchesScope(
+                scope,
+                segment: segment
+            ) else {
+                return false
+            }
+            guard !tokens.isEmpty else {
+                return true
+            }
+            guard let searchable =
+                    normalizedSearchTextBySegmentID[
+                        segment.segmentID
+                    ]
+            else {
+                return false
+            }
+            return tokens.allSatisfy {
+                searchable.contains($0)
+            }
+        }
+    }
+
+    private func matchesScope(
+        _ scope: TranscriptOutlineScope,
+        segment: TranscriptSegmentV1
+    ) -> Bool {
+        switch scope {
+        case .all:
+            true
+        case .needsReview:
+            segment.reviewStatus
+                == .needsReview
+        case .speakerReview:
+            !hasConfirmedSpeaker(
+                for: segment
+            )
+        case .humanEdited:
+            segment.revision.createdBy
+                == .user
+        }
+    }
+
+    private static func normalizeSearchText(
+        _ text: String
+    ) -> String {
+        text.folding(
+            options: [
+                .caseInsensitive,
+                .diacriticInsensitive,
+                .widthInsensitive,
+            ],
+            locale:
+                Locale(
+                    identifier:
+                        "en_US_POSIX"
+                )
+        )
     }
 
     private static func reference(

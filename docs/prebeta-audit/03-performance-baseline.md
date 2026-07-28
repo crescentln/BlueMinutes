@@ -47,6 +47,42 @@ repository's CI-shaped isolated shards above are the accepted local result.
 The fully pinned native visual harness still requires its exact macOS 26.4
 GitHub runner image.
 
+## Current functional working-tree validation
+
+The self-relative 0.4.0 candidate commit containing this document is based on protected main
+`77a4deca11190587c557e081667fb6c0e64a0f4a`. Final local validation on
+2026-07-28 produced:
+
+| Gate | Result |
+| --- | --- |
+| `swift package dump-package` | Pass |
+| CI-shaped Debug test gate with `-warnings-as-errors` | Pass: 513 tests/65 suites in the remaining shard, 12 isolated native-window tests, 11 visual-contract tests, the isolated 10,000-position scale test, and the isolated three-hour retry test |
+| Fresh full Release build with `-warnings-as-errors` | Pass in a new scratch root, 115.75 s |
+| `git diff --check` | Pass |
+| Added-line and untracked-file credential-pattern scan | Pass after excluding diff path headers |
+
+The accepted current-tree Debug result follows the repository's CI isolation
+contract and covers 538 discovered tests. The 513-test synthetic-safe shard
+truthfully skips three installed Apple-model probes and three installed
+official-Codex probes; the visual shard truthfully skips its exact-runner
+harness. All other discovered tests complete. A combined invocation that did
+not isolate the AppKit window tests terminated without a Swift Testing
+aggregate, so its outer zero status was rejected rather than reported as a
+pass. The accepted
+shards include Codex transport/runtime contracts, independent OpenAI STT,
+provider routing, configuration persistence, recording recovery, real
+AVFoundation canonical-audio processing, transcript outline/search,
+content-free diagnostics, app-owned window/menu lifecycle, brand, About, and
+the existing native visual/accessibility suites. The installed pinned official
+Codex runtime and no-meeting-data account/session probes were also run
+successfully earlier on the same date.
+
+The first fresh Release attempt exposed a Swift 6.3 WMO empty-partition link
+failure for the standalone synthetic STT fixture source. The fixture was placed
+in the concrete `OpenAISTTSupport.swift` compilation unit, after which a new
+scratch root completed the full Release build in one command. Repeating a failed
+build in place is not used as the closure evidence.
+
 ## Existing scale evidence
 
 The suite includes:
@@ -62,28 +98,55 @@ The suite includes:
 These tests prove contract bounds, not current CPU, memory, energy, or UI
 latency.
 
-## Current measured artifact values
+## Measured artifact snapshots
 
 These are observed isolated working-tree measurements, not signed package or
 distribution claims:
 
 | Item | Measured value |
 | --- | ---: |
-| Debug executable | 41,110,128 bytes (39.2 MiB) |
-| Release executable | 30,324,592 bytes (28.9 MiB) |
+| Foundation Debug executable | 41,110,128 bytes (39.2 MiB) |
+| Foundation Release executable | 30,324,592 bytes (28.9 MiB) |
+| Earlier functional Debug executable | 45,820,144 bytes (43.7 MiB) |
+| Current functional Release executable | 33,861,392 bytes (32.3 MiB) |
 | GRDB checkout cache | 154 MiB |
 | Entire disposable validation build directory | 1.5 GiB |
 
 No signed/notarized app bundle or optional local model is part of this phase, so
 there is not yet a valid public package-size result.
 
+The current functional Release executable SHA-256 is
+`b8bf403dc77aa573b1f75e3474788f38233f9f11e678a63ff49202c99be24e37`.
+It binds only the isolated local scratch build and is not a publication,
+signing, notarization, or distribution claim.
+
 ## Runtime measurement status
 
-The following v4-required observations are explicitly **not yet run** on this
-branch: cold/warm launch, five-minute idle CPU/memory/energy, main-thread hangs,
-scroll hitches, disk-write frequency/total, network request count, model
-load/unload time, audio-buffer/STT queue depth, and stop-time resource release.
-No before/after UI performance conclusion is claimed.
+A bounded staged-app smoke was run with a fresh isolated
+`CFFIXED_USER_HOME`. The 863×652 main window appeared, the About window showed
+the reviewed icon and current release-service state, closing and reopening the
+main window reused the same process, and menu Quit ended it cleanly. Initial
+idle samples observed 0–0.4 percent CPU and about 49 MiB resident memory; later
+Accessibility-driven window interaction samples were about 114–125 MiB. These
+short samples are observations, not a stable-memory or leak baseline.
+
+No established TCP connection or UDP socket was observed during the isolated
+idle, About, close, reopen, and quit sequence. The isolated home contained no
+workspace or intelligence configuration; only the deliberately retained
+screenshot and empty stdout/stderr capture remained. Apple Unified Logging
+showed only fixed content-free lifecycle codes for application start, window
+resolution, close/reopen, and termination. The diagnostics-copy control was
+rendered and enabled, but was not clicked during the live smoke so the user's
+clipboard was not overwritten; its exact sanitized payload is covered by unit
+tests.
+
+Cold/warm time to first usable workspace, five-minute idle
+CPU/memory/energy, main-thread hangs, scroll hitches, disk-write
+frequency/total, a full outbound-network spy, model load/unload time,
+audio-buffer/STT queue depth, and stop-time resource release remain **not yet
+measured**. The `open` command's 0.11-second return was deliberately not treated
+as launch-to-usable latency. No before/after UI performance conclusion is
+claimed.
 
 ## Measurements still required
 
