@@ -20,6 +20,13 @@ fail() {
 }
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "macOS is required"
+CURRENT_GIT_HEAD="$(/usr/bin/git -C "$ROOT_DIR" rev-parse --verify HEAD)"
+CURRENT_GIT_TREE="$(/usr/bin/git -C "$ROOT_DIR" rev-parse 'HEAD^{tree}')"
+CURRENT_SOURCE_STATUS="$(
+    /usr/bin/git -C "$ROOT_DIR" status --porcelain=v1 --untracked-files=all
+)"
+[[ -z "$CURRENT_SOURCE_STATUS" ]] \
+    || fail "the current release-source checkout must be clean"
 [[ -f "$SOURCE_INFO_PLIST" && ! -L "$SOURCE_INFO_PLIST" ]] \
     || fail "source Info.plist is missing or linked"
 /usr/bin/plutil -lint "$SOURCE_INFO_PLIST" >/dev/null
@@ -265,6 +272,10 @@ verify_source_inventory() {
     git_tag="$(/usr/bin/jq -er '.source.git_tag' "$manifest")"
     [[ "$git_head" =~ ^[0-9a-f]{40}$ ]] || fail "manifest Git head is invalid"
     [[ "$git_tree" =~ ^[0-9a-f]{40}$ ]] || fail "manifest Git tree is invalid"
+    [[ "$git_head" == "$CURRENT_GIT_HEAD" ]] \
+        || fail "manifest Git head differs from the current release-source checkout"
+    [[ "$git_tree" == "$CURRENT_GIT_TREE" ]] \
+        || fail "manifest Git tree differs from the current release-source checkout"
     /usr/bin/git -C "$ROOT_DIR" cat-file -e "$git_head^{commit}" \
         || fail "manifest Git commit is unavailable"
     [[ "$(/usr/bin/git -C "$ROOT_DIR" rev-parse "$git_head^{tree}")" == "$git_tree" ]] \
