@@ -9,10 +9,10 @@ current_task: "011"
 current_status: accepted
 authorized_post_mvp_work:
   task: "public GitHub source publication and long-term maintenance foundation"
-  status: "v0.3.0_published_exact_tag_local_development_package_verified_post_release_ledger_issue_58_in_progress"
+  status: "v0.3.0_published_exact_tag_local_development_package_verified_post_release_ledger_pr_59_carrier"
   rollback_anchor: "94b5ba6d83aaac099fef72b0186def2c36dafbc0"
   implementation_baseline: "protected release baseline 94b5ba6d83aaac099fef72b0186def2c36dafbc0 after release-preparation PR #55 and publication-date PR #57"
-  ledger_carrier: "the commit containing this field is the self-relative post-release Issue #58 ledger carrier based on exact v0.3.0 release baseline 94b5ba6d83aaac099fef72b0186def2c36dafbc0; it records already-complete remote publication and local package evidence without claiming its own future protected-main merge"
+  ledger_carrier: "the commit containing this field is the self-relative post-release Issue #58 and PR #59 ledger carrier based on exact v0.3.0 release baseline 94b5ba6d83aaac099fef72b0186def2c36dafbc0; it records already-complete remote publication and local package evidence without claiming its own future protected-main merge"
   public_name_status: "BlueMinutes selected by the maintainer; preliminary exact-name and affiliation-risk screen passed with normal trademark limitations"
   remote_publication_status: "https://github.com/crescentln/BlueMinutes is PUBLIC; the BlueMinutes-first README and v0.1.0 source-release material from Issue #8 and PR #9 were rebased into main at b45b38a, and the exact release baseline is verified by protected-main CI, signed-out HTTP, GitHub API, and anonymous Git access"
   public_conversion_status: "visibility conversion completed under explicit maintainer authorization at e6215373fbefa61f911ca4ee65c33852fd2dea76; main requires Pull Requests, strict Swift build and test status, linear history, conversation resolution, and administrator enforcement, while force-push and branch deletion are disabled"
@@ -31,12 +31,13 @@ authorized_post_mvp_work:
     release_baseline: "94b5ba6d83aaac099fef72b0186def2c36dafbc0"
     release_tag_object: "4a85d60360ec95834e9bf13af7e30113749d7167"
     post_release_issue: "Issue #58 at https://github.com/crescentln/BlueMinutes/issues/58"
+    post_release_pull_request: "PR #59 at https://github.com/crescentln/BlueMinutes/pull/59 is the self-relative one-file execution-ledger carrier"
     authorization_scope: "promote the bundle to 0.3.0 build 3, prepare and verify one ignored local ad-hoc development package, update release-facing documentation and tests, rebase-merge PR #55 after exact-head gates, then create an unsigned annotated v0.3.0 tag and regular source-only GitHub Release with zero uploaded assets after exact-new-main gates; Developer ID and Team ID signing, notarization, installation, updater, public binary upload or distribution, deployment, schema, dependency, provider, and network expansion remain excluded"
     merge_authority_status: "the maintainer explicitly authorized the guarded PR #55 and PR #57 rebase merges, v0.3.0 source Release, final exact-tag local package, and this post-release ledger closure within the bounded goal; all completed mutations are recorded only after their live gates passed"
     bundle_version_status: "exact release baseline Configuration/MeetingBuddy-Info.plist is public version 0.3.0 build 3; BlueMinutes.app remains backed by compatibility executable MeetingBuddyApp and bundle identifier com.meetingbuddy.desktop"
     local_package_status: "the ignored BlueMinutes-0.3.0-development release set was rebuilt from clean exact annotated tag v0.3.0 at 94b5ba6d83aaac099fef72b0186def2c36dafbc0 and passes direct-app, coherent-set, fresh-ZIP-extraction, exact-source, signature, launch, and negative distribution verification; it is ad-hoc, not notarized, not installed, not uploaded, and not authorized for distribution"
     local_package_manifest: "schema 2 DEVELOPMENT; distribution_authorized false; 394 tracked files; source tree 4566a3afe5f66ea54b03cea3a13729aecfbdf837; executable sha256 3204c54bdc5e1f1456e5fc247c05d7a64b4dc909358c55edb8d66ed93ab1e212; app-bundle sha256 2452d22ba099c167635b33c518fa759587c79ba9c75fd68cca3ed71e6b370eb0; archive sha256 8e6738aa1d0c2089e0214dcfb3210f9d5fa41dbdd4ccb74b15b2bb213ce97e63; source-inventory sha256 b13bd2fd5ffd6aa233fd9fae9653645ff6ea12604b57998f88bba1484f88b0e4; Package.resolved sha256 a14ed642cc66bd9ebdfcbfc4f23886a78afa0663d97e5243848bf77fbb688e26"
-    next_gate: "complete the self-relative Issue #58 one-file ledger carrier through exact-head review, CI, CodeQL, conversation, guarded rebase merge, and exact-new-main gates; then the authorized v0.3.0 UI Foundation and release goal is closed"
+    next_gate: "complete the self-relative Issue #58 and PR #59 one-file ledger carrier through exact-head review, CI, CodeQL, conversation, guarded rebase merge, and exact-new-main gates; then the authorized v0.3.0 UI Foundation and release goal is closed"
   previous_source_release:
     version: "v0.2.0"
     release_url: "https://github.com/crescentln/BlueMinutes/releases/tag/v0.2.0"
@@ -279,7 +280,7 @@ accepted_tasks:
   - "011"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "the commit containing this field is the self-relative Issue #58 post-release ledger carrier based directly on exact v0.3.0 release baseline 94b5ba6d83aaac099fef72b0186def2c36dafbc0; a protected rebase merge may rewrite this carrier identity without changing its reviewed one-file tree delta"
+last_known_git_head: "the commit containing this field is the self-relative Issue #58 and PR #59 post-release ledger carrier based directly on exact v0.3.0 release baseline 94b5ba6d83aaac099fef72b0186def2c36dafbc0; a protected rebase merge may rewrite this carrier identity without changing its reviewed one-file tree delta"
 working_tree_status_summary: "at this ledger-bearing post-commit state, the tracked worktree is clean and the cumulative Issue #58 diff changes exactly docs/CODEX_EXECUTION_STATE.md. The final ignored dist/BlueMinutes-0.3.0-development package remains local-only and untracked. Schema v10, Package.swift, Package.resolved, GRDB 7.11.1, application code, tests, bundle metadata, entitlements, providers, network routes, user workspaces, Developer ID signing, notarization, installation, updater, public binary upload, deployment, and application distribution are unchanged"
 last_verification_commands:
   - "Issue #58 live post-release gate: compare protected origin/main, merged PR #55/#57 commits, closed Issue #54/#56 and open Issue #58, exact release-main CI/CodeQL runs and analysis results, annotated remote tag object/peel, latest regular Release state and zero assets, signed-out HTTP and tagged README, and final exact-tag local package manifest"
@@ -432,6 +433,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
-next_eligible_task: "there is no next numbered MVP task; complete only the self-relative Issue #58 one-file post-release ledger carrier through exact-head review/CI/CodeQL/conversation, guarded rebase merge, and exact-new-main gates. After that closure, future software testing and functional debugging may build on v0.3.0 under a new bounded command; Developer ID, Team ID, notarization, public binary upload or distribution, installation, updater, deployment, and unrelated product initiatives remain excluded"
-last_updated_at: "2026-07-28T12:17:48Z"
+next_eligible_task: "there is no next numbered MVP task; complete only the self-relative Issue #58 and PR #59 one-file post-release ledger carrier through exact-head review/CI/CodeQL/conversation, guarded rebase merge, and exact-new-main gates. After that closure, future software testing and functional debugging may build on v0.3.0 under a new bounded command; Developer ID, Team ID, notarization, public binary upload or distribution, installation, updater, deployment, and unrelated product initiatives remain excluded"
+last_updated_at: "2026-07-28T12:19:20Z"
 ```
