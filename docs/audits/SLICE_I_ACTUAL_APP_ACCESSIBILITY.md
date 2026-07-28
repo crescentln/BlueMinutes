@@ -57,8 +57,8 @@ Application: staged `dist/MeetingBuddy.app`
   on the current exact-source executable completed with `unknown` provenance
   and the same managed-source, canonical-audio, and `local_only` success proof.
 - Every observed SQLite database, WAL/SHM file, task log, managed WAV, and
-  canonical CAF was mode `0600`. Both successful workspaces contained exactly
-  two succeeded jobs (`media-local-intake-v1` and
+  canonical CAF was mode `0600`. All three successful workspaces contained
+  exactly two succeeded jobs (`media-local-intake-v1` and
   `media-canonical-audio-v1`), two completed managed-asset import operations,
   and two registered managed assets.
 - An earlier source-row selection attempt in a separate empty workspace
@@ -71,9 +71,10 @@ Application: staged `dist/MeetingBuddy.app`
 - The current implementation constructs the meeting and security policy,
   validates the selected track and source byte size, constructs the intake plan
   and request, and registers the reversible process-local source capability
-  before its first persistent write. A source-order contract test prevents a
-  future preflight regression from reintroducing the observed orphaned
-  pre-task metadata sequence.
+  before its first persistent write. A source-order contract test enumerates
+  every fallible preflight and both recognized persistent sink families so a
+  future preflight regression cannot silently reintroduce the observed
+  orphaned pre-task metadata sequence.
 - The earlier exact-app processing run exposed an
   `AVAssetWriter.startWriting()` failure when the Task Manager had already
   created a zero-byte, mode-0600 writer lease. The implementation now removes
@@ -81,7 +82,7 @@ Application: staged `dist/MeetingBuddy.app`
   creating the writer, then verifies an ordinary non-symlink mode-0600
   destination before starting the media session or appending samples.
   Non-empty destinations still fail closed. The current staged executable
-  produced the two successful results above.
+  produced the third successful result above.
 
 ### Transcript keyboard and evidence surface
 

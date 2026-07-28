@@ -85,31 +85,48 @@ struct AppCapabilitiesTests {
                     "func importAndProcess(_ submission: MediaImportSubmission)"
             )
         )
-        let importBody = workflow[importStart.lowerBound...]
-        let plan = try #require(
-            importBody.range(
-                of: "let intakePlan = try LocalMediaIntakeJobPlan("
+        let importEnd = try #require(
+            workflow.range(
+                of: "func jobReview(jobID: JobID)",
+                range: importStart.upperBound..<workflow.endIndex
             )
         )
-        let request = try #require(
-            importBody.range(
-                of: "let intakeRequest = try LocalMediaIntakeJobFactory().request("
-            )
+        let importBody = String(
+            workflow[importStart.lowerBound..<importEnd.lowerBound]
         )
-        let transientRegistration = try #require(
-            importBody.range(
-                of: "try runtime.transientSources.register(sourceURL, for: intakeJobID)"
-            )
-        )
-        let firstPersistentWrite = try #require(
-            importBody.range(
-                of: "try runtime.store.insert(meeting)"
-            )
-        )
+        let falliblePreflightMarkers = [
+            "let createdAt = try currentInstant()",
+            "let meeting = try meetingProfile(",
+            "let meetingUUID = try requiredUUID(",
+            "let securityPolicy = try LocalSecurityPolicyFactory().makeDefault(",
+            "let selectedTrack = try inspection.requireTrack(",
+            "let expectedSourceByteSize = try sourceByteSize(",
+            "let intakePlan = try LocalMediaIntakeJobPlan(",
+            "let intakeRequest = try LocalMediaIntakeJobFactory().request(",
+            "try runtime.transientSources.register(sourceURL, for: intakeJobID)",
+        ]
+        let preflightRanges = try falliblePreflightMarkers.map { marker in
+            try #require(importBody.range(of: marker))
+        }
+        for (earlier, later) in zip(preflightRanges, preflightRanges.dropFirst()) {
+            #expect(earlier.lowerBound < later.lowerBound)
+        }
 
-        #expect(plan.lowerBound < firstPersistentWrite.lowerBound)
-        #expect(request.lowerBound < firstPersistentWrite.lowerBound)
-        #expect(transientRegistration.lowerBound < firstPersistentWrite.lowerBound)
+        let persistentSinkMarkers = [
+            "runtime.store.",
+            "runtime.manager.enqueue(",
+        ]
+        let persistentSinkRanges = try persistentSinkMarkers.map { marker in
+            try #require(importBody.range(of: marker))
+        }
+        let firstPersistentWrite = try #require(
+            persistentSinkRanges.min {
+                $0.lowerBound < $1.lowerBound
+            }
+        )
+        let completedPreflight = try #require(preflightRanges.last)
+
+        #expect(completedPreflight.lowerBound < firstPersistentWrite.lowerBound)
     }
 
     private var repositoryRoot: URL {
