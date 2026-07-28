@@ -92,7 +92,7 @@ struct PublicBrandPresentationTests {
         #expect(executionLedger.contains("version: \"v0.3.0\""))
         #expect(
             executionLedger.contains(
-                "bundle_version_status: \"Configuration/MeetingBuddy-Info.plist is promoted"
+                "bundle_version_status: \"exact release baseline Configuration/MeetingBuddy-Info.plist is public version 0.3.0 build 3"
             )
         )
         #expect(
@@ -100,7 +100,7 @@ struct PublicBrandPresentationTests {
                 "working_tree_status_summary: \"at this ledger-bearing post-commit state"
             )
         )
-        #expect(executionLedger.contains("changes exactly eleven Issue #54 paths"))
+        #expect(executionLedger.contains("changes exactly two Issue #58 paths"))
         #expect(
             !executionLedger.contains(
                 "remains the separately gated 0.1.0 internal-alpha application-bundle version"
