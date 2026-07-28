@@ -21,7 +21,8 @@ updates manual until the distribution path is proven.
   website handoff and update policy;
 - an exact composite invariant: the website feed and `UpdatePolicy.feedURL`
   either are both absent or are the same approved URL;
-- `UpdateSafetyGate`;
+- `UpdateSafetyGate`, which accepts only the validated composite release
+  configuration rather than a standalone update policy;
 - default public-Beta `unconfigured` state with no feed or request; and
 - a block on download/install during an active meeting.
 

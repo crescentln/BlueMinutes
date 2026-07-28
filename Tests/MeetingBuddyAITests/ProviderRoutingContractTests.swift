@@ -874,7 +874,7 @@ struct ProviderRoutingContractTests {
         #expect(
             UpdateSafetyGate().decide(
                 .check,
-                policy: updatePolicy,
+                configuration: configuration,
                 activeMeeting: false
             ) == .blocked(reasonCode: "update_service_unconfigured")
         )
@@ -944,9 +944,16 @@ struct ProviderRoutingContractTests {
         #expect(
             UpdateSafetyGate().decide(
                 .download,
-                policy: configuration.update,
+                configuration: configuration,
                 activeMeeting: true
             ) == .blocked(reasonCode: "active_meeting_protects_runtime")
+        )
+        #expect(
+            UpdateSafetyGate().decide(
+                .check,
+                configuration: configuration,
+                activeMeeting: false
+            ) == .allowed
         )
 
         let productionWebsite = try WebsiteIntegrationConfiguration.approvedServices(
@@ -972,6 +979,28 @@ struct ProviderRoutingContractTests {
                     string: "https://updates.not-allowlisted.example.test/feed.xml"
                 )!,
                 approval: sandboxApproval
+            )
+        }
+        let standaloneFeedApproval = ReleaseIntegrationApproval.testOnly(
+            environment: .sandbox,
+            updaterApproved: true,
+            allowedServiceEndpoints: [],
+            allowedUpdateFeedURLs: [
+                URL(
+                    string:
+                        "https://updates.standalone.example.test/feed.xml"
+                )!
+            ]
+        )
+        #expect(throws: ReleaseIntegrationError.self) {
+            _ = try UpdatePolicy.approved(
+                mode: .manual,
+                environment: .sandbox,
+                feedURL: URL(
+                    string:
+                        "https://updates.standalone.example.test/feed.xml"
+                )!,
+                approval: standaloneFeedApproval
             )
         }
         #expect(throws: ReleaseIntegrationError.self) {

@@ -88,7 +88,8 @@
 - Beta billing and service endpoints have an unforgeable-constructor contract
   and fail closed by default;
 - a website update feed additionally requires updater approval, the dedicated
-  exact feed allowlist, and exact equality with the composed update policy;
+  exact feed and service-endpoint allowlists, exact equality with the composed
+  update policy, and a complete release configuration at every update action;
   app-composition and network-spy proof remain open.
 
 ## Acceptance criteria for phase closure

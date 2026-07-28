@@ -258,10 +258,11 @@ public struct UpdatePolicy: Hashable, Sendable {
               approval.updaterApproved,
               WebsiteIntegrationConfiguration
                   .isSyntacticallyConstrainedHTTPSURL(feedURL),
-              approval.allowedUpdateFeedURLs.contains(feedURL)
+              approval.allowedUpdateFeedURLs.contains(feedURL),
+              approval.allowedServiceEndpoints.contains(feedURL)
         else {
             throw ReleaseIntegrationError.buildConfigurationDenied(
-                "Configured updates require a matching approved build and allowlisted HTTPS feed."
+                "Configured updates require a matching approved build and an HTTPS feed in both exact update and service-endpoint allowlists."
             )
         }
         return UpdatePolicy(
@@ -358,12 +359,18 @@ public struct UpdateSafetyGate: Sendable {
 
     public func decide(
         _ action: UpdateAction,
-        policy: UpdatePolicy,
+        configuration: ReleaseIntegrationConfiguration,
         activeMeeting: Bool
     ) -> UpdateActionDecision {
+        let policy = configuration.update
+        let website = configuration.website
         guard policy.mode != .unconfigured,
               policy.serviceEnvironment != nil,
-              policy.feedURL != nil
+              policy.feedURL != nil,
+              website.mode == .services,
+              website.permitsServiceRequests,
+              website.serviceEnvironment == policy.serviceEnvironment,
+              website.updateFeedURL == policy.feedURL
         else {
             return .blocked(reasonCode: "update_service_unconfigured")
         }
