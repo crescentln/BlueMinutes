@@ -206,6 +206,21 @@ struct PublicBrandPresentationTests {
                 "extracted app bundle differs from the release manifest"
             )
         )
+        #expect(
+            verifier.contains(
+                "the current release-source checkout must be clean"
+            )
+        )
+        #expect(
+            verifier.contains(
+                "manifest Git head differs from the current release-source checkout"
+            )
+        )
+        #expect(
+            verifier.contains(
+                "manifest Git tree differs from the current release-source checkout"
+            )
+        )
         #expect(!verifier.contains("internal-alpha|distribution"))
 
         let scalarValues = try source(
