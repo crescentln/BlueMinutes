@@ -67,7 +67,7 @@ struct PublicBrandPresentationTests {
         #expect(!readme.contains("source-only internal alpha"))
 
         let changelog = try source("CHANGELOG.md")
-        #expect(changelog.contains("## [0.3.0] - 2026-07-27"))
+        #expect(changelog.contains("## [0.3.0] - 2026-07-28"))
         #expect(changelog.contains("## [0.2.0] - 2026-07-23"))
         #expect(changelog.contains("## [0.1.0] - 2026-07-22"))
         #expect(

@@ -1,6 +1,6 @@
 # BlueMinutes v0.3.0 — Editorial Dossier Foundation
 
-- Released: 2026-07-27
+- Released: 2026-07-28
 - Tag: `v0.3.0`
 - Distribution scope: source code only; zero uploaded assets
 - Local package: ad-hoc development build for testing on the build Mac
