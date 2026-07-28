@@ -9,10 +9,10 @@ current_task: "011"
 current_status: accepted
 authorized_post_mvp_work:
   task: "public GitHub source publication and long-term maintenance foundation"
-  status: "v0.2.0_published_post_release_pull_request_20_completed_ui_foundation_through_slice_e_completed_later_ui_work_authorized_in_sequence"
+  status: "v0.2.0_published_post_release_pull_request_20_completed_ui_foundation_through_slice_i_completed_v0.3.0_release_foundation_authorized"
   rollback_anchor: "5450a916172c07ec2b7054c76fa40c80db17692e"
-  implementation_baseline: "protected main 18bafa2260fb359d062bf0e230a13bd9dbad58d4 after completed UI Foundation Future Slice E"
-  ledger_carrier: "the commit containing this field is the ledger-bearing state and descends linearly from the implementation baseline; later protected rebase merges may advance main without making the recorded Slice E implementation baseline false"
+  implementation_baseline: "protected main 83f720675ea3b7718a88089248bc4cfe2b95dd5e after completed UI Foundation Future Slice I"
+  ledger_carrier: "the commit containing this field is the ledger-bearing state and descends linearly from the final UI Foundation implementation baseline; later protected rebase merges may advance main without changing the historical Slice E baseline or the completed Slice F through I review and protected-main evidence recorded below"
   public_name_status: "BlueMinutes selected by the maintainer; preliminary exact-name and affiliation-risk screen passed with normal trademark limitations"
   remote_publication_status: "https://github.com/crescentln/BlueMinutes is PUBLIC; the BlueMinutes-first README and v0.1.0 source-release material from Issue #8 and PR #9 were rebased into main at b45b38a, and the exact release baseline is verified by protected-main CI, signed-out HTTP, GitHub API, and anonymous Git access"
   public_conversion_status: "visibility conversion completed under explicit maintainer authorization at e6215373fbefa61f911ca4ee65c33852fd2dea76; main requires Pull Requests, strict Swift build and test status, linear history, conversation resolution, and administrator enforcement, while force-push and branch deletion are disabled"
@@ -35,8 +35,8 @@ authorized_post_mvp_work:
     post_release_merge_commit: "d786b3302a250a588e1c98e22a1b23ea3c37fd19"
     authorization_scope: "prepare the v0.2.0 source-release Pull Request, update CHANGELOG and release-facing README/version documentation, publish a source-only v0.2.0 GitHub Release after protected-main gates, then replace the README audience tagline and add public-safe synthetic screenshots in a separate post-release Pull Request; no binary build, signing, notarization, application upload, installation, deployment, or other distribution is authorized"
     merge_authority_status: "historical and completed: the maintainer authorized rebase merges for PR #12, the v0.2.0 release-preparation Pull Request, and post-release PR #20 only after all applicable gates passed"
-    bundle_version_status: "Configuration/MeetingBuddy-Info.plist remains the separately gated 0.1.0 internal-alpha application-bundle version because this is a source-tree release and the historical 0.1.0-internal-alpha packaging/verifier chain is not being promoted or altered"
-    next_gate: "post-release PR #20 and UI Foundation Slice E through PR #38 are complete; later UI work is authorized only in the recorded sequence and remains subject to independent review, exact-head CI/CodeQL, protected-main merge, and exact-new-main gates"
+    bundle_version_status: "Configuration/MeetingBuddy-Info.plist remains the separately gated 0.1.0 internal-alpha application-bundle version at this UI-ledger carrier; the separately authorized v0.3.0 release-preparation change has not yet promoted it"
+    next_gate: "UI Foundation Slices F through I are complete on protected main; next is the separately authorized v0.3.0 source-release and local ad-hoc development-package preparation, while Developer ID, notarization, public binary upload, installation, updater, and deployment remain excluded"
 post_mvp_initiatives:
   blue_minutes_meeting_research:
     title: "Blue Minutes Meeting / Research integration"
@@ -112,8 +112,43 @@ post_mvp_initiatives:
         scope_kind: "completed implementation Slice E for Local Media, Record Audio, and UN Web TV Metadata intake surfaces"
         merge_commit: "18bafa2260fb359d062bf0e230a13bd9dbad58d4"
         state: merged
-    implementation_baseline: "protected main 18bafa2260fb359d062bf0e230a13bd9dbad58d4 after completed UI Foundation Future Slice E"
-    ledger_carrier: "the commit containing this field carries this reconciliation and descends linearly from the implementation baseline; the protected rebase-merge workflow preserves the reviewed final tree while rewriting branch commits"
+      - pull_request: 43
+        title: "docs: reconcile execution ledger after UI Foundation Future Slice E"
+        scope_kind: "completed documentation-only Slice E execution-ledger reconciliation"
+        merge_commit: "69e8ac878b467ad30e9e07efad408eb21f97c2ae"
+        state: merged
+      - pull_request: 46
+        title: "feat: migrate Transcript Review to editorial dossier"
+        scope_kind: "completed implementation Slice F for Transcript review and exact-evidence inspection"
+        merge_commit: "e72dd248795209ab090af871164aa867e2e65630"
+        state: merged
+      - pull_request: 47
+        title: "Future Slice G-A: migrate Analysis review with exact evidence inspection"
+        scope_kind: "completed implementation Slice G-A for fail-closed Analysis review and exact evidence"
+        merge_commit: "e4efd99d846ba76c8cb830bdc68a77d3ceaa4d56"
+        state: merged
+      - pull_request: 48
+        title: "feat: migrate Briefing to the editorial canvas"
+        scope_kind: "completed implementation Slice G-B for independent Briefing sections and publication proof"
+        merge_commit: "39dd89db2dcf0d0167678876793b39647b8c7814"
+        state: merged
+      - pull_request: 49
+        title: "Future Slice H1: migrate history and learned preferences"
+        scope_kind: "completed implementation Slice H1 for atomic historical-result state and visible learned preferences"
+        merge_commit: "4e9056d12a576e18f61112e7493dd2d110bdce2d"
+        state: merged
+      - pull_request: 50
+        title: "Future Slice H2: migrate Storage to an exact local ledger"
+        scope_kind: "completed implementation Slice H2 for exact local storage accounting and confined mutation paths"
+        merge_commit: "8616993a5a71539f0e4222ccf4e46f971b27498f"
+        state: merged
+      - pull_request: 51
+        title: "Future Slice I: close native visual and accessibility proof"
+        scope_kind: "completed implementation Slice I for deterministic native visual, runtime AX, actual-app, and review evidence"
+        merge_commit: "83f720675ea3b7718a88089248bc4cfe2b95dd5e"
+        state: merged
+    implementation_baseline: "protected main 83f720675ea3b7718a88089248bc4cfe2b95dd5e after completed UI Foundation Future Slice I"
+    ledger_carrier: "the commit containing this field carries this reconciliation and descends linearly from the final UI Foundation implementation baseline; the protected rebase-merge workflow preserves each reviewed final tree while rewriting branch commits"
     future_slice_d:
       title: "Editorial main-window shell"
       status: completed
@@ -138,28 +173,81 @@ post_mvp_initiatives:
       new_main_ci: "GitHub Actions CI run 30222070711 completed successfully on exact protected main"
       new_main_codeql: "CodeQL run 30222070679 completed successfully for Swift and Actions on exact protected main; analysis IDs 1529350682 and 1529313515 report zero results and no errors"
       next_eligible: false
-    future_slice_f:
-      title: "Transcript review"
-      status: "authorized local candidate pending clean replay, validation, independent review, publication, and protected-main gates"
-      authorization_status: authorized_in_sequence
-      github_issue: "Issue #37 at https://github.com/crescentln/BlueMinutes/issues/37"
-      local_branch: "codex/37-ui-slice-f-transcript-review"
-      local_candidate_head: "c5e0e5d73796d05e8ba26f137958d388cb6bec2c"
-      publication_status: "not pushed; the stacked local candidate must be replayed onto the protected ledger-bearing main before publication"
-      next_eligible_after_ledger_merge: true
-    later_ui_work:
-      status: "authorized sequential local development; not accepted on protected main"
-      authorization_status: authorized_in_sequence
-      local_candidates:
-        - "Future Slice G-A Analysis, Issue #39, local candidate 4fd2373ea771c53aadcc2bdf78bcaa9db0fa7855"
-        - "Future Slice G-B Briefing, Issue #40, local candidate 24af93ae5c6e28e1b87153b9f4abc3d93549e653"
-        - "Future Slice H1 Meeting History and learned preferences, Issue #41, local development in progress"
-      pending_after_predecessor_gates:
-        - "Future Slice H2 Storage"
-        - "Future Slice I visual and accessibility closure"
-      publication_order: "F, G-A, G-B, H1, H2, I; no slice may be published or merged before its predecessor is accepted on protected main"
-      next_eligible: false
-    next_gate: "merge this documentation-only reconciliation after its exact-head gates, verify exact new main, then replay Future Slice F onto that protected main and complete its independent review, Pull Request, exact-head CI/CodeQL, merge, and exact-new-main gates"
+    completed_future_slices:
+      slice_f:
+        title: "Transcript review"
+        github_issue: "Issue #37 at https://github.com/crescentln/BlueMinutes/issues/37 closed automatically"
+        pull_request: "PR #46 at https://github.com/crescentln/BlueMinutes/pull/46"
+        implementation_head: "2d6d35249894d6d83ecda1d22e2e7b7815dafeef"
+        merge_commit: "e72dd248795209ab090af871164aa867e2e65630"
+        new_main_ci: "GitHub Actions CI run 30229304776 succeeded on exact protected main"
+        new_main_codeql: "CodeQL run 30229304560 succeeded for Swift and Actions on exact protected main"
+        state: completed
+      slice_g_a:
+        title: "Analysis review"
+        github_issue: "Issue #39 at https://github.com/crescentln/BlueMinutes/issues/39 closed automatically"
+        pull_request: "PR #47 at https://github.com/crescentln/BlueMinutes/pull/47"
+        implementation_head: "2867cc97fb347c850f16da5da3840b0c21941be0"
+        merge_commit: "e4efd99d846ba76c8cb830bdc68a77d3ceaa4d56"
+        new_main_ci: "GitHub Actions CI run 30231905617 succeeded on exact protected main"
+        new_main_codeql: "CodeQL run 30231905523 succeeded for Swift and Actions on exact protected main"
+        state: completed
+      slice_g_b:
+        title: "Briefing editorial canvas"
+        github_issue: "Issue #40 at https://github.com/crescentln/BlueMinutes/issues/40 closed automatically"
+        pull_request: "PR #48 at https://github.com/crescentln/BlueMinutes/pull/48"
+        implementation_head: "74496c30a3319923613b539d02b21ce2dee43cea"
+        merge_commit: "39dd89db2dcf0d0167678876793b39647b8c7814"
+        new_main_ci: "GitHub Actions CI run 30234377135 succeeded on exact protected main"
+        new_main_codeql: "CodeQL run 30234376930 succeeded for Swift and Actions on exact protected main"
+        state: completed
+      slice_h1:
+        title: "Meeting History and learned preferences"
+        github_issue: "Issue #41 at https://github.com/crescentln/BlueMinutes/issues/41 closed automatically"
+        pull_request: "PR #49 at https://github.com/crescentln/BlueMinutes/pull/49"
+        implementation_head: "844bdcf1b02e60ac823eb6f26eda555c070de5fe"
+        merge_commit: "4e9056d12a576e18f61112e7493dd2d110bdce2d"
+        new_main_ci: "GitHub Actions CI run 30274389010 succeeded on exact protected main"
+        new_main_codeql: "CodeQL run 30274388288 succeeded for Swift and Actions on exact protected main"
+        state: completed
+      slice_h2:
+        title: "Storage exact local ledger"
+        github_issue: "Issue #44 at https://github.com/crescentln/BlueMinutes/issues/44 closed automatically"
+        pull_request: "PR #50 at https://github.com/crescentln/BlueMinutes/pull/50"
+        implementation_head: "962f08b826383aea44bc04fe99ce704fef08e407"
+        merge_commit: "8616993a5a71539f0e4222ccf4e46f971b27498f"
+        new_main_ci: "GitHub Actions CI run 30281735931 succeeded on exact protected main"
+        new_main_codeql: "CodeQL run 30281736463 succeeded for Swift and Actions on exact protected main"
+        state: completed
+      slice_i:
+        title: "Native visual and accessibility proof"
+        github_issue: "Issue #45 at https://github.com/crescentln/BlueMinutes/issues/45 closed automatically"
+        pull_request: "PR #51 at https://github.com/crescentln/BlueMinutes/pull/51"
+        implementation_head: "d22bbd4e2ea3b4c0d50b55ee44251b913d064b0f"
+        merge_commit: "83f720675ea3b7718a88089248bc4cfe2b95dd5e"
+        tree_equivalence: "implementation head and exact protected new main both have tree fcd74c509653b716597869e721f4e9a5b9bc8283"
+        exact_head_ci: "CI run 30316602010 succeeded for Swift build/test and native visual regression"
+        exact_head_codeql: "CodeQL run 30316600498 succeeded for Swift and Actions; both analyses had zero results and no error, aggregate PR CodeQL succeeded, and open code-scanning alerts were zero"
+        new_main_ci: "CI run 30318171454 succeeded for Swift build/test and native visual regression on exact protected main"
+        new_main_codeql: "CodeQL run 30318171601 succeeded for Swift and Actions on exact protected main; both analyses had zero results and no error, open alerts were zero, and GitHub does not emit a separate aggregate CodeQL check for main push runs"
+        review_status: "independent final read-only review found no P0/P1; two valid P2 findings were remediated and the exact remediation re-review closed both with no new finding; PR review threads including outdated threads are zero"
+        visual_baseline:
+          initial_candidate: "run 30306957209, evidence job 90113453412, source f203010c3a645d11ccdb97538d6baf9af9a94b04"
+          initial_calibration: "run 30307533539, evidence job 90115266147, same exact source"
+          rejected_remediation_candidate: "run 30313002869, evidence job 90132570916, source c477cc49cea5c1d5a38324f3573afdb46cab4524; rejected during full-resolution semantic review and never imported"
+          accepted_remediation_candidate: "run 30313447482, evidence job 90133908047, source b86264d6d207ed8c2c96b3a87c5cfdfa4a49cdaa"
+          accepted_manifest_sha256: "63fac4d34e01baa4e48b30e9420c313066fe2e6b21f237defa2d5ef3ba2e561c"
+          changed_images: 4
+          byte_identical_images: 46
+          accepted_calibration: "run 30313797786, evidence job 90134932100, source b86264d6d207ed8c2c96b3a87c5cfdfa4a49cdaa"
+          determinism: "three fresh processes times 50 cases times five captures equals 750 frames and 1,500 pairwise comparisons; every hash matched within and across processes and the candidate; thresholds remain maximum channel delta 0, changed-pixel ratio 0, and luminance SSIM 1"
+        actual_app_evidence:
+          source_revision: "90fc6c6911bed80d2c0e3ddd222a92dbc1d3e8a1"
+          executable_sha256: "399596f84c93783c6ce3d1fd7589ab14462d3c88cb795964fedcde4d0587ffaf"
+          result: "a fresh exact-path synthetic WAV import with unknown provenance completed copied/hash-verified local intake and canonical audio as Succeeded, 3 of 3, chunk-0, and local_only; workspace database, sidecars, logs, managed WAV, and canonical CAF were mode 0600"
+          manual_boundary: "current-head Transcript transition automation bridge terminated without harming the app; the earlier unchanged-path Transcript hands-on sequence remains bounded evidence, while VoiceOver spoken wording and live toggle-and-restore checks for Reduce Transparency, Differentiate Without Color, and Reduce Motion remain honestly unverified system-integration observations"
+        state: completed
+    next_gate: "complete this one-file execution-ledger reconciliation through independent review, exact-head and exact-new-main gates, then prepare the separately authorized v0.3.0 source release and local ad-hoc development package; Developer ID, notarization, public binary upload, installation, updater, deployment, schema, dependency, provider, and network expansion remain excluded"
 accepted_tasks:
   - "001"
   - "002"
@@ -180,8 +268,8 @@ accepted_tasks:
   - "011"
 completed_pending_acceptance: []
 blocked_tasks: []
-last_known_git_head: "the commit containing this field is the self-relative ledger carrier and descends linearly from exact Slice E implementation baseline 18bafa2260fb359d062bf0e230a13bd9dbad58d4; later rebase merges advance protected main without altering the historical baseline or reviewed tree-equivalence evidence recorded here"
-working_tree_status_summary: "at this ledger-bearing post-commit state, the tracked worktree is clean and the cumulative branch diff changes exactly docs/CODEX_EXECUTION_STATE.md relative to exact Slice E implementation baseline 18bafa2260fb359d062bf0e230a13bd9dbad58d4. Protected main records the prior UI Foundation progression through Slice D and documentation PR #35, then completed Slice E PR #38 at the implementation baseline. Future Slice F and later G/H/I work are authorized sequential local candidates or pending slices but remain unaccepted and must not be published out of order. No Developer ID signing, notarization, binary upload, installation, deployment, or application distribution has been performed"
+last_known_git_head: "the commit containing this field is the self-relative ledger carrier and descends linearly from exact final UI Foundation implementation baseline 83f720675ea3b7718a88089248bc4cfe2b95dd5e; later rebase merges advance protected main without altering the historical Slice E baseline or recorded Slice F through I review and protected-main evidence"
+working_tree_status_summary: "at this ledger-bearing post-commit state, the tracked worktree is clean and the cumulative branch diff changes exactly docs/CODEX_EXECUTION_STATE.md relative to final UI Foundation implementation baseline 83f720675ea3b7718a88089248bc4cfe2b95dd5e. Protected main records the historical progression through Slice E and documentation PR #43, then completed Slices F, G-A, G-B, H1, H2, and I in sequence through PR #51. No production source, test, configuration, schema, migration, dependency, entitlement, release artifact, user workspace, Developer ID signing, notarization, public binary upload, installation, updater, deployment, or application distribution changed in this docs-only reconciliation"
 last_verification_commands:
   - "Codex Security standard repository scan ec5ba727-af63-4f1a-bd8c-feb3001ed3a2 with 134/134 receipts, validation, reconciliation, attack-path analysis, sealed manifest/findings/coverage/report/SARIF, and completion indexing"
   - "swift test --scratch-path <new temporary directory> -Xswiftc -warnings-as-errors"
@@ -229,7 +317,12 @@ last_verification_commands:
   - "Issue #34 docs-only ledger gate: parse the single fenced YAML document with recursive duplicate-key rejection; assert required fields, frozen accepted Tasks 001-011, exact protected-main progression through PR #33, completed Slice D, unauthorized Slice E/later boundaries, Markdown structure and links, exact one-file unstaged scope and branch point, git diff --check, and bounded added-line sensitive-content patterns"
   - "Issue #42 post-Slice-E live closure gate: verify protected origin/main 18bafa2260fb359d062bf0e230a13bd9dbad58d4, PR #38 merged state and exact merge commit, Issue #36 completed closure, PR-head/new-main tree equivalence, and terminal-success exact-new-main CI and CodeQL for Swift and Actions"
   - "Issue #42 docs-only ledger gate: parse the single fenced YAML document with recursive duplicate-key rejection; assert required fields, frozen accepted Tasks 001-011, progression through PR #35 and PR #38, completed Slice E, sequential-but-unaccepted F/G/H/I state, historical UI-migration-plan authorization note, self-relative ledger carrier, Markdown structure and links, exact one-file scope and branch point, git diff --check, and bounded added-line sensitive-content checks"
+  - "Issue #52 post-Slice-I live closure gate: verify protected origin/main 83f720675ea3b7718a88089248bc4cfe2b95dd5e; merged PR #46 through PR #51 and closed Issue #37, #39, #40, #41, #44, and #45; PR #51 head/new-main tree equivalence; terminal-success exact-new-main CI and CodeQL analyses; zero open code-scanning alerts; and zero unresolved review threads including outdated threads"
+  - "Issue #52 docs-only ledger gate: parse the single fenced YAML document with Psych and recursive duplicate-key rejection; assert required fields, frozen accepted Tasks 001-011, exact protected-main progression through PR #51, completed Slices F through I, exact final implementation baseline, historical UI-migration-plan authorization note, self-relative ledger carrier, Markdown structure and local links, exact one-file scope and branch point, git diff --check, and bounded added-line sensitive-content checks"
 last_verification_results:
+  - "Issue #52 local docs-only gate passes on codex/52-ui-foundation-ledger: the single YAML document parses with recursive duplicate-key rejection; all required fields, 17 frozen accepted task IDs, 16 exact protected-main progression entries, six completed final slices, the historical migration-plan note, exact 83f720675ea3b7718a88089248bc4cfe2b95dd5e implementation baseline, and self-relative ledger carrier are internally consistent; the single H1, two fences, local targets, exact one-file allowlist, branch point, ancestry, whitespace, and bounded added-line sensitive-content checks pass. Swift build/test and native/manual validation are not applicable to this local documentation-only change"
+  - "Issue #52 live closure refresh confirms protected origin/main at 83f720675ea3b7718a88089248bc4cfe2b95dd5e after PR #46 through PR #51 merged in sequence and their tracked issues closed; PR #51 implementation head d22bbd4e2ea3b4c0d50b55ee44251b913d064b0f and exact new main share tree fcd74c509653b716597869e721f4e9a5b9bc8283; exact-new-main CI run 30318171454 and CodeQL run 30318171601 succeeded, both CodeQL analyses reported zero results and no error, open code-scanning alerts were zero, and no separate aggregate CodeQL check is emitted for main push runs"
+  - "Issue #52 records the final Slice I proof without overstating it: four changed native reference images received full-resolution semantic review, 46 were byte-identical, 750 calibration frames and 1,500 comparisons were exactly deterministic, a fresh exact-path actual-app WAV import completed 3 of 3 locally with protected file modes, and current-head VoiceOver spoken wording plus live system accessibility toggle-and-restore observations remain unverified"
   - "Issue #42 live closure refresh confirms protected origin/main at 18bafa2260fb359d062bf0e230a13bd9dbad58d4; PR #38 is merged at that exact commit and Issue #36 is closed as completed; PR head b591ac0be9903e338b52194faa0ef34da761077f and new main share tree a37118d46bd6c40f6af5c1296f9716633110e88a; exact-main CI run 30222070711 and CodeQL run 30222070679 completed successfully for Swift and Actions with zero results and no errors"
   - "Issue #42 local docs-only gate passes on codex/42-execution-ledger-slice-e: the YAML parses with no duplicate keys and all required operational fields; accepted Tasks 001-011 remain exact; Slice E completion, sequential-but-unaccepted later work, the historical migration-plan status, and the self-relative ledger carrier are internally consistent; Markdown structure and links, exact one-file allowlist from branch point 18bafa2260fb359d062bf0e230a13bd9dbad58d4, whitespace, and bounded sensitive-content checks pass. Swift build/test and native/manual validation are not applicable to the local documentation-only change"
   - "Issue #34 live closure refresh confirms protected origin/main at 0fc56a58c74ae0215a7443bb9c5b7d847526d222; PR #33 is merged at that exact commit and Issue #32 is closed as completed; PR head 5d4980884fcbb7fb970f571c09ede518014db108 and new main share tree ec2745fe424ec796facec017baec156c7b5e7ff6; exact-main CI run 30208963904 and CodeQL run 30208963890 are completed/success, with successful Swift and Actions jobs and zero CodeQL results, errors, or warnings"
@@ -287,6 +380,8 @@ last_verification_results:
 open_P0_decisions: []
 open_P1_decisions: []
 known_out_of_scope_findings:
+  - "the final Slice I current-head actual-app import path is proven with synthetic local media, but the Transcript transition automation bridge terminated before producing current-head transition evidence; an earlier unchanged-path Transcript hands-on sequence remains bounded evidence, and current-head VoiceOver spoken wording plus live Reduce Transparency, Differentiate Without Color, and Reduce Motion toggle-and-restore observations remain unverified"
+  - "the authorized v0.3.0 foundation may produce a local ad-hoc development package and a source-only GitHub Release with zero uploaded assets; Developer ID and Team ID signing, notarization and stapling, public binary upload or distribution, installation, automatic update, deployment, schema or dependency changes, and provider or network expansion remain separate future gates"
   - "Phase 1 Change Group 2 intentionally adds no enabled Research capability, conditional feature branch, persistence, migration, ObjectStore implementation, provider or connector, network route, production resolver, Research service/executor, Setup Guide, Settings, Conversation/Chat UI, artifact UI, task registration, automation, CLI, MCP, export, or user-data behavior; all later work remains separately gated"
   - "Task 011 release classification is INTERNAL ALPHA: Developer ID, Team ID, notarization/stapling, affirmative Gatekeeper distribution approval, clean-machine install/update/rollback, final distribution icon/localization review, manual VoiceOver/keyboard/contrast/reduced-motion review, and intended-OS live TCC/capture interruption evidence are incomplete"
   - "current-version application reopen is proven for a cold copied workspace, but an actual older binary rollback and clean-machine restore are untested; compact verification summaries are preserved without full raw test transcripts"
@@ -311,6 +406,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this internal-alpha acceptance"
-next_eligible_task: "there is no next numbered MVP task; after this documentation-only ledger carrier is accepted, Future Slice F is next in the explicitly authorized UI sequence, followed only after independent predecessor gates by G-A, G-B, H1, H2, and I; binary signing, notarization, upload, installation, deployment, distribution, and unrelated product initiatives remain outside the current authorization"
-last_updated_at: "2026-07-26T23:12:00Z"
+next_eligible_task: "there is no next numbered MVP task; after this documentation-only ledger carrier passes independent review, exact-head checks, protected rebase merge, and exact-new-main gates, the next authorized work is the bounded v0.3.0 source-release and local ad-hoc development-package foundation; Developer ID, notarization, public binary upload or distribution, installation, updater, deployment, and unrelated product initiatives remain excluded"
+last_updated_at: "2026-07-28T01:29:58Z"
 ```
