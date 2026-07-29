@@ -16,6 +16,22 @@ The canonical executable fixtures remain under
 `Tests/MeetingBuddyFeaturesTests/VisualRegression/`. The audit copy is evidence,
 not a second source of test truth.
 
+The accepted 0.4.0 candidate was captured from exact source
+`82b1abc1b921b37c730e54c699574272c54e8f0e` in GitHub Actions run
+`30408544276`, evidence job `90439382718`. Twenty-six images are byte-identical
+to the preceding baseline. The 24 changed Light/Dark images are limited to
+Local Media ready/working, onboarding empty, Recording active/loading/ready,
+the four shell sizes, and Transcript incomplete/selected. Labeled contact
+sheets for all 50 images plus full-resolution review of the changed surfaces
+found no blank capture, overlap, clipping, missing primary action, or
+privacy-bearing content. All thresholds remain exact at 0/0/1.
+
+GitHub Actions run `30409045361`, evidence job `90440892621`, then calibrated
+the same exact source in three fresh processes. All 750 captured frames and
+1,500 within-process pair comparisons were byte-exact, and every per-case hash
+matched the reviewed candidate. The three durable records are stored under
+`docs/audits/visual-regression-calibration/`.
+
 ## Existing design to preserve
 
 - native `NavigationSplitView`, `List`, `TabView`, `Form`, `Section`, toolbar,

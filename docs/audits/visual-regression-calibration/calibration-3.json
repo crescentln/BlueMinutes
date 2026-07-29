@@ -3,11 +3,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "28992e87c7ca6820582e87b4dabc39f30d186bcb6e073400cc14d337456aba32",
-        "28992e87c7ca6820582e87b4dabc39f30d186bcb6e073400cc14d337456aba32",
-        "28992e87c7ca6820582e87b4dabc39f30d186bcb6e073400cc14d337456aba32",
-        "28992e87c7ca6820582e87b4dabc39f30d186bcb6e073400cc14d337456aba32",
-        "28992e87c7ca6820582e87b4dabc39f30d186bcb6e073400cc14d337456aba32"
+        "fd8f126e1d400c41019f31058a926c9081ae1d1a06db42a67150c10d9e0b2a1a",
+        "fd8f126e1d400c41019f31058a926c9081ae1d1a06db42a67150c10d9e0b2a1a",
+        "fd8f126e1d400c41019f31058a926c9081ae1d1a06db42a67150c10d9e0b2a1a",
+        "fd8f126e1d400c41019f31058a926c9081ae1d1a06db42a67150c10d9e0b2a1a",
+        "fd8f126e1d400c41019f31058a926c9081ae1d1a06db42a67150c10d9e0b2a1a"
       ],
       "id" : "shell-860x600-light",
       "maximumChangedPixelRatio" : 0,
@@ -18,11 +18,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "ab5daf0920ef03624f74519deac0c83e5459800066a7cb12f42cbe39985f1f74",
-        "ab5daf0920ef03624f74519deac0c83e5459800066a7cb12f42cbe39985f1f74",
-        "ab5daf0920ef03624f74519deac0c83e5459800066a7cb12f42cbe39985f1f74",
-        "ab5daf0920ef03624f74519deac0c83e5459800066a7cb12f42cbe39985f1f74",
-        "ab5daf0920ef03624f74519deac0c83e5459800066a7cb12f42cbe39985f1f74"
+        "7e7764485e577f1676936ea7f02d3a4e46c3e9520ce741ee59044cdc47809a1a",
+        "7e7764485e577f1676936ea7f02d3a4e46c3e9520ce741ee59044cdc47809a1a",
+        "7e7764485e577f1676936ea7f02d3a4e46c3e9520ce741ee59044cdc47809a1a",
+        "7e7764485e577f1676936ea7f02d3a4e46c3e9520ce741ee59044cdc47809a1a",
+        "7e7764485e577f1676936ea7f02d3a4e46c3e9520ce741ee59044cdc47809a1a"
       ],
       "id" : "shell-860x600-dark",
       "maximumChangedPixelRatio" : 0,
@@ -33,11 +33,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "4424f22ecc570d2f06765610c52135f3c7db032c76782b58b458398a23c3b4f5",
-        "4424f22ecc570d2f06765610c52135f3c7db032c76782b58b458398a23c3b4f5",
-        "4424f22ecc570d2f06765610c52135f3c7db032c76782b58b458398a23c3b4f5",
-        "4424f22ecc570d2f06765610c52135f3c7db032c76782b58b458398a23c3b4f5",
-        "4424f22ecc570d2f06765610c52135f3c7db032c76782b58b458398a23c3b4f5"
+        "afcb42d0484b3c7935db16ce3a17882ef7da7d5abce760e901f88f071624efbd",
+        "afcb42d0484b3c7935db16ce3a17882ef7da7d5abce760e901f88f071624efbd",
+        "afcb42d0484b3c7935db16ce3a17882ef7da7d5abce760e901f88f071624efbd",
+        "afcb42d0484b3c7935db16ce3a17882ef7da7d5abce760e901f88f071624efbd",
+        "afcb42d0484b3c7935db16ce3a17882ef7da7d5abce760e901f88f071624efbd"
       ],
       "id" : "shell-1080x720-light",
       "maximumChangedPixelRatio" : 0,
@@ -48,11 +48,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "e521685be27bc2036454e025d911ab34b5c9d20d4363967a490374378854b13a",
-        "e521685be27bc2036454e025d911ab34b5c9d20d4363967a490374378854b13a",
-        "e521685be27bc2036454e025d911ab34b5c9d20d4363967a490374378854b13a",
-        "e521685be27bc2036454e025d911ab34b5c9d20d4363967a490374378854b13a",
-        "e521685be27bc2036454e025d911ab34b5c9d20d4363967a490374378854b13a"
+        "032e19c0d2c090377374bfaa3820f61d034dd66347880589a7b84e5295eec2f9",
+        "032e19c0d2c090377374bfaa3820f61d034dd66347880589a7b84e5295eec2f9",
+        "032e19c0d2c090377374bfaa3820f61d034dd66347880589a7b84e5295eec2f9",
+        "032e19c0d2c090377374bfaa3820f61d034dd66347880589a7b84e5295eec2f9",
+        "032e19c0d2c090377374bfaa3820f61d034dd66347880589a7b84e5295eec2f9"
       ],
       "id" : "shell-1080x720-dark",
       "maximumChangedPixelRatio" : 0,
@@ -63,11 +63,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "052f28023d8c9303db7cd47382d91de9f5fd14f177ce9962279a77451812f974",
-        "052f28023d8c9303db7cd47382d91de9f5fd14f177ce9962279a77451812f974",
-        "052f28023d8c9303db7cd47382d91de9f5fd14f177ce9962279a77451812f974",
-        "052f28023d8c9303db7cd47382d91de9f5fd14f177ce9962279a77451812f974",
-        "052f28023d8c9303db7cd47382d91de9f5fd14f177ce9962279a77451812f974"
+        "734a70facea3c2ef5ebaa5700dd53a2f674dcd499846c4004af477803db953ce",
+        "734a70facea3c2ef5ebaa5700dd53a2f674dcd499846c4004af477803db953ce",
+        "734a70facea3c2ef5ebaa5700dd53a2f674dcd499846c4004af477803db953ce",
+        "734a70facea3c2ef5ebaa5700dd53a2f674dcd499846c4004af477803db953ce",
+        "734a70facea3c2ef5ebaa5700dd53a2f674dcd499846c4004af477803db953ce"
       ],
       "id" : "shell-1440x1024-light",
       "maximumChangedPixelRatio" : 0,
@@ -78,11 +78,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "5541e031ce91120dd64646ff48ed1f99e36e26e54e13ed15ef6c94678332f783",
-        "5541e031ce91120dd64646ff48ed1f99e36e26e54e13ed15ef6c94678332f783",
-        "5541e031ce91120dd64646ff48ed1f99e36e26e54e13ed15ef6c94678332f783",
-        "5541e031ce91120dd64646ff48ed1f99e36e26e54e13ed15ef6c94678332f783",
-        "5541e031ce91120dd64646ff48ed1f99e36e26e54e13ed15ef6c94678332f783"
+        "f6ab99cfe73f651051dc236820940c76a95f51ca94a119e162d4921f1dc84787",
+        "f6ab99cfe73f651051dc236820940c76a95f51ca94a119e162d4921f1dc84787",
+        "f6ab99cfe73f651051dc236820940c76a95f51ca94a119e162d4921f1dc84787",
+        "f6ab99cfe73f651051dc236820940c76a95f51ca94a119e162d4921f1dc84787",
+        "f6ab99cfe73f651051dc236820940c76a95f51ca94a119e162d4921f1dc84787"
       ],
       "id" : "shell-1440x1024-dark",
       "maximumChangedPixelRatio" : 0,
@@ -93,11 +93,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "1e0ed37ae8857bce2e9110eb81bb0e71d2a83296201aab9fb8504d1f460c0842",
-        "1e0ed37ae8857bce2e9110eb81bb0e71d2a83296201aab9fb8504d1f460c0842",
-        "1e0ed37ae8857bce2e9110eb81bb0e71d2a83296201aab9fb8504d1f460c0842",
-        "1e0ed37ae8857bce2e9110eb81bb0e71d2a83296201aab9fb8504d1f460c0842",
-        "1e0ed37ae8857bce2e9110eb81bb0e71d2a83296201aab9fb8504d1f460c0842"
+        "e7f4a6bc39880b8fd71c476bda7acd5a44ff41ea33a1dca769bb76bf40594d46",
+        "e7f4a6bc39880b8fd71c476bda7acd5a44ff41ea33a1dca769bb76bf40594d46",
+        "e7f4a6bc39880b8fd71c476bda7acd5a44ff41ea33a1dca769bb76bf40594d46",
+        "e7f4a6bc39880b8fd71c476bda7acd5a44ff41ea33a1dca769bb76bf40594d46",
+        "e7f4a6bc39880b8fd71c476bda7acd5a44ff41ea33a1dca769bb76bf40594d46"
       ],
       "id" : "shell-1728x1024-light",
       "maximumChangedPixelRatio" : 0,
@@ -108,11 +108,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "95f82a97c50cd92ef26a1309fa234e7b28aaaafe5497974c198dd2f5928047dc",
-        "95f82a97c50cd92ef26a1309fa234e7b28aaaafe5497974c198dd2f5928047dc",
-        "95f82a97c50cd92ef26a1309fa234e7b28aaaafe5497974c198dd2f5928047dc",
-        "95f82a97c50cd92ef26a1309fa234e7b28aaaafe5497974c198dd2f5928047dc",
-        "95f82a97c50cd92ef26a1309fa234e7b28aaaafe5497974c198dd2f5928047dc"
+        "e6c4beb42daaaedad87d0ad40dd5dc6b6f0d0d96207d996939d33f11cb7ef2fb",
+        "e6c4beb42daaaedad87d0ad40dd5dc6b6f0d0d96207d996939d33f11cb7ef2fb",
+        "e6c4beb42daaaedad87d0ad40dd5dc6b6f0d0d96207d996939d33f11cb7ef2fb",
+        "e6c4beb42daaaedad87d0ad40dd5dc6b6f0d0d96207d996939d33f11cb7ef2fb",
+        "e6c4beb42daaaedad87d0ad40dd5dc6b6f0d0d96207d996939d33f11cb7ef2fb"
       ],
       "id" : "shell-1728x1024-dark",
       "maximumChangedPixelRatio" : 0,
@@ -123,11 +123,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "4ec7b9f803d1e74500476e1716b668f6f6df9538e0bfc70a7647182ead406abb",
-        "4ec7b9f803d1e74500476e1716b668f6f6df9538e0bfc70a7647182ead406abb",
-        "4ec7b9f803d1e74500476e1716b668f6f6df9538e0bfc70a7647182ead406abb",
-        "4ec7b9f803d1e74500476e1716b668f6f6df9538e0bfc70a7647182ead406abb",
-        "4ec7b9f803d1e74500476e1716b668f6f6df9538e0bfc70a7647182ead406abb"
+        "20d0f5dda5ebeaae65ccbdf2ff2942611be2ec1446ad67b18964a18dba8f362c",
+        "20d0f5dda5ebeaae65ccbdf2ff2942611be2ec1446ad67b18964a18dba8f362c",
+        "20d0f5dda5ebeaae65ccbdf2ff2942611be2ec1446ad67b18964a18dba8f362c",
+        "20d0f5dda5ebeaae65ccbdf2ff2942611be2ec1446ad67b18964a18dba8f362c",
+        "20d0f5dda5ebeaae65ccbdf2ff2942611be2ec1446ad67b18964a18dba8f362c"
       ],
       "id" : "onboarding-empty-light",
       "maximumChangedPixelRatio" : 0,
@@ -138,11 +138,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "5b35c45edf106dbb5311966e1b38fc826a2e0260a0892e9b0da17c0229c6f5f7",
-        "5b35c45edf106dbb5311966e1b38fc826a2e0260a0892e9b0da17c0229c6f5f7",
-        "5b35c45edf106dbb5311966e1b38fc826a2e0260a0892e9b0da17c0229c6f5f7",
-        "5b35c45edf106dbb5311966e1b38fc826a2e0260a0892e9b0da17c0229c6f5f7",
-        "5b35c45edf106dbb5311966e1b38fc826a2e0260a0892e9b0da17c0229c6f5f7"
+        "fe86694578a40c33a6de84dbc839e89726f28bb0643964b65b92c21a9f9f3411",
+        "fe86694578a40c33a6de84dbc839e89726f28bb0643964b65b92c21a9f9f3411",
+        "fe86694578a40c33a6de84dbc839e89726f28bb0643964b65b92c21a9f9f3411",
+        "fe86694578a40c33a6de84dbc839e89726f28bb0643964b65b92c21a9f9f3411",
+        "fe86694578a40c33a6de84dbc839e89726f28bb0643964b65b92c21a9f9f3411"
       ],
       "id" : "onboarding-empty-dark",
       "maximumChangedPixelRatio" : 0,
@@ -153,11 +153,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "9258be6fe37e0338caaa551a86dd8ed5d03c29a974f25192cb482c202a020a86",
-        "9258be6fe37e0338caaa551a86dd8ed5d03c29a974f25192cb482c202a020a86",
-        "9258be6fe37e0338caaa551a86dd8ed5d03c29a974f25192cb482c202a020a86",
-        "9258be6fe37e0338caaa551a86dd8ed5d03c29a974f25192cb482c202a020a86",
-        "9258be6fe37e0338caaa551a86dd8ed5d03c29a974f25192cb482c202a020a86"
+        "04e6b43b38ba8fe167a1287cbb251176685a19f48376c0eeee389082bc78af97",
+        "04e6b43b38ba8fe167a1287cbb251176685a19f48376c0eeee389082bc78af97",
+        "04e6b43b38ba8fe167a1287cbb251176685a19f48376c0eeee389082bc78af97",
+        "04e6b43b38ba8fe167a1287cbb251176685a19f48376c0eeee389082bc78af97",
+        "04e6b43b38ba8fe167a1287cbb251176685a19f48376c0eeee389082bc78af97"
       ],
       "id" : "local-media-ready-light",
       "maximumChangedPixelRatio" : 0,
@@ -168,11 +168,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "8bf83078aaac77f90061a82e98387d5cae39596b33d5f5f7e32b90ce980fa8d0",
-        "8bf83078aaac77f90061a82e98387d5cae39596b33d5f5f7e32b90ce980fa8d0",
-        "8bf83078aaac77f90061a82e98387d5cae39596b33d5f5f7e32b90ce980fa8d0",
-        "8bf83078aaac77f90061a82e98387d5cae39596b33d5f5f7e32b90ce980fa8d0",
-        "8bf83078aaac77f90061a82e98387d5cae39596b33d5f5f7e32b90ce980fa8d0"
+        "6d1b14ea323f75e2580ea59076d9760ca7196e2d48794aac45a1850146d2383a",
+        "6d1b14ea323f75e2580ea59076d9760ca7196e2d48794aac45a1850146d2383a",
+        "6d1b14ea323f75e2580ea59076d9760ca7196e2d48794aac45a1850146d2383a",
+        "6d1b14ea323f75e2580ea59076d9760ca7196e2d48794aac45a1850146d2383a",
+        "6d1b14ea323f75e2580ea59076d9760ca7196e2d48794aac45a1850146d2383a"
       ],
       "id" : "local-media-ready-dark",
       "maximumChangedPixelRatio" : 0,
@@ -183,11 +183,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "f0cfd926c4a0d6213886af1c93e24adb1c53e913ed0aa3b7844265c9db6f8a88",
-        "f0cfd926c4a0d6213886af1c93e24adb1c53e913ed0aa3b7844265c9db6f8a88",
-        "f0cfd926c4a0d6213886af1c93e24adb1c53e913ed0aa3b7844265c9db6f8a88",
-        "f0cfd926c4a0d6213886af1c93e24adb1c53e913ed0aa3b7844265c9db6f8a88",
-        "f0cfd926c4a0d6213886af1c93e24adb1c53e913ed0aa3b7844265c9db6f8a88"
+        "4ea6ffa547ec582973e38d3a9391a96ac0166e39399389f4fd31aee6f9860317",
+        "4ea6ffa547ec582973e38d3a9391a96ac0166e39399389f4fd31aee6f9860317",
+        "4ea6ffa547ec582973e38d3a9391a96ac0166e39399389f4fd31aee6f9860317",
+        "4ea6ffa547ec582973e38d3a9391a96ac0166e39399389f4fd31aee6f9860317",
+        "4ea6ffa547ec582973e38d3a9391a96ac0166e39399389f4fd31aee6f9860317"
       ],
       "id" : "local-media-working-light",
       "maximumChangedPixelRatio" : 0,
@@ -198,11 +198,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "eb00cfb95475bcc0360b63fbd1cb76e1c2f8485895be0a59c5e20de2de087328",
-        "eb00cfb95475bcc0360b63fbd1cb76e1c2f8485895be0a59c5e20de2de087328",
-        "eb00cfb95475bcc0360b63fbd1cb76e1c2f8485895be0a59c5e20de2de087328",
-        "eb00cfb95475bcc0360b63fbd1cb76e1c2f8485895be0a59c5e20de2de087328",
-        "eb00cfb95475bcc0360b63fbd1cb76e1c2f8485895be0a59c5e20de2de087328"
+        "3d1cd44672e85d10092a45b35b7938286a86ece51078720eb1b35cb8cdbf9564",
+        "3d1cd44672e85d10092a45b35b7938286a86ece51078720eb1b35cb8cdbf9564",
+        "3d1cd44672e85d10092a45b35b7938286a86ece51078720eb1b35cb8cdbf9564",
+        "3d1cd44672e85d10092a45b35b7938286a86ece51078720eb1b35cb8cdbf9564",
+        "3d1cd44672e85d10092a45b35b7938286a86ece51078720eb1b35cb8cdbf9564"
       ],
       "id" : "local-media-working-dark",
       "maximumChangedPixelRatio" : 0,
@@ -213,11 +213,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "f6ef8ff03bbbf30908c5140f3a038c12735caf34676427124521e5b5da3affc2",
-        "f6ef8ff03bbbf30908c5140f3a038c12735caf34676427124521e5b5da3affc2",
-        "f6ef8ff03bbbf30908c5140f3a038c12735caf34676427124521e5b5da3affc2",
-        "f6ef8ff03bbbf30908c5140f3a038c12735caf34676427124521e5b5da3affc2",
-        "f6ef8ff03bbbf30908c5140f3a038c12735caf34676427124521e5b5da3affc2"
+        "23f7533a9df5067198270e4a5c691d7819970dff36cb9cc4fcbbf34805a359dc",
+        "23f7533a9df5067198270e4a5c691d7819970dff36cb9cc4fcbbf34805a359dc",
+        "23f7533a9df5067198270e4a5c691d7819970dff36cb9cc4fcbbf34805a359dc",
+        "23f7533a9df5067198270e4a5c691d7819970dff36cb9cc4fcbbf34805a359dc",
+        "23f7533a9df5067198270e4a5c691d7819970dff36cb9cc4fcbbf34805a359dc"
       ],
       "id" : "recording-ready-light",
       "maximumChangedPixelRatio" : 0,
@@ -228,11 +228,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "10f14f0f3ce3b97a141d0605b1400b69ff6bae3615b0a9cb3e0c3f8fed4f10dc",
-        "10f14f0f3ce3b97a141d0605b1400b69ff6bae3615b0a9cb3e0c3f8fed4f10dc",
-        "10f14f0f3ce3b97a141d0605b1400b69ff6bae3615b0a9cb3e0c3f8fed4f10dc",
-        "10f14f0f3ce3b97a141d0605b1400b69ff6bae3615b0a9cb3e0c3f8fed4f10dc",
-        "10f14f0f3ce3b97a141d0605b1400b69ff6bae3615b0a9cb3e0c3f8fed4f10dc"
+        "97132c9b12b06722cef4086ad43bd9cd3e32541ed1cbb243acfc5da0489a1b4f",
+        "97132c9b12b06722cef4086ad43bd9cd3e32541ed1cbb243acfc5da0489a1b4f",
+        "97132c9b12b06722cef4086ad43bd9cd3e32541ed1cbb243acfc5da0489a1b4f",
+        "97132c9b12b06722cef4086ad43bd9cd3e32541ed1cbb243acfc5da0489a1b4f",
+        "97132c9b12b06722cef4086ad43bd9cd3e32541ed1cbb243acfc5da0489a1b4f"
       ],
       "id" : "recording-ready-dark",
       "maximumChangedPixelRatio" : 0,
@@ -243,11 +243,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "444270834888f54fd4d38692f32c9e6003a9dc179b1e11790cfc03bbadbded90",
-        "444270834888f54fd4d38692f32c9e6003a9dc179b1e11790cfc03bbadbded90",
-        "444270834888f54fd4d38692f32c9e6003a9dc179b1e11790cfc03bbadbded90",
-        "444270834888f54fd4d38692f32c9e6003a9dc179b1e11790cfc03bbadbded90",
-        "444270834888f54fd4d38692f32c9e6003a9dc179b1e11790cfc03bbadbded90"
+        "3e855e337d161ea67377b2d33c7ab6f1c2c9886fa788e82630e6a7fb5f97eb62",
+        "3e855e337d161ea67377b2d33c7ab6f1c2c9886fa788e82630e6a7fb5f97eb62",
+        "3e855e337d161ea67377b2d33c7ab6f1c2c9886fa788e82630e6a7fb5f97eb62",
+        "3e855e337d161ea67377b2d33c7ab6f1c2c9886fa788e82630e6a7fb5f97eb62",
+        "3e855e337d161ea67377b2d33c7ab6f1c2c9886fa788e82630e6a7fb5f97eb62"
       ],
       "id" : "recording-loading-light",
       "maximumChangedPixelRatio" : 0,
@@ -258,11 +258,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "84fd63556f8abfa475d855983a49cb442c98eaa4ad430684c8021d4507200034",
-        "84fd63556f8abfa475d855983a49cb442c98eaa4ad430684c8021d4507200034",
-        "84fd63556f8abfa475d855983a49cb442c98eaa4ad430684c8021d4507200034",
-        "84fd63556f8abfa475d855983a49cb442c98eaa4ad430684c8021d4507200034",
-        "84fd63556f8abfa475d855983a49cb442c98eaa4ad430684c8021d4507200034"
+        "29a9ba3db5d0797a42a2ebe306dea82469c427a9915d940dcf3cc2eacd0eadb3",
+        "29a9ba3db5d0797a42a2ebe306dea82469c427a9915d940dcf3cc2eacd0eadb3",
+        "29a9ba3db5d0797a42a2ebe306dea82469c427a9915d940dcf3cc2eacd0eadb3",
+        "29a9ba3db5d0797a42a2ebe306dea82469c427a9915d940dcf3cc2eacd0eadb3",
+        "29a9ba3db5d0797a42a2ebe306dea82469c427a9915d940dcf3cc2eacd0eadb3"
       ],
       "id" : "recording-loading-dark",
       "maximumChangedPixelRatio" : 0,
@@ -273,11 +273,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "359af2987a898b6882de9e56057582480cc4f888c4dc04e65fa0691697ae4dde",
-        "359af2987a898b6882de9e56057582480cc4f888c4dc04e65fa0691697ae4dde",
-        "359af2987a898b6882de9e56057582480cc4f888c4dc04e65fa0691697ae4dde",
-        "359af2987a898b6882de9e56057582480cc4f888c4dc04e65fa0691697ae4dde",
-        "359af2987a898b6882de9e56057582480cc4f888c4dc04e65fa0691697ae4dde"
+        "83eea0ec13b556b4ad92828abb93fc4ea317da2313a50547ac7d43585c2b32ae",
+        "83eea0ec13b556b4ad92828abb93fc4ea317da2313a50547ac7d43585c2b32ae",
+        "83eea0ec13b556b4ad92828abb93fc4ea317da2313a50547ac7d43585c2b32ae",
+        "83eea0ec13b556b4ad92828abb93fc4ea317da2313a50547ac7d43585c2b32ae",
+        "83eea0ec13b556b4ad92828abb93fc4ea317da2313a50547ac7d43585c2b32ae"
       ],
       "id" : "recording-active-light",
       "maximumChangedPixelRatio" : 0,
@@ -288,11 +288,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "fdb01e527ffb04a1be57278d12f4a49870b9ef079d7ee8cbd3a94f3df609c53c",
-        "fdb01e527ffb04a1be57278d12f4a49870b9ef079d7ee8cbd3a94f3df609c53c",
-        "fdb01e527ffb04a1be57278d12f4a49870b9ef079d7ee8cbd3a94f3df609c53c",
-        "fdb01e527ffb04a1be57278d12f4a49870b9ef079d7ee8cbd3a94f3df609c53c",
-        "fdb01e527ffb04a1be57278d12f4a49870b9ef079d7ee8cbd3a94f3df609c53c"
+        "844ad9e68a7ef8de23e10113d4afbdb418c8ddc7346fa3f8c3d21e65bdb14556",
+        "844ad9e68a7ef8de23e10113d4afbdb418c8ddc7346fa3f8c3d21e65bdb14556",
+        "844ad9e68a7ef8de23e10113d4afbdb418c8ddc7346fa3f8c3d21e65bdb14556",
+        "844ad9e68a7ef8de23e10113d4afbdb418c8ddc7346fa3f8c3d21e65bdb14556",
+        "844ad9e68a7ef8de23e10113d4afbdb418c8ddc7346fa3f8c3d21e65bdb14556"
       ],
       "id" : "recording-active-dark",
       "maximumChangedPixelRatio" : 0,
@@ -363,11 +363,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "846c5816ef7ad4f8c8a5ad1c9b13e35767bfeddb24974185e202007f1b3d0b27",
-        "846c5816ef7ad4f8c8a5ad1c9b13e35767bfeddb24974185e202007f1b3d0b27",
-        "846c5816ef7ad4f8c8a5ad1c9b13e35767bfeddb24974185e202007f1b3d0b27",
-        "846c5816ef7ad4f8c8a5ad1c9b13e35767bfeddb24974185e202007f1b3d0b27",
-        "846c5816ef7ad4f8c8a5ad1c9b13e35767bfeddb24974185e202007f1b3d0b27"
+        "72775d4a29bfd4202830581d87de2cd3df39789d93f1e0e813e59b38631da65e",
+        "72775d4a29bfd4202830581d87de2cd3df39789d93f1e0e813e59b38631da65e",
+        "72775d4a29bfd4202830581d87de2cd3df39789d93f1e0e813e59b38631da65e",
+        "72775d4a29bfd4202830581d87de2cd3df39789d93f1e0e813e59b38631da65e",
+        "72775d4a29bfd4202830581d87de2cd3df39789d93f1e0e813e59b38631da65e"
       ],
       "id" : "transcript-selected-light",
       "maximumChangedPixelRatio" : 0,
@@ -378,11 +378,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "796b3e449f8c5afafa87eecd6919da913a73e655cf05082c08adfa4055c210ea",
-        "796b3e449f8c5afafa87eecd6919da913a73e655cf05082c08adfa4055c210ea",
-        "796b3e449f8c5afafa87eecd6919da913a73e655cf05082c08adfa4055c210ea",
-        "796b3e449f8c5afafa87eecd6919da913a73e655cf05082c08adfa4055c210ea",
-        "796b3e449f8c5afafa87eecd6919da913a73e655cf05082c08adfa4055c210ea"
+        "de0b9197ba301af74bc9cc7416ed20d77c0f0934f307055c6916ab685b564cf1",
+        "de0b9197ba301af74bc9cc7416ed20d77c0f0934f307055c6916ab685b564cf1",
+        "de0b9197ba301af74bc9cc7416ed20d77c0f0934f307055c6916ab685b564cf1",
+        "de0b9197ba301af74bc9cc7416ed20d77c0f0934f307055c6916ab685b564cf1",
+        "de0b9197ba301af74bc9cc7416ed20d77c0f0934f307055c6916ab685b564cf1"
       ],
       "id" : "transcript-selected-dark",
       "maximumChangedPixelRatio" : 0,
@@ -393,11 +393,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "7c5079f2bb0d4986675d8917087e55ea767c49d2d66832809aed41c34992ba3d",
-        "7c5079f2bb0d4986675d8917087e55ea767c49d2d66832809aed41c34992ba3d",
-        "7c5079f2bb0d4986675d8917087e55ea767c49d2d66832809aed41c34992ba3d",
-        "7c5079f2bb0d4986675d8917087e55ea767c49d2d66832809aed41c34992ba3d",
-        "7c5079f2bb0d4986675d8917087e55ea767c49d2d66832809aed41c34992ba3d"
+        "40d64b324844545b1b7849815802b4a63580b933d82a3ce7fa11993a52ffb593",
+        "40d64b324844545b1b7849815802b4a63580b933d82a3ce7fa11993a52ffb593",
+        "40d64b324844545b1b7849815802b4a63580b933d82a3ce7fa11993a52ffb593",
+        "40d64b324844545b1b7849815802b4a63580b933d82a3ce7fa11993a52ffb593",
+        "40d64b324844545b1b7849815802b4a63580b933d82a3ce7fa11993a52ffb593"
       ],
       "id" : "transcript-incomplete-light",
       "maximumChangedPixelRatio" : 0,
@@ -408,11 +408,11 @@
     {
       "captureCount" : 5,
       "capturePNGHashes" : [
-        "56d36e2013850a37b6c3c968220d1fa3fdbf36d83e7fc953a2d71c5d0350d2d8",
-        "56d36e2013850a37b6c3c968220d1fa3fdbf36d83e7fc953a2d71c5d0350d2d8",
-        "56d36e2013850a37b6c3c968220d1fa3fdbf36d83e7fc953a2d71c5d0350d2d8",
-        "56d36e2013850a37b6c3c968220d1fa3fdbf36d83e7fc953a2d71c5d0350d2d8",
-        "56d36e2013850a37b6c3c968220d1fa3fdbf36d83e7fc953a2d71c5d0350d2d8"
+        "28640defc8557e6232f4974bdaa2bea4a501f856e8644fa5cc6a19dc6d72b353",
+        "28640defc8557e6232f4974bdaa2bea4a501f856e8644fa5cc6a19dc6d72b353",
+        "28640defc8557e6232f4974bdaa2bea4a501f856e8644fa5cc6a19dc6d72b353",
+        "28640defc8557e6232f4974bdaa2bea4a501f856e8644fa5cc6a19dc6d72b353",
+        "28640defc8557e6232f4974bdaa2bea4a501f856e8644fa5cc6a19dc6d72b353"
       ],
       "id" : "transcript-incomplete-dark",
       "maximumChangedPixelRatio" : 0,
@@ -779,9 +779,9 @@
   },
   "fixtureCatalogSHA256" : "115715977aa7e2bf2ad01324cd7015104d45ff505a0f39c1a5ca49c652074156",
   "githubRunAttempt" : "1",
-  "githubRunID" : "30313797786",
-  "manifestSHA256" : "d558e643f5a33b6f0109f188a6d376e8ce1631e5ec8a0fefaca23a848320ee9f",
+  "githubRunID" : "30409045361",
+  "manifestSHA256" : "63fac4d34e01baa4e48b30e9420c313066fe2e6b21f237defa2d5ef3ba2e561c",
   "processIndex" : 3,
-  "sourceRevision" : "b86264d6d207ed8c2c96b3a87c5cfdfa4a49cdaa",
+  "sourceRevision" : "82b1abc1b921b37c730e54c699574272c54e8f0e",
   "version" : 1
 }
