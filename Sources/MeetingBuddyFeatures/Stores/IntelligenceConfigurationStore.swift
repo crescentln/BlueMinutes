@@ -579,16 +579,36 @@ public final class IntelligenceConfigurationStore {
             let identifier = try configuration
                 .secretIdentifier
             let previous = try secretStore.read(identifier)
-            try secretStore.write(
-                Data(normalizedKey.utf8),
-                for: identifier
-            )
-            var providers = current.providers.filter {
-                $0.identifier != configuration.identifier
+            let credential = Data(normalizedKey.utf8)
+            let credentialChanged =
+                previous != credential
+            var providers:
+                [RemoteProviderConfiguration] =
+                []
+            for existing in current.providers
+            where existing.identifier
+                != configuration.identifier
+            {
+                if credentialChanged,
+                   try existing.secretIdentifier
+                    == identifier
+                {
+                    providers.append(
+                        try invalidatingConnectionState(
+                            of: existing
+                        )
+                    )
+                } else {
+                    providers.append(existing)
+                }
             }
             providers.append(configuration)
             let next = try current.replacing(
                 providers: providers
+            )
+            try secretStore.write(
+                credential,
+                for: identifier
             )
             do {
                 try repository.save(
@@ -613,6 +633,28 @@ public final class IntelligenceConfigurationStore {
             safeErrorMessage = safeMessage(for: error)
             return false
         }
+    }
+
+    private func invalidatingConnectionState(
+        of configuration:
+            RemoteProviderConfiguration
+    ) throws -> RemoteProviderConfiguration {
+        try RemoteProviderConfiguration(
+            identifier: configuration.identifier,
+            displayName: configuration.displayName,
+            family: configuration.family,
+            purpose: configuration.purpose,
+            baseURL: configuration.baseURL,
+            modelIdentifier:
+                configuration.modelIdentifier,
+            modelDisplayName:
+                configuration.modelDisplayName,
+            capabilities: configuration.capabilities,
+            credentialAccount:
+                configuration.credentialAccount,
+            connectionState: .notTested,
+            lastTestedAt: nil
+        )
     }
 
     private func mutate(

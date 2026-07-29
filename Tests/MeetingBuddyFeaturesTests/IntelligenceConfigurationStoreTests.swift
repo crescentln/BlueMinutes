@@ -7,7 +7,7 @@ import Testing
 @Suite
 struct IntelligenceConfigurationStoreTests {
     @Test @MainActor
-    func remoteProvidersKeepSecretsSeparateAndRouteOnlyEligibleTasks()
+    func sharedCredentialChangesInvalidateSiblingReadinessBeforeRouting()
         async throws
     {
         let repository =
@@ -69,6 +69,20 @@ struct IntelligenceConfigurationStoreTests {
                 apiKey: textKey
             )
         #expect(textConfigured)
+        let invalidatedSpeech =
+            try #require(
+                store.state?.providers.first {
+                    $0.identifier == "openai-stt"
+                }
+            )
+        #expect(
+            invalidatedSpeech.connectionState
+                == .notTested
+        )
+        #expect(
+            invalidatedSpeech.lastTestedAt
+                == nil
+        )
         await store.testProvider(identifier: "openai-text")
         let text = try #require(
             store.state?.providers.first {
@@ -89,13 +103,23 @@ struct IntelligenceConfigurationStoreTests {
         )
         #expect(
             store.state?.route(for: .speechToTextBatch)
-                .selection?.providerIdentifier
-                == "openai-stt"
+                .selection == nil
         )
         #expect(
             store.state?.route(for: .summaryAndMinutes)
                 .selection?.providerIdentifier
                 == "openai-text"
+        )
+        await store.testProvider(
+            identifier: "openai-stt"
+        )
+        await store.useRecommendedRouting(
+            codexConnected: false
+        )
+        #expect(
+            store.state?.route(for: .speechToTextBatch)
+                .selection?.providerIdentifier
+                == "openai-stt"
         )
         let speechOptions = store.routeOptions(
             for: .speechToTextBatch,
