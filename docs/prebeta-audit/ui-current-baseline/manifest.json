@@ -1,5 +1,5 @@
 {
-  "baselineSourceRevision" : "b86264d6d207ed8c2c96b3a87c5cfdfa4a49cdaa",
+  "baselineSourceRevision" : "82b1abc1b921b37c730e54c699574272c54e8f0e",
   "environment" : {
     "architecture" : "arm64",
     "clangBuild" : "clang-2100.1.1.101",
@@ -447,8 +447,8 @@
         }
       },
       "fileName" : "local-media-ready-dark.png",
-      "pixelSHA256" : "350cf4eddfc4965a2870a8ff0f6d5b96f56cc6ed3d9bc75ee1071ef252ce13ec",
-      "pngSHA256" : "8bf83078aaac77f90061a82e98387d5cae39596b33d5f5f7e32b90ce980fa8d0",
+      "pixelSHA256" : "61c379928024ce8387b721cd05411ee83bd87a5b7caa24e7153844182cc86bd6",
+      "pngSHA256" : "6d1b14ea323f75e2580ea59076d9760ca7196e2d48794aac45a1850146d2383a",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -480,8 +480,8 @@
         }
       },
       "fileName" : "local-media-ready-light.png",
-      "pixelSHA256" : "554322aa3bf26e71916d3fc78350dd32ff406e87b2b1e7edda562a7432d80f1f",
-      "pngSHA256" : "9258be6fe37e0338caaa551a86dd8ed5d03c29a974f25192cb482c202a020a86",
+      "pixelSHA256" : "550814bf8d5967e794544733353d89937ee08489640135e5396b57d348c36da8",
+      "pngSHA256" : "04e6b43b38ba8fe167a1287cbb251176685a19f48376c0eeee389082bc78af97",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -513,8 +513,8 @@
         }
       },
       "fileName" : "local-media-working-dark.png",
-      "pixelSHA256" : "a6e1b35f3ac0cd944feba09102aa2ebb413ebefdb5463b1b2d20d0d0a45fd8f7",
-      "pngSHA256" : "eb00cfb95475bcc0360b63fbd1cb76e1c2f8485895be0a59c5e20de2de087328",
+      "pixelSHA256" : "170e269c313ffce61676ccb05b1e281c176d52830ddf5c3453188b4a5818bb32",
+      "pngSHA256" : "3d1cd44672e85d10092a45b35b7938286a86ece51078720eb1b35cb8cdbf9564",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -546,8 +546,8 @@
         }
       },
       "fileName" : "local-media-working-light.png",
-      "pixelSHA256" : "044a04416fedfd0c8fe4c759de3ad1275e91614be23fe79d336beb938ab6877e",
-      "pngSHA256" : "f0cfd926c4a0d6213886af1c93e24adb1c53e913ed0aa3b7844265c9db6f8a88",
+      "pixelSHA256" : "e697db91107239d6d202ed8b1b331173488e37472115131b25946e903826608a",
+      "pngSHA256" : "4ea6ffa547ec582973e38d3a9391a96ac0166e39399389f4fd31aee6f9860317",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -579,8 +579,8 @@
         }
       },
       "fileName" : "onboarding-empty-dark.png",
-      "pixelSHA256" : "0a5c326f0ae3ac9f5dbccc995cafb36cf7f669c04b9f6439893b28f1c94db57d",
-      "pngSHA256" : "5b35c45edf106dbb5311966e1b38fc826a2e0260a0892e9b0da17c0229c6f5f7",
+      "pixelSHA256" : "5c004ad5e2a2836d19623817c75a12a2e9bc539841f342dbc6d1c76fe78dea12",
+      "pngSHA256" : "fe86694578a40c33a6de84dbc839e89726f28bb0643964b65b92c21a9f9f3411",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -612,8 +612,8 @@
         }
       },
       "fileName" : "onboarding-empty-light.png",
-      "pixelSHA256" : "64b5b0dec2f6e27d2c1563de477771a90062893b3c42877e94a48046ba45bc43",
-      "pngSHA256" : "4ec7b9f803d1e74500476e1716b668f6f6df9538e0bfc70a7647182ead406abb",
+      "pixelSHA256" : "5fea0f0a43d335bb3b720bea1fb4caa24cffd534a276f24e6d5bb9a8bebafc27",
+      "pngSHA256" : "20d0f5dda5ebeaae65ccbdf2ff2942611be2ec1446ad67b18964a18dba8f362c",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -645,8 +645,8 @@
         }
       },
       "fileName" : "recording-active-dark.png",
-      "pixelSHA256" : "abec2bc14755665ff09052cee52215868aa7b640384d2eb606b9bc0139c2c0d4",
-      "pngSHA256" : "fdb01e527ffb04a1be57278d12f4a49870b9ef079d7ee8cbd3a94f3df609c53c",
+      "pixelSHA256" : "58e54ff34aee6e0ee5af8d4c8093eea12588dfe02b48473d0b42d3119c5c875c",
+      "pngSHA256" : "844ad9e68a7ef8de23e10113d4afbdb418c8ddc7346fa3f8c3d21e65bdb14556",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -678,8 +678,8 @@
         }
       },
       "fileName" : "recording-active-light.png",
-      "pixelSHA256" : "1e382c799d0d2d257dc915a36bd883e5d542340c1a35077661f43ce409ee52d6",
-      "pngSHA256" : "359af2987a898b6882de9e56057582480cc4f888c4dc04e65fa0691697ae4dde",
+      "pixelSHA256" : "804981a7fc8f91ea1f104e2214756f66b5a520dfa1628bc9c098ef1527a0c0d7",
+      "pngSHA256" : "83eea0ec13b556b4ad92828abb93fc4ea317da2313a50547ac7d43585c2b32ae",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -711,8 +711,8 @@
         }
       },
       "fileName" : "recording-loading-dark.png",
-      "pixelSHA256" : "b773b4cbb853002a08512a32114c35605232a2144f53dca9057f545c3735c431",
-      "pngSHA256" : "84fd63556f8abfa475d855983a49cb442c98eaa4ad430684c8021d4507200034",
+      "pixelSHA256" : "901ce19163b7c67502af53adfb765066162f55e1e35dc895c5b5e7a4aab68364",
+      "pngSHA256" : "29a9ba3db5d0797a42a2ebe306dea82469c427a9915d940dcf3cc2eacd0eadb3",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -744,8 +744,8 @@
         }
       },
       "fileName" : "recording-loading-light.png",
-      "pixelSHA256" : "454f337b71f9648d0bd430fe54f5f4f8f3fe0b2f5b82ff9d7d04cb37a7679d25",
-      "pngSHA256" : "444270834888f54fd4d38692f32c9e6003a9dc179b1e11790cfc03bbadbded90",
+      "pixelSHA256" : "5aed93258037f7a727eec550e1536b77b47864baaa51b1dab8fba8ec624b4493",
+      "pngSHA256" : "3e855e337d161ea67377b2d33c7ab6f1c2c9886fa788e82630e6a7fb5f97eb62",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -777,8 +777,8 @@
         }
       },
       "fileName" : "recording-ready-dark.png",
-      "pixelSHA256" : "b84f749baa74fd124b7bf7196b3e748bcc396b39156f70a7626eb53298ad6bbc",
-      "pngSHA256" : "10f14f0f3ce3b97a141d0605b1400b69ff6bae3615b0a9cb3e0c3f8fed4f10dc",
+      "pixelSHA256" : "fcb9a59e31bceadb0312b4a71719d722e3bcaeabdd6ce87de77d5459fbc352a5",
+      "pngSHA256" : "97132c9b12b06722cef4086ad43bd9cd3e32541ed1cbb243acfc5da0489a1b4f",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -810,8 +810,8 @@
         }
       },
       "fileName" : "recording-ready-light.png",
-      "pixelSHA256" : "c4090e36f70294c6b5dee22f3f392de8949b64a6fd1828f7c0cf3f0973ca7bfa",
-      "pngSHA256" : "f6ef8ff03bbbf30908c5140f3a038c12735caf34676427124521e5b5da3affc2",
+      "pixelSHA256" : "ef65670d533cd9a2a18ca002d1acf8552e4a292f37fcb465218a408ecaa48ecf",
+      "pngSHA256" : "23f7533a9df5067198270e4a5c691d7819970dff36cb9cc4fcbbf34805a359dc",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -975,8 +975,8 @@
         }
       },
       "fileName" : "shell-1080x720-dark.png",
-      "pixelSHA256" : "406a99811c3979ff17bf9ecb29c302f119511068df6963ae86b1fb5529ecab60",
-      "pngSHA256" : "e521685be27bc2036454e025d911ab34b5c9d20d4363967a490374378854b13a",
+      "pixelSHA256" : "fc981cb838d1897cae3f5eb675c855056047add835ad8b32a6c3ef2db19a77b4",
+      "pngSHA256" : "032e19c0d2c090377374bfaa3820f61d034dd66347880589a7b84e5295eec2f9",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1008,8 +1008,8 @@
         }
       },
       "fileName" : "shell-1080x720-light.png",
-      "pixelSHA256" : "3ecb595aaff3b8a8c3453128d3d951852e5e8027d1a91e28769f3481ee806bc5",
-      "pngSHA256" : "4424f22ecc570d2f06765610c52135f3c7db032c76782b58b458398a23c3b4f5",
+      "pixelSHA256" : "713999cc9b3e4241fd541ae7c72af8026fc2e07600a37b8155a4435faf1dd6e6",
+      "pngSHA256" : "afcb42d0484b3c7935db16ce3a17882ef7da7d5abce760e901f88f071624efbd",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1041,8 +1041,8 @@
         }
       },
       "fileName" : "shell-1440x1024-dark.png",
-      "pixelSHA256" : "e5dc59188124b4be99d6f7be9dcd1a263f7514fbaa1dad61911f2bee37e28dfc",
-      "pngSHA256" : "5541e031ce91120dd64646ff48ed1f99e36e26e54e13ed15ef6c94678332f783",
+      "pixelSHA256" : "3637e4d8b336aecd51ab435b2c86313abddf77c8bd300ee838ef81c1a3501012",
+      "pngSHA256" : "f6ab99cfe73f651051dc236820940c76a95f51ca94a119e162d4921f1dc84787",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1074,8 +1074,8 @@
         }
       },
       "fileName" : "shell-1440x1024-light.png",
-      "pixelSHA256" : "59209ca9c3700c7dfa055d09442fa8f62370aaf0a1b738ba7d68925333f11f6c",
-      "pngSHA256" : "052f28023d8c9303db7cd47382d91de9f5fd14f177ce9962279a77451812f974",
+      "pixelSHA256" : "9960184e7c64ee6e5a7ce12909bd949a1c71a5acd37601c3a7192b17c7f19e79",
+      "pngSHA256" : "734a70facea3c2ef5ebaa5700dd53a2f674dcd499846c4004af477803db953ce",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1107,8 +1107,8 @@
         }
       },
       "fileName" : "shell-1728x1024-dark.png",
-      "pixelSHA256" : "c178ca739683c844e023c2cfacf839a779c8bcdfaec3548d73f198badd9260ae",
-      "pngSHA256" : "95f82a97c50cd92ef26a1309fa234e7b28aaaafe5497974c198dd2f5928047dc",
+      "pixelSHA256" : "27e830c14b8de5f3003012b53df7c5f66e97d57f7aa59d4437d80e6afe649570",
+      "pngSHA256" : "e6c4beb42daaaedad87d0ad40dd5dc6b6f0d0d96207d996939d33f11cb7ef2fb",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1140,8 +1140,8 @@
         }
       },
       "fileName" : "shell-1728x1024-light.png",
-      "pixelSHA256" : "400bab68b0a6c3817d6128c0e7aba929c1d365e744b37f9202ccb99650521167",
-      "pngSHA256" : "1e0ed37ae8857bce2e9110eb81bb0e71d2a83296201aab9fb8504d1f460c0842",
+      "pixelSHA256" : "6f835e11030a8ffee820cf2bcac23476c29f2649b5fe074babe7200ea645308c",
+      "pngSHA256" : "e7f4a6bc39880b8fd71c476bda7acd5a44ff41ea33a1dca769bb76bf40594d46",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1173,8 +1173,8 @@
         }
       },
       "fileName" : "shell-860x600-dark.png",
-      "pixelSHA256" : "d98b1bd5541590995378b90b7eedfe9aa8937c734d93f76bd0495cdd32f63c66",
-      "pngSHA256" : "ab5daf0920ef03624f74519deac0c83e5459800066a7cb12f42cbe39985f1f74",
+      "pixelSHA256" : "ea632535ba931d1d9875f4236d68ab4a2fc810d834289c4d5ad1f1e438366c91",
+      "pngSHA256" : "7e7764485e577f1676936ea7f02d3a4e46c3e9520ce741ee59044cdc47809a1a",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1206,8 +1206,8 @@
         }
       },
       "fileName" : "shell-860x600-light.png",
-      "pixelSHA256" : "963adc1fad86ab5e9313a7919ea8728799c1e9ff84eec5ade8d5d7ed6f758e07",
-      "pngSHA256" : "28992e87c7ca6820582e87b4dabc39f30d186bcb6e073400cc14d337456aba32",
+      "pixelSHA256" : "3610cb3a0c093b0e68a0b2fd42e3746b7ecc5c46bdd278ae9365f1229073c5d6",
+      "pngSHA256" : "fd8f126e1d400c41019f31058a926c9081ae1d1a06db42a67150c10d9e0b2a1a",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1437,8 +1437,8 @@
         }
       },
       "fileName" : "transcript-incomplete-dark.png",
-      "pixelSHA256" : "ff2041a4b4c0d6c38c70c7a3097092b4899813c258fa0b37e286c3985a386b83",
-      "pngSHA256" : "56d36e2013850a37b6c3c968220d1fa3fdbf36d83e7fc953a2d71c5d0350d2d8",
+      "pixelSHA256" : "6eeec7327e0b6b5a6d3bebcd8cf40b3de327b53e8a5a01247810a3a4d98e2b6a",
+      "pngSHA256" : "28640defc8557e6232f4974bdaa2bea4a501f856e8644fa5cc6a19dc6d72b353",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1470,8 +1470,8 @@
         }
       },
       "fileName" : "transcript-incomplete-light.png",
-      "pixelSHA256" : "996adab98eb4b11af1fd542d9caf96bf1c907e0060c47de5ec6e28c8a954ce94",
-      "pngSHA256" : "7c5079f2bb0d4986675d8917087e55ea767c49d2d66832809aed41c34992ba3d",
+      "pixelSHA256" : "297b4e936e435cbdc7cc4189d555a2455d381853ee41b6244c2a7129647360d1",
+      "pngSHA256" : "40d64b324844545b1b7849815802b4a63580b933d82a3ce7fa11993a52ffb593",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1503,8 +1503,8 @@
         }
       },
       "fileName" : "transcript-selected-dark.png",
-      "pixelSHA256" : "b6ffd75627463be72ac4fdb7fc8b8134b9ed4109b65e3d95b492baffdc0c082f",
-      "pngSHA256" : "796b3e449f8c5afafa87eecd6919da913a73e655cf05082c08adfa4055c210ea",
+      "pixelSHA256" : "f79d35f51904e3bcb8ecda028f3e312bad77a9bc49db769347d81e7e84b37e59",
+      "pngSHA256" : "de0b9197ba301af74bc9cc7416ed20d77c0f0934f307055c6916ab685b564cf1",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,
@@ -1536,8 +1536,8 @@
         }
       },
       "fileName" : "transcript-selected-light.png",
-      "pixelSHA256" : "3d51ece9a1b5d975790816736b9e2551425b578b9edfdcc585c84eac81ad6331",
-      "pngSHA256" : "846c5816ef7ad4f8c8a5ad1c9b13e35767bfeddb24974185e202007f1b3d0b27",
+      "pixelSHA256" : "3a8ca93878bcbdfe7fe3cae322fa373e6dec9d6843c999b078fd07efdc329d44",
+      "pngSHA256" : "72775d4a29bfd4202830581d87de2cd3df39789d93f1e0e813e59b38631da65e",
       "profileSHA256" : "2b3aa1645779a9e634744faf9b01e9102b0c9b88fd6deced7934df86b949af7e",
       "threshold" : {
         "maximumChangedPixelRatio" : 0,

@@ -106,6 +106,14 @@ brand/plist/signature/source checks, and an isolated staged-app close/reopen,
 About, clean-quit, content-free-log, and idle no-socket smoke. Installed Apple
 model probes remain opt-in and use only project-authored synthetic input.
 
+The pinned runner also produced and reviewed a complete 50-case Light/Dark
+visual candidate from the exact functional source. Twenty-six images remained
+byte-identical; the 24 changes are limited to the authorized Local Media,
+Recording, New Meeting/shell, and Transcript controls. Three fresh calibration
+processes then captured 750 frames with 1,500 pair comparisons; every frame
+matched its reviewed candidate exactly, with the original zero-difference
+thresholds retained.
+
 These bounded checks establish entry into formal software testing; they do not
 close the intended-device, duration, accessibility, performance, outbound
 network, signing, or distribution matrices.
