@@ -55,11 +55,29 @@ struct WorkspaceSidebarRow: View {
                 .accessibilityHidden(true)
             Text(title)
                 .lineLimit(1)
+            Spacer(minLength: 4)
+            if isPrerequisiteUnavailable {
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
         .accessibilityHint(availability.resolvedHint(enabledHint: enabledHint))
         .help(availability.resolvedHint(enabledHint: enabledHint))
+    }
+
+    private var isPrerequisiteUnavailable:
+        Bool
+    {
+        if case .prerequisiteUnavailable =
+            availability
+        {
+            return true
+        }
+        return false
     }
 }

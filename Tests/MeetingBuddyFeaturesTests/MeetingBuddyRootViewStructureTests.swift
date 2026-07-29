@@ -181,14 +181,14 @@ struct MeetingBuddyRootViewStructureTests {
             )
         )
         #expect(root.contains("List(selection: sectionSelection)"))
-        for section in ["transcript", "analysis", "briefing"] {
-            #expect(
-                root.components(
-                    separatedBy:
-                        "!sceneState.isDestinationAvailable(.\(section))"
-                ).count - 1 == 1
+        #expect(
+            !root.contains(
+                ".disabled(\n                            !sceneState.isDestinationAvailable"
             )
-        }
+        )
+        #expect(root.contains("@State private var blockedDestination:"))
+        #expect(root.contains("blockedDestination ="))
+        #expect(root.contains("destinationPrerequisiteReason("))
         #expect(!root.contains("$store.selectedSection"))
         #expect(!store.contains("public var selectedSection"))
         #expect(sceneState.contains("public var selectedSection"))
@@ -298,9 +298,23 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(root.contains("LocalMediaIntakeView("))
         #expect(
             localMedia.contains(
-                ".frame(maxWidth: readingWidth.points, alignment: .leading)"
+                "BlueMinutesDetailScrollView("
             )
         )
+        #expect(
+            localMedia.contains(
+                "contentMaxWidth: readingWidth.points"
+            )
+        )
+        #expect(
+            root.contains(
+                "@Environment(\\.openSettings)"
+            )
+        )
+        #expect(root.contains("AI Models & Routing…"))
+        #expect(root.contains("selectedSettingsTab?"))
+        #expect(app.contains("@State private var selectedSettingsTab:"))
+        #expect(app.contains("selectedTab:"))
 
         #expect(settings.contains("Label(\"General\""))
         #expect(settings.contains("Label(\"Appearance\""))
@@ -320,6 +334,49 @@ struct MeetingBuddyRootViewStructureTests {
         }
         #expect(settings.contains("MediaReviewStore"))
         #expect(!settings.contains("MediaReviewSceneState"))
+    }
+
+    @Test
+    func detailScrollViewsKeepReadingWidthAndUseTheFullViewport()
+        throws
+    {
+        let component = try source(
+            "Sources/MeetingBuddyFeatures/DesignSystem/Components/BlueMinutesDetailScrollView.swift"
+        )
+        #expect(
+            component.contains(
+                "maxWidth: contentMaxWidth"
+            )
+        )
+        #expect(
+            component.components(
+                separatedBy:
+                    "maxWidth: .infinity"
+            ).count - 1 == 2
+        )
+        #expect(
+            component.contains(
+                "alignment: .topLeading"
+            )
+        )
+
+        for path in [
+            "Sources/MeetingBuddyFeatures/Views/LocalMediaIntakeView.swift",
+            "Sources/MeetingBuddyFeatures/Views/RecordingCaptureView.swift",
+            "Sources/MeetingBuddyFeatures/Views/UNWebTVMetadataView.swift",
+            "Sources/MeetingBuddyFeatures/Views/TranscriptReviewView.swift",
+            "Sources/MeetingBuddyFeatures/Views/AnalysisReviewView.swift",
+            "Sources/MeetingBuddyFeatures/Views/BriefingReviewView.swift",
+            "Sources/MeetingBuddyFeatures/Views/HistoricalReviewView.swift",
+            "Sources/MeetingBuddyFeatures/Views/StorageDashboardView.swift"
+        ] {
+            #expect(
+                try source(path)
+                    .contains(
+                        "BlueMinutesDetailScrollView("
+                    )
+            )
+        }
     }
 
     @Test
@@ -428,6 +485,14 @@ struct MeetingBuddyRootViewStructureTests {
         #expect(
             component.contains(
                 "case temporarilyUnavailable(reason: String)"
+            )
+        )
+        #expect(component.contains("Image(systemName: \"lock.fill\")"))
+        #expect(root.contains("blockedDestinationTitle"))
+        #expect(root.contains("blockedDestinationMessage"))
+        #expect(
+            root.contains(
+                "First publish or import a transcript in Transcript Review."
             )
         )
         #expect(!component.contains("@Environment(\\.isEnabled)"))

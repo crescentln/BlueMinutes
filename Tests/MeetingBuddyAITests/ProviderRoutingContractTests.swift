@@ -6,13 +6,17 @@ import Testing
 struct ProviderRoutingContractTests {
     @Test
     func builtInRegistryKeepsCodexOutOfSpeechToText() throws {
-        let registry = try BlueMinutesBuiltInProviders.registry()
+        let registry =
+            try BlueMinutesBuiltInProviders.registry()
         let speechOptions = registry.eligibleModels(for: .speechToTextBatch)
         let realtimeSpeechOptions = registry.eligibleModels(
             for: .speechToTextRealtime
         )
         let textOptions = registry.eligibleModels(for: .meetingChat)
         let analysisOptions = registry.eligibleModels(for: .textAnalysis)
+        let researchOptions = registry.eligibleModels(
+            for: .externalResearch
+        )
 
         #expect(
             speechOptions
@@ -39,6 +43,12 @@ struct ProviderRoutingContractTests {
                     modelIdentifier: "codex-default"
                 )
             )
+        )
+        #expect(
+            researchOptions.allSatisfy {
+                $0.providerIdentifier
+                    != "codex-subscription"
+            }
         )
     }
 
@@ -121,7 +131,8 @@ struct ProviderRoutingContractTests {
             )
         }
 
-        let registry = try BlueMinutesBuiltInProviders.registry()
+        let registry =
+            try BlueMinutesBuiltInProviders.registry()
         let speechProvider = try #require(
             registry.provider(identifier: "apple-speech")
         )
@@ -675,7 +686,32 @@ struct ProviderRoutingContractTests {
             )
         }
 
-        let registry = try BlueMinutesBuiltInProviders.registry()
+        let builtIn =
+            try BlueMinutesBuiltInProviders.registry()
+        let registry = try ProviderRegistry(
+            providers:
+                builtIn.providers
+                + [
+                    ProviderProfile(
+                        identifier: "research-api",
+                        displayName: "Research API",
+                        kind: .remoteAPI,
+                        dataRoute: .userAPIText,
+                        costOwner: .userAPIAccount,
+                        models: [
+                            ProviderModelProfile(
+                                identifier:
+                                    "research-model",
+                                displayName:
+                                    "Research Model",
+                                capabilities:
+                                    [.externalResearch]
+                            )
+                        ],
+                        requiresCredential: true
+                    )
+                ]
+        )
         let profile = try TaskRoutingProfile(
             identifier: "sensitive-research",
             displayName: "Sensitive Research",
@@ -685,8 +721,10 @@ struct ProviderRoutingContractTests {
                     task: .externalResearch,
                     routeOverride: .selection(
                         primary: ProviderModelSelection(
-                            providerIdentifier: "codex-subscription",
-                            modelIdentifier: "codex-default"
+                            providerIdentifier:
+                                "research-api",
+                            modelIdentifier:
+                                "research-model"
                         ),
                         fallback: nil
                     )
@@ -707,8 +745,10 @@ struct ProviderRoutingContractTests {
                 runtime: try ProviderRuntimeRegistry(
                     snapshots: [
                         ProviderRuntimeSnapshot(
-                            providerIdentifier: "codex-subscription",
-                            modelIdentifier: "codex-default",
+                            providerIdentifier:
+                                "research-api",
+                            modelIdentifier:
+                                "research-model",
                             state: .ready
                         )
                     ]
@@ -873,6 +913,65 @@ struct ProviderRoutingContractTests {
         )
         let authorization = try CodexTextExecutionAuthorizationFactory()
             .authorize(candidate: candidate, request: request)
+        let researchCandidate = ResolvedTaskRoute(
+            task: .externalResearch,
+            providerIdentifier:
+                candidate.providerIdentifier,
+            modelIdentifier:
+                candidate.modelIdentifier,
+            capability: .externalResearch,
+            dataRoute: candidate.dataRoute,
+            costOwner: candidate.costOwner,
+            meetingRevision:
+                candidate.meetingRevision,
+            sensitivityLabelRevision:
+                candidate.sensitivityLabelRevision,
+            accessPolicyRevision:
+                candidate.accessPolicyRevision,
+            effectiveClassification:
+                candidate.effectiveClassification,
+            noOutboundMode:
+                candidate.noOutboundMode,
+            workspaceID: candidate.workspaceID,
+            meetingID: candidate.meetingID,
+            routeOrigin: candidate.routeOrigin
+        )
+        #expect(
+            throws:
+                CodexIntegrationContractError
+                .self
+        ) {
+            _ = try
+                CodexTextExecutionAuthorizationFactory()
+                .authorize(
+                    candidate: researchCandidate,
+                    request: ModelRouteRequest(
+                        capability: .analysis,
+                        dataClassification:
+                            .internal,
+                        offlineMode: false,
+                        organizationAllowsExternalProcessing:
+                            true,
+                        deploymentEnvironment:
+                            .production,
+                        destination:
+                            .approvedProvider(
+                                identifier:
+                                    CodexTextExecutionAuthorization
+                                    .providerIdentifier
+                            ),
+                        retentionPolicy:
+                            .noProviderRetention,
+                        dataCategories:
+                            [.userPromptText],
+                        visibleUserAuthorization:
+                            true,
+                        localModelAvailable: false,
+                        securityPolicy:
+                            securityPolicy
+                    )
+                )
+        }
         let later = try routingTranscriptSegment(
             index: 2,
             startMilliseconds: 2_000,

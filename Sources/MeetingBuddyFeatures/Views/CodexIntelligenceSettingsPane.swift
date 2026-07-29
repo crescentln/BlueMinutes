@@ -136,7 +136,7 @@ struct CodexIntelligenceSettingsPane: View {
                 }
 
                 Text(
-                    "Codex is used for text analysis, chat, research, and structured outputs. Speech-to-text must be configured separately with a local model or a remote STT API."
+                    "Codex is used for bounded text analysis, chat, document questions, and structured outputs. Speech-to-text and external research must be configured separately."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -462,7 +462,7 @@ struct CodexIntelligenceSettingsPane: View {
                     }
                 }
                 Text(
-                    "Every route stores one exact provider/model. Fallback remains off; unavailable tasks fail independently. Sensitive meetings re-check the local-only policy before execution."
+                    "Every route stores one exact provider/model. Fallback remains off; unavailable tasks fail independently. In 0.4, Meeting Chat is enforced by Codex Assistant; the other text routes are saved preferences for later dedicated executors and do not start processing by themselves. Sensitive meetings re-check the local-only policy before execution."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

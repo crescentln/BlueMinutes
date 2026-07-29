@@ -1295,6 +1295,230 @@ struct WorkspaceAndMigrationTests {
     }
 
     @Test
+    func createsWorkspaceInExistingEmptyOrFinderMetadataOnlyFolder()
+        throws
+    {
+        let container =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                "meetingbuddy-workspace-create-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer {
+            try? FileManager.default
+                .removeItem(at: container)
+        }
+        try FileManager.default
+            .createDirectory(
+                at: container,
+                withIntermediateDirectories:
+                    true
+            )
+
+        let empty =
+            container.appendingPathComponent(
+                "empty",
+                isDirectory: true
+            )
+        try FileManager.default
+            .createDirectory(
+                at: empty,
+                withIntermediateDirectories:
+                    true
+            )
+        let service =
+            LocalWorkspaceService()
+        let emptyDescriptor =
+            try service.createWorkspace(
+                at: empty,
+                workspaceID:
+                    PersistenceFixtures
+                    .workspaceID,
+                createdAt:
+                    PersistenceFixtures
+                    .createdAt
+            )
+        #expect(
+            FileManager.default.fileExists(
+                atPath:
+                    emptyDescriptor
+                    .layout
+                    .workspaceManifest
+                    .path
+            )
+        )
+
+        let metadataOnly =
+            container.appendingPathComponent(
+                "finder-metadata",
+                isDirectory: true
+            )
+        try FileManager.default
+            .createDirectory(
+                at: metadataOnly,
+                withIntermediateDirectories:
+                    true
+            )
+        let finderMetadata =
+            Data("finder-owned".utf8)
+        let dsStore =
+            metadataOnly
+            .appendingPathComponent(
+                ".DS_Store"
+            )
+        let localized =
+            metadataOnly
+            .appendingPathComponent(
+                ".localized"
+            )
+        try finderMetadata.write(
+            to: dsStore
+        )
+        try Data().write(
+            to: localized
+        )
+        let metadataDescriptor =
+            try service.createWorkspace(
+                at: metadataOnly,
+                workspaceID:
+                    WorkspaceID(UUID()),
+                createdAt:
+                    PersistenceFixtures
+                    .createdAt
+            )
+
+        #expect(
+            try Data(contentsOf: dsStore)
+                == finderMetadata
+        )
+        #expect(
+            FileManager.default.fileExists(
+                atPath:
+                    metadataDescriptor
+                    .layout
+                    .workspaceManifest
+                    .path
+            )
+        )
+    }
+
+    @Test
+    func finderMetadataAllowlistRejectsLinksDirectoriesAndOversizedFiles()
+        throws
+    {
+        let container = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                "meetingbuddy-metadata-guards-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer {
+            try? FileManager.default
+                .removeItem(at: container)
+        }
+        try FileManager.default.createDirectory(
+            at: container,
+            withIntermediateDirectories: true
+        )
+        let target =
+            container.appendingPathComponent(
+                "symlink-target"
+            )
+        let targetData =
+            Data("must-remain-untouched".utf8)
+        try targetData.write(to: target)
+
+        let symlinkRoot =
+            container.appendingPathComponent(
+                "symlink-root",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: symlinkRoot,
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            at:
+                symlinkRoot
+                .appendingPathComponent(".DS_Store"),
+            withDestinationURL: target
+        )
+
+        let directoryRoot =
+            container.appendingPathComponent(
+                "directory-root",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at:
+                directoryRoot
+                .appendingPathComponent(
+                    ".localized",
+                    isDirectory: true
+                ),
+            withIntermediateDirectories: true
+        )
+
+        let oversizedRoot =
+            container.appendingPathComponent(
+                "oversized-root",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: oversizedRoot,
+            withIntermediateDirectories: true
+        )
+        let oversized = Data(
+            repeating: 0x41,
+            count: 4 * 1_024 + 1
+        )
+        try oversized.write(
+            to:
+                oversizedRoot
+                .appendingPathComponent(".localized")
+        )
+
+        let service = LocalWorkspaceService()
+        for root in [
+            symlinkRoot,
+            directoryRoot,
+            oversizedRoot
+        ] {
+            do {
+                _ = try service.createWorkspace(
+                    at: root,
+                    workspaceID: WorkspaceID(UUID()),
+                    createdAt:
+                        PersistenceFixtures.createdAt
+                )
+                Issue.record(
+                    "Unsafe Finder metadata unexpectedly became a workspace."
+                )
+            } catch let error as
+                WorkspaceContractError
+            {
+                #expect(
+                    error == .workspaceRootNotEmpty
+                )
+            }
+            #expect(
+                !FileManager.default.fileExists(
+                    atPath:
+                        root.appendingPathComponent(
+                            LocalWorkspaceService
+                                .manifestFilename
+                        ).path
+                )
+            )
+        }
+        #expect(
+            try Data(contentsOf: target)
+                == targetData
+        )
+    }
+
+    @Test
     func rejectsTraversalSymlinksAndUnownedRoots() throws {
         for raw in ["/absolute", "../escape", "a/../escape", "a//b", "~/home", "a\\b", "a\u{0000}b"] {
             #expect(throws: WorkspaceContractError.self) {
@@ -1310,13 +1534,41 @@ struct WorkspaceAndMigrationTests {
         let nonempty = container.appendingPathComponent("nonempty", isDirectory: true)
         try FileManager.default.createDirectory(at: nonempty, withIntermediateDirectories: true)
         try Data("not-a-workspace".utf8).write(to: nonempty.appendingPathComponent("foreign.txt"))
-        #expect(throws: WorkspaceContractError.self) {
+        do {
             _ = try LocalWorkspaceService().createWorkspace(
                 at: nonempty,
                 workspaceID: PersistenceFixtures.workspaceID,
                 createdAt: PersistenceFixtures.createdAt
             )
+            Issue.record(
+                "A folder containing a foreign file unexpectedly became a workspace."
+            )
+        } catch let error as WorkspaceContractError {
+            #expect(
+                error
+                    == .workspaceRootNotEmpty
+            )
         }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath:
+                    nonempty
+                    .appendingPathComponent(
+                        LocalWorkspaceService
+                            .manifestFilename
+                    )
+                    .path
+            )
+        )
+        #expect(
+            try Data(
+                contentsOf:
+                    nonempty
+                    .appendingPathComponent(
+                        "foreign.txt"
+                    )
+            ) == Data("not-a-workspace".utf8)
+        )
 
         let target = container.appendingPathComponent("target", isDirectory: true)
         let link = container.appendingPathComponent("workspace-link", isDirectory: true)

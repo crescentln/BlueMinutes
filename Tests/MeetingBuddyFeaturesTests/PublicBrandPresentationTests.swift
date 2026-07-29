@@ -135,7 +135,7 @@ struct PublicBrandPresentationTests {
         let changelog = try source("CHANGELOG.md")
         #expect(
             changelog.contains(
-                "## [0.4.0] - 2026-07-28"
+                "## [0.4.0] - 2026-07-29"
             )
         )
         #expect(

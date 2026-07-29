@@ -882,7 +882,6 @@ public enum BlueMinutesBuiltInProviders {
                                 .summaryAndMinutes,
                                 .meetingChat,
                                 .documentQuery,
-                                .externalResearch,
                                 .structuredOutput
                             ]
                         )

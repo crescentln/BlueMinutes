@@ -111,7 +111,9 @@ struct TranscriptReviewView: View {
     }
 
     private var setupView: some View {
-        ScrollView {
+        BlueMinutesDetailScrollView(
+            contentMaxWidth: 820
+        ) {
             VStack(alignment: .leading, spacing: 20) {
                 routeCard
                 GroupBox("Speech-to-Text Route") {
@@ -173,7 +175,6 @@ struct TranscriptReviewView: View {
                 manualFallbackCard
             }
             .padding(28)
-            .frame(maxWidth: 820, alignment: .leading)
         }
     }
 

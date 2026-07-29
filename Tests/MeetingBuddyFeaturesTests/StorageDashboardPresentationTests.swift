@@ -7,6 +7,64 @@ import Testing
 @Suite
 struct StorageDashboardPresentationTests {
     @Test
+    func byteCountsUseReadableUnitsWhilePreservingExactValues() {
+        let locale =
+            Locale(
+                identifier:
+                    "en_US_POSIX"
+            )
+        let readableCases:
+            [(UInt64, String)] = [
+                (0, "0 KB"),
+                (1, "<0.1 KB"),
+                (914, "0.9 KB"),
+                (260_162, "260.2 KB"),
+                (2_002_136, "2 MB"),
+                (2_263_360, "2.3 MB"),
+                (1_500_000_000, "1.5 GB"),
+                (UInt64.max, "18.4 EB")
+            ]
+
+        for (
+            byteCount,
+            expected
+        ) in readableCases {
+            #expect(
+                StorageDashboardPresentation
+                    .readableByteCount(
+                        byteCount,
+                        locale: locale
+                    )
+                    == expected
+            )
+        }
+
+        #expect(
+            StorageDashboardPresentation
+                .exactByteCount(
+                    1,
+                    locale: locale
+                ) == "1 byte"
+        )
+        #expect(
+            StorageDashboardPresentation
+                .exactByteCount(
+                    2_263_360,
+                    locale: locale
+                )
+                == "2,263,360 bytes"
+        )
+        #expect(
+            StorageDashboardPresentation
+                .exactByteCount(
+                    UInt64.max,
+                    locale: locale
+                )
+                == "18,446,744,073,709,551,615 bytes"
+        )
+    }
+
+    @Test
     func utcDateLabelUsesUTCIndependentlyOfTheProcessTimeZone()
         throws
     {

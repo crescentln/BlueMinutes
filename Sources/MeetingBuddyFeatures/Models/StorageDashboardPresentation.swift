@@ -80,6 +80,104 @@ enum StorageTrashMutationBlockReason:
 }
 
 enum StorageDashboardPresentation {
+    static func readableByteCount(
+        _ byteCount: UInt64,
+        locale: Locale =
+            .autoupdatingCurrent
+    ) -> String {
+        let unit: (
+            divisor: Double,
+            symbol: String
+        )
+        switch byteCount {
+        case 1_000_000_000_000_000_000...:
+            unit = (
+                1_000_000_000_000_000_000,
+                "EB"
+            )
+        case 1_000_000_000_000_000...:
+            unit = (
+                1_000_000_000_000_000,
+                "PB"
+            )
+        case 1_000_000_000_000...:
+            unit = (
+                1_000_000_000_000,
+                "TB"
+            )
+        case 1_000_000_000...:
+            unit = (
+                1_000_000_000,
+                "GB"
+            )
+        case 1_000_000...:
+            unit = (
+                1_000_000,
+                "MB"
+            )
+        default:
+            unit = (1_000, "KB")
+        }
+
+        let scaled =
+            Double(byteCount)
+            / unit.divisor
+        if byteCount > 0,
+           scaled < 0.1
+        {
+            return "<0.1 \(unit.symbol)"
+        }
+
+        let formatter =
+            NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle =
+            .decimal
+        formatter.usesGroupingSeparator =
+            true
+        formatter.minimumFractionDigits =
+            0
+        formatter.maximumFractionDigits =
+            1
+        formatter.roundingMode = .halfUp
+        let number =
+            formatter.string(
+                from: NSNumber(value: scaled)
+            )
+            ?? String(
+                format: "%.1f",
+                locale: locale,
+                scaled
+            )
+        return "\(number) \(unit.symbol)"
+    }
+
+    static func exactByteCount(
+        _ byteCount: UInt64,
+        locale: Locale =
+            .autoupdatingCurrent
+    ) -> String {
+        let formatter =
+            NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle =
+            .decimal
+        formatter.usesGroupingSeparator =
+            true
+        formatter.minimumFractionDigits =
+            0
+        formatter.maximumFractionDigits =
+            0
+        let number =
+            formatter.string(
+                from: NSNumber(value: byteCount)
+            )
+            ?? String(byteCount)
+        return byteCount == 1
+            ? "\(number) byte"
+            : "\(number) bytes"
+    }
+
     static func utcDateLabel(
         _ instant: UTCInstant,
         locale: Locale =

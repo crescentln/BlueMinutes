@@ -15,9 +15,9 @@ language. Its visible order is fixed:
 
 The header must state:
 
-> Codex is used for text analysis, chat, research and structured outputs.
-> Speech-to-text must be configured separately with a local model or a remote
-> STT API.
+> Codex is used for bounded text analysis, chat, document questions, and
+> structured outputs. Speech-to-text and external research must be configured
+> separately.
 
 ## Capability registry
 
@@ -41,7 +41,7 @@ Built-in profiles currently describe:
 | Apple Speech | Batch STT | Local only | Local device |
 | Apple Translation | Translation | Local only | Local device |
 | Apple Foundation Models | Text analysis, summary/minutes, structured output | Local only | Local device |
-| Codex subscription | Text tasks; never STT | Authorized text through Codex account | User's Codex subscription |
+| Codex subscription | Bounded text tasks except external research; never STT | Authorized text through Codex account | User's Codex subscription |
 
 The registry is eligibility metadata, not runtime readiness or user
 authorization.
@@ -82,7 +82,13 @@ profile by itself cannot upload audio.
 | Summary & Minutes | Apple / Codex / capable BYOK | Explicit selection |
 | Meeting Chat | Codex / capable BYOK / future local text | Off until connected |
 | Document Query | Codex / capable BYOK | Off until connected |
-| External Research | Codex / capable BYOK | Off; Sensitive forbids |
+| External Research | Capable BYOK only | Off; Sensitive forbids |
+
+The 0.4 application executes and revalidates the persisted Meeting Chat route
+through Codex Assistant. The other text-task rows are saved routing preferences
+for later dedicated executors; choosing them does not itself start processing.
+Codex is ineligible for External Research because the isolated runtime disables
+web, Apps, plugins, and MCP.
 
 ## Scope and precedence
 

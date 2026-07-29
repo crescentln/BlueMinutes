@@ -160,6 +160,87 @@ struct IntelligenceConfigurationContractTests {
     }
 
     @Test
+    func persistedRemoteProviderMustRevalidateCatalogAndReadiness()
+        throws
+    {
+        let provider = try
+            RemoteProviderConfiguration
+            .openAISpeechToText(
+                modelIdentifier: "whisper-1"
+            )
+            .recordingConnectionResult(
+                .ready,
+                testedAt: UTCInstant(
+                    millisecondsSinceUnixEpoch:
+                        1_000
+                )
+            )
+        let original = try
+            IntelligenceConfigurationState(
+                revision: 2,
+                defaultSpeechLanguageTag: "en",
+                providers: [provider],
+                routes: RoutedTask.allCases.map {
+                    IntelligenceTaskRouteSetting(
+                        task: $0,
+                        selection: nil
+                    )
+                }
+            )
+        let encoded = try JSONEncoder()
+            .encode(original)
+        let root = try #require(
+            JSONSerialization.jsonObject(
+                with: encoded
+            ) as? [String: Any]
+        )
+
+        let mutations:
+            [(inout [String: Any]) -> Void] = [
+            { (provider: inout [String: Any]) in
+                _ = provider.removeValue(
+                    forKey: "lastTestedAt"
+                )
+            },
+            { (provider: inout [String: Any]) in
+                provider["modelIdentifier"] =
+                    "unverified-model"
+            },
+            { (provider: inout [String: Any]) in
+                provider["capabilities"] = [
+                    ProviderCapability
+                        .meetingChat.rawValue
+                ]
+            },
+            { (provider: inout [String: Any]) in
+                provider["displayName"] =
+                    "Unverified OpenAI"
+            }
+        ]
+        for mutation in mutations {
+            var mutated = root
+            var providers = try #require(
+                mutated["providers"]
+                    as? [[String: Any]]
+            )
+            mutation(&providers[0])
+            mutated["providers"] = providers
+            let data = try JSONSerialization.data(
+                withJSONObject: mutated,
+                options: [.sortedKeys]
+            )
+
+            #expect(throws: (any Error).self) {
+                _ = try JSONDecoder().decode(
+                    IntelligenceConfigurationState
+                        .self,
+                    from: data
+                )
+            }
+        }
+    }
+
+    @Test
     func unverifiedModelIdentifiersCannotManufactureCapabilities()
     {
         #expect(throws: (any Error).self) {

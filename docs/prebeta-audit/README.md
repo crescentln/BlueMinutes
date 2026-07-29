@@ -1,7 +1,7 @@
 # BlueMinutes 0.4.0 v4 Pre-Beta Audit
 
-Status: Candidate audit complete; the exact protected-main source is promoted
-through the separately authorized source-only `v0.4.0` Release. Binary
+Status: Candidate audit complete; source-only `v0.4.0` publication is
+authorized only after the exact PR and protected-main gates. Binary
 distribution gates remain open
 Candidate version: `0.4.0` build `4`
 Foundation rollback anchor: `b41ae589e40ce9811a64c389899bc9639f8188d2`
@@ -16,11 +16,13 @@ existing UI visual language and does not start U1.
 
 The numbered documents follow the v4 output list. They cross-reference one
 another rather than repeating the same matrix. The 50 PNG files in
-`ui-current-baseline/` are byte-identical copies of the accepted visual
-regression goldens for the 0.4.0 functional candidate captured from exact
-source `82b1abc1b921b37c730e54c699574272c54e8f0e`. `manifest.json` records
-their fixture matrix. They are a current functional UI baseline, not a U1
-before/after proposal.
+`ui-current-baseline/` are byte-identical copies of the earlier accepted visual
+regression goldens captured from exact source
+`82b1abc1b921b37c730e54c699574272c54e8f0e`. `manifest.json` records their
+fixture matrix. Final normal-user layout corrections require a fresh pinned
+candidate and calibration before merge; the earlier images are not claimed as
+final evidence. They remain a functional UI baseline, not a U1 before/after
+proposal.
 
 Current boundaries:
 

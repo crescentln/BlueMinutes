@@ -32,7 +32,9 @@ struct LocalMediaIntakeView: View {
     }
 
     var body: some View {
-        ScrollView {
+        BlueMinutesDetailScrollView(
+            contentMaxWidth: readingWidth.points
+        ) {
             VStack(alignment: .leading, spacing: 28) {
                 newMeetingSection
                 sourceSection
@@ -54,7 +56,6 @@ struct LocalMediaIntakeView: View {
                 }
             }
             .padding(28)
-            .frame(maxWidth: readingWidth.points, alignment: .leading)
         }
         .onChange(of: sceneState.dataClassification) { _, _ in
             if !codexTextProcessingIsEligible {

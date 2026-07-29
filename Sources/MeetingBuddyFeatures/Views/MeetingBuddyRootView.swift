@@ -8,10 +8,16 @@ public struct MeetingBuddyRootView: View {
     @State private var sceneState: MediaReviewSceneState
     @State private var fileImporterPurpose = LocalFileImporterPurpose.workspace
     @State private var showFileImporter = false
+    @State private var blockedDestination:
+        MediaReviewSection?
     @FocusState private var sidebarIsFocused: Bool
+    @Environment(\.openSettings)
+    private var openSettings
     private let codexStore: CodexConnectionStore?
     private let intelligenceStore:
         IntelligenceConfigurationStore?
+    private let selectedSettingsTab:
+        Binding<BlueMinutesSettingsTab>?
     private let onSceneStateAvailable:
         @MainActor (MediaReviewSceneState) -> Void
 
@@ -20,6 +26,8 @@ public struct MeetingBuddyRootView: View {
         codexStore: CodexConnectionStore? = nil,
         intelligenceStore:
             IntelligenceConfigurationStore? = nil,
+        selectedSettingsTab:
+            Binding<BlueMinutesSettingsTab>? = nil,
         onSceneStateAvailable:
             @escaping @MainActor (MediaReviewSceneState) -> Void = { _ in }
     ) {
@@ -27,6 +35,8 @@ public struct MeetingBuddyRootView: View {
         _sceneState = State(initialValue: MediaReviewSceneState())
         self.codexStore = codexStore
         self.intelligenceStore = intelligenceStore
+        self.selectedSettingsTab =
+            selectedSettingsTab
         self.onSceneStateAvailable = onSceneStateAvailable
     }
 
@@ -77,57 +87,37 @@ public struct MeetingBuddyRootView: View {
                         icon: .transcript,
                         enabledHint: "Open Transcript Review.",
                         availability: sidebarAvailability(
-                            for: .transcript,
-                            prerequisiteReason:
-                            "Available after local media processing succeeds."
+                            for: .transcript
                         )
                     )
                         .tag(MediaReviewSection.transcript)
-                        .disabled(
-                            !sceneState.isDestinationAvailable(.transcript)
-                        )
                     WorkspaceSidebarRow(
                         title: "Codex Assistant",
                         icon: .assistant,
                         enabledHint: "Open the text-only Codex Assistant.",
                         availability: sidebarAvailability(
-                            for: .assistant,
-                            prerequisiteReason:
-                            "Available after a published transcript is loaded."
+                            for: .assistant
                         )
                     )
                         .tag(MediaReviewSection.assistant)
-                        .disabled(
-                            !sceneState.isDestinationAvailable(.assistant)
-                        )
                     WorkspaceSidebarRow(
                         title: "Analysis Review",
                         icon: .analysis,
                         enabledHint: "Open Analysis Review.",
                         availability: sidebarAvailability(
-                            for: .analysis,
-                            prerequisiteReason:
-                            "Available after local media processing succeeds and transcript review is loaded."
+                            for: .analysis
                         )
                     )
                         .tag(MediaReviewSection.analysis)
-                        .disabled(
-                            !sceneState.isDestinationAvailable(.analysis)
-                        )
                     WorkspaceSidebarRow(
                         title: "Briefing",
                         icon: .briefing,
                         enabledHint: "Open Briefing.",
                         availability: sidebarAvailability(
-                            for: .briefing,
-                            prerequisiteReason:
-                            "Available after local media processing succeeds, transcript review is loaded, and analysis is human-confirmed."
+                            for: .briefing
                         )
                     )
                         .tag(MediaReviewSection.briefing)
-                        .disabled(
-                            !sceneState.isDestinationAvailable(.briefing)
-                        )
                 }
                 Section("Library") {
                     WorkspaceSidebarRow(
@@ -144,6 +134,25 @@ public struct MeetingBuddyRootView: View {
                         availability: globalSidebarAvailability
                     )
                         .tag(MediaReviewSection.storage)
+                }
+                Section("Settings") {
+                    Button {
+                        selectedSettingsTab?
+                            .wrappedValue =
+                            .intelligence
+                        openSettings()
+                    } label: {
+                        Label(
+                            "AI Models & Routing…",
+                            systemImage: "sparkles"
+                        )
+                    }
+                    .accessibilityIdentifier(
+                        "blueminutes.sidebar.intelligence-settings"
+                    )
+                    .accessibilityHint(
+                        "Open Intelligence Settings to choose local or approved remote models and task routes."
+                    )
                 }
             }
             .navigationTitle("BlueMinutes")
@@ -286,6 +295,26 @@ public struct MeetingBuddyRootView: View {
             Button("OK", role: .cancel) { store.clearError() }
         } message: {
             Text(store.safeErrorMessage ?? "")
+        }
+        .alert(
+            blockedDestinationTitle,
+            isPresented: Binding(
+                get: {
+                    blockedDestination != nil
+                },
+                set: {
+                    if !$0 {
+                        blockedDestination =
+                            nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                blockedDestination = nil
+            }
+        } message: {
+            Text(blockedDestinationMessage)
         }
         .confirmationDialog(
             "Unsaved Editor Changes",
@@ -500,7 +529,24 @@ public struct MeetingBuddyRootView: View {
     private var sectionSelection: Binding<MediaReviewSection?> {
         Binding(
             get: { sceneState.selectedSection },
-            set: { sceneState.requestSection($0) }
+            set: { destination in
+                if let destination,
+                   !sceneState
+                    .isDestinationAvailable(
+                        destination
+                    ),
+                   destinationPrerequisiteReason(
+                    for: destination
+                   ) != nil
+                {
+                    blockedDestination =
+                        destination
+                    return
+                }
+                sceneState.requestSection(
+                    destination
+                )
+            }
         )
     }
 
@@ -572,15 +618,76 @@ public struct MeetingBuddyRootView: View {
     }
 
     private func sidebarAvailability(
-        for destination: MediaReviewSection,
-        prerequisiteReason: String
+        for destination: MediaReviewSection
     ) -> WorkspaceSidebarRowAvailability {
         .resolve(
             prerequisiteReason: sceneState.isDestinationAvailable(destination)
                 ? nil
-                : prerequisiteReason,
+                : destinationPrerequisiteReason(
+                    for: destination
+                ),
             temporaryReason: sidebarTemporaryUnavailableReason
         )
+    }
+
+    private func destinationPrerequisiteReason(
+        for destination: MediaReviewSection
+    ) -> String? {
+        switch destination {
+        case .transcript:
+            "First import or record audio and finish local media processing."
+        case .assistant:
+            "First publish or import a transcript in Transcript Review. Codex never receives meeting audio."
+        case .analysis:
+            "First finish local media processing and publish or import a transcript."
+        case .briefing:
+            "First publish a transcript, complete Analysis Review, and confirm the analysis."
+        case .intake,
+             .recording,
+             .webMetadata,
+             .history,
+             .storage:
+            nil
+        }
+    }
+
+    private var blockedDestinationTitle:
+        String
+    {
+        guard let blockedDestination
+        else {
+            return "This Page Is Not Ready"
+        }
+        return
+            "\(title(for: blockedDestination)) Is Not Ready"
+    }
+
+    private var blockedDestinationMessage:
+        String
+    {
+        guard let blockedDestination
+        else { return "" }
+        return
+            destinationPrerequisiteReason(
+                for: blockedDestination
+            )
+            ?? ""
+    }
+
+    private func title(
+        for destination: MediaReviewSection
+    ) -> String {
+        switch destination {
+        case .intake: "Local Media"
+        case .recording: "Record Audio"
+        case .webMetadata: "UN Web TV Metadata"
+        case .transcript: "Transcript Review"
+        case .assistant: "Codex Assistant"
+        case .analysis: "Analysis Review"
+        case .briefing: "Briefing"
+        case .history: "Meeting History"
+        case .storage: "Storage"
+        }
     }
 
     private var sidebarTemporaryUnavailableReason: String? {

@@ -19,6 +19,8 @@ struct MeetingBuddyDesktopApp: App {
     @State private var codexStore: CodexConnectionStore
     @State private var intelligenceStore:
         IntelligenceConfigurationStore
+    @State private var selectedSettingsTab:
+        BlueMinutesSettingsTab = .general
 
     init() {
         windowingDiagnostics.record(
@@ -90,6 +92,8 @@ struct MeetingBuddyDesktopApp: App {
                     codexStore: codexStore,
                     intelligenceStore:
                         intelligenceStore,
+                    selectedSettingsTab:
+                        $selectedSettingsTab,
                     onSceneStateAvailable: { sceneState in
                         applicationDelegate.store = store
                         applicationDelegate.codexStore =
@@ -118,7 +122,9 @@ struct MeetingBuddyDesktopApp: App {
                     store: store,
                     codexStore: codexStore,
                     intelligenceStore:
-                        intelligenceStore
+                        intelligenceStore,
+                    selectedTab:
+                        $selectedSettingsTab
                 )
             }
         }

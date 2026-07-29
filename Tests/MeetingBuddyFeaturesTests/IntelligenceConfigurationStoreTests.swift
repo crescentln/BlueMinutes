@@ -114,6 +114,34 @@ struct IntelligenceConfigurationStoreTests {
                 )
             }
         )
+        await store.useRecommendedRouting(
+            codexConnected: true
+        )
+        #expect(
+            store.state?.route(
+                for: .summaryAndMinutes
+            ).selection?.providerIdentifier
+                == "codex-subscription"
+        )
+        #expect(
+            store.state?.route(
+                for: .externalResearch
+            ).selection?.providerIdentifier
+                == "openai-text"
+        )
+        let researchOptions = store.routeOptions(
+            for: .externalResearch,
+            codexConnected: true
+        )
+        #expect(
+            researchOptions.allSatisfy {
+                $0.selection?.providerIdentifier
+                    != "codex-subscription"
+            }
+        )
+        await store.useRecommendedRouting(
+            codexConnected: false
+        )
 
         await store.removeProvider(
             identifier: "openai-stt"

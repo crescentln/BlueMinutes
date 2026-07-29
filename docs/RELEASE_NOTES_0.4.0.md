@@ -1,6 +1,6 @@
 # BlueMinutes v0.4.0 — Formal Software-Testing Baseline
 
-- Released: 2026-07-28
+- Released: 2026-07-29
 - Application version: `0.4.0` (build `4`)
 - Source state: protected `main`, annotated tag `v0.4.0`, and regular GitHub
   source Release
@@ -23,6 +23,11 @@ update payload, deployment, installation channel, or update feed.
 - Intelligence Settings now separates provider profiles, speech-to-text, task
   routing, and Sensitive Meeting policy instead of presenting one generic
   model choice.
+- Codex Assistant enforces the exact persisted Meeting Chat route immediately
+  before authorization. None or a non-Codex selection fails closed; Codex does
+  not claim External Research because its isolated runtime has no external
+  research channel. Other text routes remain saved preferences for later
+  dedicated executors.
 - Speech-to-text has explicit Record Only, Apple local batch, and optional
   OpenAI remote batch routes. Missing, disabled, deleted, or unready providers
   produce visible repair state and never silently change destination or cost.
@@ -45,6 +50,10 @@ update payload, deployment, installation channel, or update feed.
   text/time search without replacing immutable evidence selection.
 - A lightweight New Meeting readiness coordinator and an independent About
   surface reuse the accepted components and visual language.
+- Final normal-user testing also made unsafe workspace selection actionable,
+  moved detail scrollbars to the window edge, added the missing Intelligence
+  Settings destination, made locked destinations explain the next action, and
+  rendered storage quantities as readable KB/MB/GB values.
 - The supplied BlueMinutes logo and icon are integrated through deterministic,
   hash-bound source and derived assets.
 
@@ -65,6 +74,11 @@ update payload, deployment, installation channel, or update feed.
 - Workspace switching commits its security-scoped bookmark only after the new
   workspace passes recovery; a failed candidate leaves the prior workspace and
   restorable bookmark active.
+- New workspace creation permits only bounded regular Finder metadata files;
+  same-named directories, symbolic links, oversized files, or any foreign
+  content are preserved and rejected without writing a manifest.
+- Persisted remote-provider settings are reconstructed through the same exact
+  provider/model/capability/readiness validation as newly entered settings.
 - Billing and licensing remain disabled. The typed website handoff remains
   disconnected with no endpoint, and updates remain unconfigured.
 - Fixed Apple Unified Logging events accept no meeting content. The About
@@ -104,18 +118,16 @@ authorized for public distribution.
 ## Verification baseline
 
 The candidate gate includes warning-as-error SwiftPM build/test shards covering
-538 discovered tests, an independent warnings-as-errors Release build,
+545 discovered tests, an independent warnings-as-errors Release build,
 brand/plist/signature/source checks, and an isolated staged-app close/reopen,
 About, clean-quit, content-free-log, and idle no-socket smoke. Installed Apple
 model probes remain opt-in and use only project-authored synthetic input.
 
-The pinned runner also produced and reviewed a complete 50-case Light/Dark
-visual candidate from the exact functional source. Twenty-six images remained
-byte-identical; the 24 changes are limited to the authorized Local Media,
-Recording, New Meeting/shell, and Transcript controls. Three fresh calibration
-processes then captured 750 frames with 1,500 pair comparisons; every frame
-matched its reviewed candidate exactly, with the original zero-difference
-thresholds retained.
+An earlier functional candidate produced and reviewed the complete 50-case
+Light/Dark visual set. The final normal-user usability corrections change
+shared page layout and therefore require a fresh candidate, calibration, and
+zero-tolerance regression run on the pinned GitHub runner before merge. This
+intermediate source does not reuse the earlier visual result as final evidence.
 
 These bounded checks establish entry into formal software testing; they do not
 close the intended-device, duration, accessibility, performance, outbound

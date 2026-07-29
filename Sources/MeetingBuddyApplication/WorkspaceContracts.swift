@@ -42,6 +42,7 @@ public struct WorkspaceRelativePath: Codable, Hashable, Sendable, CustomStringCo
 public enum WorkspaceContractError: Error, Equatable, Sendable {
     case invalidRelativePath(String)
     case invalidWorkspaceRoot(String)
+    case workspaceRootNotEmpty
     case workspaceManifestMissing
     case workspaceManifestMismatch(String)
     case pathEscapesWorkspace(String)

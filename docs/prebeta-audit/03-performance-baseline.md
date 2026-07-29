@@ -50,32 +50,30 @@ GitHub runner image.
 ## Current functional working-tree validation
 
 The self-relative 0.4.0 candidate commit containing this document is based on protected main
-`77a4deca11190587c557e081667fb6c0e64a0f4a`. Final local validation on
-2026-07-28 produced:
+`77a4deca11190587c557e081667fb6c0e64a0f4a`. Final local refresh on
+2026-07-29 produced:
 
 | Gate | Result |
 | --- | --- |
 | `swift package dump-package` | Pass |
-| CI-shaped Debug test gate with `-warnings-as-errors` | Pass: 513 tests/65 suites in the remaining shard, 12 isolated native-window tests, 11 visual-contract tests, the isolated 10,000-position scale test, and the isolated three-hour retry test |
-| Fresh full Release build with `-warnings-as-errors` | Pass in a new scratch root, 115.75 s |
+| CI-shaped non-GUI Debug gate with `-warnings-as-errors` | Pass: 520 tests in the remaining shard, the isolated 10,000-position scale test, and the isolated three-hour retry test |
+| Local native-window and visual shards | Not accepted on this invocation: the Codex desktop test process could not activate its AppKit window and returned typed `applicationActivationFailed` / `accessibilityWindowUnavailable`; the pinned PR runner remains required |
+| Fresh full Release build with `-warnings-as-errors` | Pass in a new scratch root, 105.08 s |
 | `git diff --check` | Pass |
 | Added-line and untracked-file credential-pattern scan | Pass after excluding diff path headers |
 
-The accepted current-tree Debug result follows the repository's CI isolation
-contract and covers 538 discovered tests. The 513-test synthetic-safe shard
-truthfully skips three installed Apple-model probes and three installed
-official-Codex probes; the visual shard truthfully skips its exact-runner
-harness. All other discovered tests complete. A combined invocation that did
-not isolate the AppKit window tests terminated without a Swift Testing
-aggregate, so its outer zero status was rejected rather than reported as a
-pass. The accepted
-shards include Codex transport/runtime contracts, independent OpenAI STT,
+The current tree contains 545 discovered tests. The 520-test synthetic-safe
+shard truthfully skips three installed Apple-model probes and three installed
+official-Codex probes. The scale and three-hour shards pass separately. The 12
+native-window tests and 11-test visual-contract shard are not counted as a
+local pass on this refresh because AppKit activation was unavailable; their
+exact PR runner results remain merge-blocking evidence. The accepted local
+shards still include Codex transport/runtime contracts, independent OpenAI STT,
 provider routing, configuration persistence, recording recovery, real
 AVFoundation canonical-audio processing, transcript outline/search,
-content-free diagnostics, app-owned window/menu lifecycle, brand, About, and
-the existing native visual/accessibility suites. The installed pinned official
-Codex runtime and no-meeting-data account/session probes were also run
-successfully earlier on the same date.
+content-free diagnostics, brand, and About. Earlier exact-candidate evidence
+retains the prior native-window results but is not substituted for the final
+source.
 
 The first fresh Release attempt exposed a Swift 6.3 WMO empty-partition link
 failure for the standalone synthetic STT fixture source. The fixture was placed
@@ -108,7 +106,7 @@ distribution claims:
 | Foundation Debug executable | 41,110,128 bytes (39.2 MiB) |
 | Foundation Release executable | 30,324,592 bytes (28.9 MiB) |
 | Earlier functional Debug executable | 45,820,144 bytes (43.7 MiB) |
-| Current functional Release executable | 33,861,392 bytes (32.3 MiB) |
+| Current functional Release executable | 33,814,048 bytes (32.2 MiB) |
 | GRDB checkout cache | 154 MiB |
 | Entire disposable validation build directory | 1.5 GiB |
 
@@ -116,7 +114,7 @@ No signed/notarized app bundle or optional local model is part of this phase, so
 there is not yet a valid public package-size result.
 
 The current functional Release executable SHA-256 is
-`b8bf403dc77aa573b1f75e3474788f38233f9f11e678a63ff49202c99be24e37`.
+`50925acfc6bb0a2ef3121d2e40b9725cc259c7e37a2d39a36513f0c0a02817ad`.
 It binds only the isolated local scratch build and is not a publication,
 signing, notarization, or distribution claim.
 

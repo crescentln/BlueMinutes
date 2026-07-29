@@ -8,7 +8,9 @@ struct UNWebTVMetadataView: View {
     private var readingWidth
 
     var body: some View {
-        ScrollView {
+        BlueMinutesDetailScrollView(
+            contentMaxWidth: readingWidth.points
+        ) {
             VStack(alignment: .leading, spacing: 28) {
                 requestSection
                 if let candidate = store.webMetadataCandidate {
@@ -18,7 +20,6 @@ struct UNWebTVMetadataView: View {
                 fallbackSection
             }
             .padding(28)
-            .frame(maxWidth: readingWidth.points, alignment: .leading)
         }
     }
 

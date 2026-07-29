@@ -44,6 +44,7 @@ public struct CodexTextExecutionAuthorizationFactory: Sendable {
               candidate.dataRoute == .codexSubscriptionText,
               candidate.costOwner == .codexSubscription,
               !candidate.task.isSpeechToText,
+              candidate.task != .externalResearch,
               candidate.task.acceptedCapabilities.contains(candidate.capability),
               candidate.capability != .speechToTextBatch,
               candidate.capability != .speechToTextRealtime,
@@ -114,7 +115,7 @@ public struct CodexTextExecutionAuthorizationFactory: Sendable {
             return values.contains(.userPromptText)
                 && values.contains(.documentText)
         case .externalResearch:
-            return values.contains(.userPromptText)
+            return false
         }
     }
 }

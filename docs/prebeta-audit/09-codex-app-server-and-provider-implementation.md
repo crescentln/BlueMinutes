@@ -133,10 +133,11 @@ capability.
 ## Text-only provider boundary
 
 Codex may assist with selected-text analysis, meeting chat, summary/minutes,
-translation, document query, external research, and structured output. Every
+translation, document query, and structured output. Every
 consequential result still passes schema validation, exact evidence binding,
 and human confirmation. Codex never receives audio and never becomes an STT
-option.
+option. External Research is excluded because the isolated runtime deliberately
+disables web, Apps, plugins, and MCP.
 
 ## Independent BYOK path
 

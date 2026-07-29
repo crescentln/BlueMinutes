@@ -212,6 +212,86 @@ struct AppCapabilitiesTests {
     }
 
     @Test
+    func workspaceFolderFailuresRemainSafeAndActionable()
+        throws
+    {
+        let workflow = try source(
+            "Sources/MeetingBuddyApp/AppMediaReviewWorkflow.swift"
+        )
+        #expect(
+            workflow.contains(
+                "case workspaceFolderContainsOtherFiles"
+            )
+        )
+        #expect(
+            workflow.contains(
+                "This folder contains other files, so BlueMinutes left it unchanged."
+            )
+        )
+        #expect(
+            workflow.contains(
+                "error as?"
+            )
+        )
+        #expect(
+            workflow.contains(
+                ".workspaceRootNotEmpty"
+            )
+        )
+        #expect(
+            workflow.contains(
+                ".workspaceFolderContainsOtherFiles"
+            )
+        )
+    }
+
+    @Test
+    func codexAssistantEnforcesThePersistedMeetingChatRoute()
+        throws
+    {
+        let workflow = try source(
+            "Sources/MeetingBuddyApp/AppMediaReviewWorkflow.swift"
+        )
+        let turnStart = try #require(
+            workflow.range(
+                of:
+                    "func codexTurnRequest("
+            )
+        )
+        let turnEnd = try #require(
+            workflow.range(
+                of:
+                    "private func recordingReview(",
+                range:
+                    turnStart.upperBound
+                        ..< workflow.endIndex
+            )
+        )
+        let body = String(
+            workflow[
+                turnStart.lowerBound
+                    ..< turnEnd.lowerBound
+            ]
+        )
+
+        for required in [
+            "try intelligenceRepository.load()",
+            ".route(for: .meetingChat)",
+            "== configuredSelection",
+            "intelligenceState",
+            ".routingProfile()",
+            "registry: try intelligenceState.registry()"
+        ] {
+            #expect(body.contains(required))
+        }
+        #expect(
+            !body.contains(
+                "identifier: \"v4-codex-text\""
+            )
+        )
+    }
+
+    @Test
     func workspaceSwitchChecksRecordingAndEveryTaskManagerJob()
         throws
     {
