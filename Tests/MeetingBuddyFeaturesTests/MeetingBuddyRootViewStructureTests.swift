@@ -690,6 +690,24 @@ struct MeetingBuddyRootViewStructureTests {
         }
     }
 
+    @Test
+    func visualCaptureWindowCannotInheritRunnerPointerHover() throws {
+        let captureSupport = try source(
+            "Tests/MeetingBuddyFeaturesTests/BlueMinutesRuntimeCaptureSupport.swift"
+        )
+
+        #expect(
+            captureSupport.contains(
+                "window.ignoresMouseEvents = true"
+            )
+        )
+        #expect(
+            captureSupport.contains(
+                "configuration.showsCursor = false"
+            )
+        )
+    }
+
     private func sectionIdentifier(_ section: MediaReviewSection) -> String {
         switch section {
         case .intake:

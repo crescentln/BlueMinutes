@@ -336,6 +336,11 @@ enum BlueMinutesRuntimeCapture {
             captureBackgroundColor(
                 descriptor.appearance
             )
+        // The compositor hides the cursor, but AppKit can still apply a hover
+        // state when the runner's stationary pointer happens to cross a
+        // newly created capture window. Visual evidence is non-interactive,
+        // so exclude mouse hit testing to keep fresh processes equivalent.
+        window.ignoresMouseEvents = true
         window.appearance =
             visualAppearance(
                 appearance:
