@@ -116,7 +116,7 @@ struct SpeechToTextRoutePicker: View {
             }
 
             Text(
-                "Codex provides text analysis, chat and research only. It never receives audio and is not an STT option."
+                "Codex provides bounded text analysis and chat only. It never receives audio and is not an STT option."
             )
             .font(.caption)
             .foregroundStyle(.secondary)

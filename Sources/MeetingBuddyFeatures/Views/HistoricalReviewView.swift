@@ -5,7 +5,9 @@ struct HistoricalReviewView: View {
     @Bindable var sceneState: MediaReviewSceneState
 
     var body: some View {
-        ScrollView {
+        BlueMinutesDetailScrollView(
+            contentMaxWidth: 1_100
+        ) {
             VStack(alignment: .leading, spacing: 20) {
                 EditorialSectionHeader(
                     "Meeting History",
@@ -155,10 +157,6 @@ struct HistoricalReviewView: View {
                 )
             }
             .padding(24)
-            .frame(
-                maxWidth: 1_100,
-                alignment: .leading
-            )
         }
         .onChange(of: currentFilter) { _, _ in
             store.historicalFilterDidChange(

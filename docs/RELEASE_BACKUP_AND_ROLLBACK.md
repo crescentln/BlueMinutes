@@ -139,8 +139,12 @@ For any future distributable application:
 
 ## Safe application rollback
 
-Schema v10 is intentionally rejected by older binaries that understand only a
-prior schema. An older app must never be pointed at the newer live workspace.
+Versions 0.3 and 0.4 both use schema v10, so a schema-number check alone does not
+make a 0.4-to-0.3 rollback safe. Version 0.4 adds app-support routing state and
+newer serialized task-plan payloads that the older app was not proven to
+understand. An actual 0.3 binary has not passed a rollback matrix against a 0.4
+workspace. Never point it at the newer live workspace; use a verified cold copy
+made before the application change.
 
 To roll back:
 

@@ -5,6 +5,11 @@ import MeetingBuddyDomain
 public struct LocalWorkspaceService: WorkspaceService, @unchecked Sendable {
     public static let manifestFilename = "workspace_manifest.json"
     public static let databaseRelativePath = try! WorkspaceRelativePath("Database/meetingbuddy.sqlite")
+    private static let permittedNewWorkspaceMetadataByteLimits:
+        [String: Int] = [
+            ".DS_Store": 16 * 1_024 * 1_024,
+            ".localized": 4 * 1_024
+        ]
 
     private let fileManager: FileManager
 
@@ -44,10 +49,14 @@ public struct LocalWorkspaceService: WorkspaceService, @unchecked Sendable {
                 }
                 return existing
             }
-            guard contents.isEmpty else {
-                throw WorkspaceContractError.invalidWorkspaceRoot(
-                    "A new workspace root must be empty or already contain a BlueMinutes manifest."
+            let foreignContents = try contents.filter {
+                try !Self.isPermittedNewWorkspaceMetadata(
+                    at: $0
                 )
+            }
+            guard foreignContents.isEmpty else {
+                throw WorkspaceContractError
+                    .workspaceRootNotEmpty
             }
         } else {
             try fileManager.createDirectory(
@@ -82,6 +91,34 @@ public struct LocalWorkspaceService: WorkspaceService, @unchecked Sendable {
             ofItemAtPath: layout.workspaceManifest.path
         )
         return LocalWorkspaceDescriptor(manifest: manifest, layout: layout)
+    }
+
+    private static func isPermittedNewWorkspaceMetadata(
+        at url: URL
+    ) throws -> Bool {
+        guard let byteLimit =
+                permittedNewWorkspaceMetadataByteLimits[
+                    url.lastPathComponent
+                ]
+        else {
+            return false
+        }
+        let values = try url.resourceValues(
+            forKeys: [
+                .isRegularFileKey,
+                .isSymbolicLinkKey,
+                .fileSizeKey
+            ]
+        )
+        guard values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              let fileSize = values.fileSize,
+              fileSize >= 0,
+              fileSize <= byteLimit
+        else {
+            return false
+        }
+        return true
     }
 
     public func openWorkspace(at root: URL) throws -> LocalWorkspaceDescriptor {

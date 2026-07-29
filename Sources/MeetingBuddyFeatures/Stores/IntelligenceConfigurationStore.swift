@@ -374,7 +374,7 @@ public final class IntelligenceConfigurationStore {
                     modelIdentifier: $0.modelIdentifier
                 )
             }
-        let textSelection:
+        let codexSelection:
             ProviderModelSelectionRecord? =
             codexConnected
             ? ProviderModelSelectionRecord(
@@ -382,7 +382,9 @@ public final class IntelligenceConfigurationStore {
                     "codex-subscription",
                 modelIdentifier: "codex-default"
             )
-            : readyText.map {
+            : nil
+        let remoteTextSelection =
+            readyText.map {
                 ProviderModelSelectionRecord(
                     providerIdentifier: $0.identifier,
                     modelIdentifier: $0.modelIdentifier
@@ -423,9 +425,12 @@ public final class IntelligenceConfigurationStore {
                  .textAnalysis,
                  .summaryAndMinutes,
                  .meetingChat,
-                 .documentQuery,
-                 .externalResearch:
-                selection = textSelection
+                 .documentQuery:
+                selection =
+                    codexSelection
+                        ?? remoteTextSelection
+            case .externalResearch:
+                selection = remoteTextSelection
             }
             return IntelligenceTaskRouteSetting(
                 task: task,
@@ -470,7 +475,8 @@ public final class IntelligenceConfigurationStore {
             )
         }
         if !task.isSpeechToText,
-           task != .speakerProcessing
+           task != .speakerProcessing,
+           task != .externalResearch
         {
             options.append(
                 IntelligenceRouteOption(

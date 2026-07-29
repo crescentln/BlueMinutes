@@ -1,7 +1,10 @@
 import Foundation
 import SwiftUI
 
-enum BlueMinutesSettingsTab: Hashable {
+public enum BlueMinutesSettingsTab:
+    Hashable,
+    Sendable
+{
     case general
     case appearance
     case intelligence
@@ -12,7 +15,8 @@ public struct BlueMinutesSettingsView: View {
     @AppStorage private var appearanceRawValue: String
     @AppStorage private var interfaceDensityRawValue: String
     @AppStorage private var readingWidthRawValue: String
-    @State private var selectedTab: BlueMinutesSettingsTab
+    @State private var localSelectedTab:
+        BlueMinutesSettingsTab
     @State private var preferenceEditor:
         LearnedPreferenceEditorState
 
@@ -21,6 +25,8 @@ public struct BlueMinutesSettingsView: View {
     private let codexStore: CodexConnectionStore?
     private let intelligenceStore:
         IntelligenceConfigurationStore?
+    private let selectedTabOverride:
+        Binding<BlueMinutesSettingsTab>?
 
     public init(defaults: UserDefaults = .standard) {
         self.init(
@@ -28,7 +34,8 @@ public struct BlueMinutesSettingsView: View {
             codexStore: nil,
             intelligenceStore: nil,
             defaults: defaults,
-            initialTab: .general
+            initialTab: .general,
+            selectedTabOverride: nil
         )
     }
 
@@ -44,7 +51,29 @@ public struct BlueMinutesSettingsView: View {
             codexStore: codexStore,
             intelligenceStore: intelligenceStore,
             defaults: defaults,
-            initialTab: .general
+            initialTab: .general,
+            selectedTabOverride: nil
+        )
+    }
+
+    public init(
+        store: MediaReviewStore,
+        codexStore: CodexConnectionStore? = nil,
+        intelligenceStore:
+            IntelligenceConfigurationStore? = nil,
+        selectedTab:
+            Binding<BlueMinutesSettingsTab>,
+        defaults: UserDefaults = .standard
+    ) {
+        self.init(
+            store: store,
+            codexStore: codexStore,
+            intelligenceStore: intelligenceStore,
+            defaults: defaults,
+            initialTab:
+                selectedTab.wrappedValue,
+            selectedTabOverride:
+                selectedTab
         )
     }
 
@@ -57,7 +86,8 @@ public struct BlueMinutesSettingsView: View {
             codexStore: nil,
             intelligenceStore: nil,
             defaults: defaults,
-            initialTab: initialTab
+            initialTab: initialTab,
+            selectedTabOverride: nil
         )
     }
 
@@ -67,13 +97,19 @@ public struct BlueMinutesSettingsView: View {
         intelligenceStore:
             IntelligenceConfigurationStore? = nil,
         defaults: UserDefaults,
-        initialTab: BlueMinutesSettingsTab
+        initialTab: BlueMinutesSettingsTab,
+        selectedTabOverride:
+            Binding<BlueMinutesSettingsTab>? = nil
     ) {
         self.defaults = defaults
         self.store = store
         self.codexStore = codexStore
         self.intelligenceStore = intelligenceStore
-        _selectedTab = State(initialValue: initialTab)
+        self.selectedTabOverride =
+            selectedTabOverride
+        _localSelectedTab = State(
+            initialValue: initialTab
+        )
         _preferenceEditor = State(
             initialValue:
                 LearnedPreferenceEditorState()
@@ -99,7 +135,7 @@ public struct BlueMinutesSettingsView: View {
     }
 
     public var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: selectedTab) {
             BlueMinutesGeneralSettingsPane(
                 interfaceDensity: interfaceDensity,
                 readingWidth: readingWidth,
@@ -168,6 +204,13 @@ public struct BlueMinutesSettingsView: View {
         .frame(width: 520, height: 320)
         .scenePadding()
         .accessibilityIdentifier("blueminutes.settings")
+    }
+
+    private var selectedTab:
+        Binding<BlueMinutesSettingsTab>
+    {
+        selectedTabOverride
+            ?? $localSelectedTab
     }
 
     private var appearance:

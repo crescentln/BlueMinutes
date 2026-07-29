@@ -1376,7 +1376,7 @@ struct BlueMinutesSettingsTests {
             "BlueMinutes Storage AX Probe"
         let snapshots = try withHostedWindow(
             title: title,
-            size: CGSize(width: 860, height: 600),
+            size: CGSize(width: 1_440, height: 900),
             content: {
                 StorageDashboardView(
                     store: store,
@@ -1404,6 +1404,19 @@ struct BlueMinutesSettingsTests {
                     ?? 0 > 0
             )
         }
+        let dashboard = try #require(
+            snapshots[
+                "blueminutes.storage.dashboard"
+            ]
+        )
+        #expect(
+            abs(
+                dashboard.frame.maxX
+                    - snapshots
+                    .containingFrame
+                    .maxX
+            ) <= 2
+        )
         for identifier in [
             "blueminutes.storage.refresh",
             restoreIdentifier,

@@ -23,7 +23,9 @@ struct RecordingCaptureView: View {
     }
 
     var body: some View {
-        ScrollView {
+        BlueMinutesDetailScrollView(
+            contentMaxWidth: readingWidth.points
+        ) {
             VStack(alignment: .leading, spacing: 28) {
                 capabilitySection
                 captureSection
@@ -32,7 +34,6 @@ struct RecordingCaptureView: View {
                 }
             }
             .padding(28)
-            .frame(maxWidth: readingWidth.points, alignment: .leading)
         }
         .onChange(of: sceneState.dataClassification) { _, _ in
             if !codexTextProcessingIsEligible {

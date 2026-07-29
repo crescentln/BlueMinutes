@@ -78,12 +78,32 @@ public struct OpenAIRemoteTranscriptionProvider:
         transport: any OpenAITranscriptionTransport
     ) throws {
         let decision = authorization.decision
+        guard let descriptor =
+                try? OpenAIModelCapabilityCatalog
+                    .speechDescriptor(
+                        configuration
+                            .modelIdentifier
+                    )
+        else {
+            throw AIProviderContractError.routeDenied(
+                "The remote transcription adapter did not receive a verified OpenAI speech model."
+            )
+        }
+        let expectedCapabilities =
+            descriptor.capabilities.sorted {
+                $0.rawValue < $1.rawValue
+            }
         guard configuration.family == .openAI,
               configuration.purpose == .speechToText,
               configuration.baseURL.absoluteString
                   == RemoteProviderConfiguration
                   .openAIBaseURL,
               configuration.connectionState == .ready,
+              configuration.lastTestedAt != nil,
+              configuration.modelDisplayName
+                  == descriptor.displayName,
+              configuration.capabilities
+                  == expectedCapabilities,
               configuration.capabilities.contains(
                   .speechToTextBatch
               ),
@@ -441,6 +461,22 @@ struct SecureOpenAITranscriptionTransport:
     func urlRequest(
         _ input: OpenAITranscriptionTransportRequest
     ) throws -> URLRequest {
+        guard let descriptor =
+                try? OpenAIModelCapabilityCatalog
+                    .speechDescriptor(
+                        input.configuration
+                            .modelIdentifier
+                    )
+        else {
+            throw AIProviderContractError
+                .invalidRequest(
+                    "The remote transcription request did not select a verified OpenAI speech model."
+                )
+        }
+        let expectedCapabilities =
+            descriptor.capabilities.sorted {
+                $0.rawValue < $1.rawValue
+            }
         guard input.configuration.family == .openAI,
               input.configuration.purpose
                   == .speechToText,
@@ -448,6 +484,13 @@ struct SecureOpenAITranscriptionTransport:
                   .absoluteString
                   == RemoteProviderConfiguration
                   .openAIBaseURL,
+              input.configuration.connectionState
+                  == .ready,
+              input.configuration.lastTestedAt != nil,
+              input.configuration.modelDisplayName
+                  == descriptor.displayName,
+              input.configuration.capabilities
+                  == expectedCapabilities,
               input.configuration.capabilities
                   .contains(.speechToTextBatch),
               let key = String(

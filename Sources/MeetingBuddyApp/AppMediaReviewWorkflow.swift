@@ -10,6 +10,7 @@ import MeetingBuddyTasks
 enum AppWorkflowError: LocalizedError {
     case workspaceRequired
     case workspaceAuthorizationFailed
+    case workspaceFolderContainsOtherFiles
     case workspaceOpenFailed
     case workspaceHealthFailed
     case workspaceWorkInProgress
@@ -41,8 +42,10 @@ enum AppWorkflowError: LocalizedError {
             "Choose a local BlueMinutes workspace first."
         case .workspaceAuthorizationFailed:
             "BlueMinutes could not retain access to the selected workspace."
+        case .workspaceFolderContainsOtherFiles:
+            "This folder contains other files, so BlueMinutes left it unchanged. In the folder picker, create a new empty folder (for example, “BlueMinutes Workspace”) or choose an existing BlueMinutes workspace."
         case .workspaceOpenFailed:
-            "The selected folder is not an empty folder or a valid BlueMinutes workspace."
+            "BlueMinutes could not open this folder. Choose an existing BlueMinutes workspace, or create and select a new empty folder."
         case .workspaceHealthFailed:
             "The workspace did not pass its local database and recovery health checks."
         case .workspaceWorkInProgress:
@@ -1091,6 +1094,15 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
         } catch {
             workspaceSecurityScope
                 .discard(candidateScope)
+            if let workspaceError =
+                    error as?
+                    WorkspaceContractError,
+               workspaceError
+                == .workspaceRootNotEmpty
+            {
+                throw AppWorkflowError
+                    .workspaceFolderContainsOtherFiles
+            }
             throw AppWorkflowError.workspaceOpenFailed
         }
     }
@@ -2933,33 +2945,39 @@ final class AppMediaReviewWorkflow: MediaReviewWorkflow {
             accessPolicy: accessPolicy,
             securityPolicy: securityPolicy
         )
-        let selection = try ProviderModelSelection(
+        let configuredSelection =
+            ProviderModelSelectionRecord(
             providerIdentifier:
                 CodexTextExecutionAuthorization
                 .providerIdentifier,
             modelIdentifier: "codex-default"
         )
-        let profile = try TaskRoutingProfile(
-            identifier: "v4-codex-text",
-            displayName: "Codex Text",
-            scope: .global,
-            routes: [
-                TaskRoutePreference(
-                    task: .meetingChat,
-                    routeOverride: .selection(
-                        primary: selection,
-                        fallback: nil
-                    )
-                )
-            ]
-        )
+        let intelligenceState:
+            IntelligenceConfigurationState
+        do {
+            intelligenceState =
+                try intelligenceRepository.load()
+        } catch {
+            throw AppWorkflowError
+                .codexContextUnavailable
+        }
+        guard intelligenceState
+                .route(for: .meetingChat)
+                .selection
+                == configuredSelection
+        else {
+            throw AppWorkflowError
+                .codexContextUnavailable
+        }
         let resolution = TaskRoutingResolver().resolve(
             task: .meetingChat,
             scopeStack: try TaskRoutingScopeStack(
                 securityContext: routingContext,
-                global: profile
+                global:
+                    intelligenceState
+                    .routingProfile()
             ),
-            registry: try BlueMinutesBuiltInProviders.registry(),
+            registry: try intelligenceState.registry(),
             runtime: try ProviderRuntimeRegistry(
                 snapshots: [
                     ProviderRuntimeSnapshot(

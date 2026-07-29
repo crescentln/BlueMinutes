@@ -8,7 +8,7 @@ All notable project changes are documented here. The format follows
 
 Notable changes after `v0.4.0` will be recorded here.
 
-## [0.4.0] - 2026-07-28
+## [0.4.0] - 2026-07-29
 
 Formal software-testing baseline for the v4 pre-Beta functional round.
 
@@ -39,6 +39,9 @@ Formal software-testing baseline for the v4 pre-Beta functional round.
   surface. The separately gated U1 visual redesign remains unstarted.
 - Made missing or disabled STT resolve honestly to Record Only; provider repair
   suggestions never activate a different data route or cost owner silently.
+- Clarified locked destinations, added the missing Intelligence Settings route,
+  moved detail scrollbars to the window edge, preserved workspace selection on
+  unsafe folders, and made storage sizes use readable KB/MB/GB units.
 
 ### Fixed
 
@@ -55,6 +58,15 @@ Formal software-testing baseline for the v4 pre-Beta functional round.
   replace its restorable bookmark before recovery succeeds.
 - Persisted queued work no longer replays or strands transient source,
   capture, or outbound authority after restart.
+- Codex Assistant now consumes the exact persisted Meeting Chat route; selecting
+  None or a non-Codex provider fails closed before transcript text can leave the
+  app.
+- Persisted remote-provider records are revalidated against the exact model
+  catalog, capability set, identity, endpoint, credential account, and
+  connection-test timestamp when decoded.
+- New-workspace Finder metadata exceptions now accept only bounded regular
+  non-symlink files; same-named directories, links, and oversized files leave
+  the selected folder unchanged.
 
 ### Security and privacy
 
@@ -63,6 +75,8 @@ Formal software-testing baseline for the v4 pre-Beta functional round.
 - Codex remains text-only, receives no audio or arbitrary path, and runs in an
   isolated app-owned home with shell, file-change, web, Apps, plugins, MCP,
   memory, multi-agent, and permission-escalation surfaces disabled.
+- Codex does not advertise or authorize External Research because its isolated
+  runtime has no web, Apps, plugin, or MCP research channel.
 - Codex history persistence is disabled; disconnect waits for any in-flight
   connection, requires confirmed process exit, and fails closed until private
   runtime state is purged.

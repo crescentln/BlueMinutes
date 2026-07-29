@@ -82,7 +82,9 @@ struct AnalysisReviewView: View {
     }
 
     private var setupView: some View {
-        ScrollView {
+        BlueMinutesDetailScrollView(
+            contentMaxWidth: 900
+        ) {
             VStack(alignment: .leading, spacing: 20) {
                 routeCard
                 if let job = store.analysisJob {
@@ -118,7 +120,6 @@ struct AnalysisReviewView: View {
                 }
             }
             .padding(28)
-            .frame(maxWidth: 900, alignment: .leading)
         }
     }
 
@@ -213,7 +214,9 @@ struct AnalysisReviewView: View {
                     .count
             )
 
-        return ScrollView {
+        return BlueMinutesDetailScrollView(
+            contentMaxWidth: 1_020
+        ) {
             VStack(alignment: .leading, spacing: 20) {
                 EditorialSectionHeader(
                     "Analysis Review",
@@ -242,7 +245,6 @@ struct AnalysisReviewView: View {
                 )
             }
             .padding(24)
-            .frame(maxWidth: 1_020, alignment: .leading)
         }
         .inspector(isPresented: $inspectorIsPresented) {
             AnalysisEvidenceInspectorPanel(

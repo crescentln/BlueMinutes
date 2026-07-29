@@ -18,7 +18,7 @@
 
 | Gate | Status |
 | --- | --- |
-| Fresh Debug/Release/warnings/full-test baseline | Pass on current branch: the CI-shaped warnings-as-errors gate covers 538 discovered tests and a fresh one-pass warnings-as-errors Release build completes |
+| Fresh Debug/Release/warnings/full-test baseline | Pass on current branch: the CI-shaped warnings-as-errors gate covers 545 discovered tests and a fresh one-pass warnings-as-errors Release build completes |
 | Supplied logo/icon replacement | Implemented and merged in foundation PR #61; the current staged development bundle contains the reviewed ICNS byte-for-byte, while the eventual signed distribution artifact remains a later gate |
 | Capability registry and Codex-excluded STT | Implemented contracts, persisted configuration, four-section UI, meeting pickers, and tests |
 | Explicit record-only and no silent fallback | Implemented through import, recording, canonical preparation, and transcript execution |
@@ -124,7 +124,15 @@
   credentials, URLs, or paths;
 - same-suffix persistence test workspaces now receive a per-run UUID, so an
   interrupted test cannot leak old active-revision pointers into a later run
-  while production optimistic locking remains unchanged.
+  while production optimistic locking remains unchanged;
+- Codex Assistant loads and enforces the persisted Meeting Chat route before it
+  can construct an outbound turn; None and non-Codex selections fail closed;
+- Codex no longer advertises or authorizes External Research while its isolated
+  runtime disables every external research channel;
+- decoded remote-provider state must reproduce the exact approved model,
+  capabilities, endpoint, credential account, and connection-test evidence; and
+- Finder metadata exceptions for a new workspace are bounded regular
+  non-symlink files, not basename-only exemptions.
 
 ## Acceptance criteria for phase closure
 
@@ -200,7 +208,7 @@ These are explicit gates, not claims of completion.
 The current candidate tree is ready to enter formal software testing: its
 bounded P0 implementation, functional UI integration, Codex/STT separation,
 recording-to-transcript path, recovery, configuration persistence,
-content-free diagnostics, staged-app lifecycle smoke, 538-test CI-shaped Debug
+content-free diagnostics, staged-app lifecycle smoke, 545-test CI-shaped Debug
 gate, and fresh Release build are in place. It is **not** a public-Beta or 1.0
 distribution candidate. Hardware-duration, accessibility, performance,
 full outbound-network, signing/notarization, updater, complete export, and

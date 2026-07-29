@@ -113,6 +113,31 @@ public struct RemoteProviderConfiguration:
         let sortedCapabilities = capabilities.sorted {
             $0.rawValue < $1.rawValue
         }
+        let descriptor:
+            OpenAIModelCapabilityDescriptor
+        let expectedIdentifier: String
+        let expectedDisplayName: String
+        switch purpose {
+        case .speechToText:
+            descriptor = try OpenAIModelCapabilityCatalog
+                .speechDescriptor(
+                    modelIdentifier
+                )
+            expectedIdentifier = "openai-stt"
+            expectedDisplayName =
+                "OpenAI Speech-to-Text API"
+        case .textIntelligence:
+            descriptor = try OpenAIModelCapabilityCatalog
+                .textDescriptor(
+                    modelIdentifier
+                )
+            expectedIdentifier = "openai-text"
+            expectedDisplayName = "OpenAI API"
+        }
+        let expectedCapabilities =
+            descriptor.capabilities.sorted {
+                $0.rawValue < $1.rawValue
+            }
         guard Self.validOpaqueIdentifier(identifier),
               Self.validLabel(displayName),
               Self.validOpaqueIdentifier(modelIdentifier),
@@ -122,13 +147,26 @@ public struct RemoteProviderConfiguration:
               Set(sortedCapabilities).count
                   == sortedCapabilities.count,
               family == .openAI,
+              identifier == expectedIdentifier,
+              displayName == expectedDisplayName,
               baseURL.absoluteString == Self.openAIBaseURL,
+              modelIdentifier == descriptor.identifier,
+              modelDisplayName == descriptor.displayName,
+              sortedCapabilities == expectedCapabilities,
+              credentialAccount
+                  == Self.sharedOpenAICredentialAccount,
               Self.capabilities(
                   sortedCapabilities,
                   match: purpose
               ),
-              connectionState == .notTested
-                  || lastTestedAt != nil
+              (
+                  connectionState == .notTested
+                      && lastTestedAt == nil
+              )
+                  || (
+                      connectionState != .notTested
+                          && lastTestedAt != nil
+                  )
         else {
             throw IntelligenceConfigurationError
                 .invalidConfiguration(
@@ -146,6 +184,58 @@ public struct RemoteProviderConfiguration:
         self.credentialAccount = credentialAccount
         self.connectionState = connectionState
         self.lastTestedAt = lastTestedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(
+            keyedBy: CodingKeys.self
+        )
+        try self.init(
+            identifier: container.decode(
+                String.self,
+                forKey: .identifier
+            ),
+            displayName: container.decode(
+                String.self,
+                forKey: .displayName
+            ),
+            family: container.decode(
+                RemoteProviderFamily.self,
+                forKey: .family
+            ),
+            purpose: container.decode(
+                RemoteProviderPurpose.self,
+                forKey: .purpose
+            ),
+            baseURL: container.decode(
+                HTTPSURL.self,
+                forKey: .baseURL
+            ),
+            modelIdentifier: container.decode(
+                String.self,
+                forKey: .modelIdentifier
+            ),
+            modelDisplayName: container.decode(
+                String.self,
+                forKey: .modelDisplayName
+            ),
+            capabilities: container.decode(
+                [ProviderCapability].self,
+                forKey: .capabilities
+            ),
+            credentialAccount: container.decode(
+                String.self,
+                forKey: .credentialAccount
+            ),
+            connectionState: container.decode(
+                RemoteProviderConnectionState.self,
+                forKey: .connectionState
+            ),
+            lastTestedAt: container.decodeIfPresent(
+                UTCInstant.self,
+                forKey: .lastTestedAt
+            )
+        )
     }
 
     public func recordingConnectionResult(
@@ -256,6 +346,23 @@ public struct RemoteProviderConfiguration:
         case .textIntelligence:
             return values.isDisjoint(with: speech)
         }
+    }
+
+    private enum CodingKeys:
+        String,
+        CodingKey
+    {
+        case identifier
+        case displayName
+        case family
+        case purpose
+        case baseURL
+        case modelIdentifier
+        case modelDisplayName
+        case capabilities
+        case credentialAccount
+        case connectionState
+        case lastTestedAt
     }
 
     private static func validOpaqueIdentifier(

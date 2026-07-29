@@ -32,7 +32,9 @@ struct BriefingReviewView: View {
     }
 
     private var setupView: some View {
-        ScrollView {
+        BlueMinutesDetailScrollView(
+            contentMaxWidth: 920
+        ) {
             VStack(alignment: .leading, spacing: 20) {
                 EditorialSectionHeader(
                     "Create a Briefing",
@@ -46,7 +48,6 @@ struct BriefingReviewView: View {
                 generationCard
             }
             .padding(28)
-            .frame(maxWidth: 920, alignment: .leading)
         }
     }
 
@@ -170,7 +171,9 @@ struct BriefingReviewView: View {
         _ review: BriefingReviewBundle
     ) -> some View {
         if let sections = canonicalSections(in: review) {
-            ScrollView {
+            BlueMinutesDetailScrollView(
+                contentMaxWidth: 1_080
+            ) {
                 VStack(alignment: .leading, spacing: 20) {
                     reviewState(review)
                     BriefingEditorialCanvas(
@@ -192,10 +195,6 @@ struct BriefingReviewView: View {
                     exportCard(review)
                 }
                 .padding(24)
-                .frame(
-                    maxWidth: 1_080,
-                    alignment: .leading
-                )
             }
         } else {
             WorkflowStateView(

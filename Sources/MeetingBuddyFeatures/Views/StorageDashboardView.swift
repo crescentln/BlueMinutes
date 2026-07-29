@@ -26,7 +26,9 @@ struct StorageDashboardView: View {
 
     var body: some View {
         let state = presentationState
-        ScrollView {
+        BlueMinutesDetailScrollView(
+            contentMaxWidth: 980
+        ) {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 stateSummary(state)
@@ -56,10 +58,6 @@ struct StorageDashboardView: View {
                 deletionBoundary
             }
             .padding(28)
-            .frame(
-                maxWidth: 980,
-                alignment: .leading
-            )
         }
         .accessibilityIdentifier(
             "blueminutes.storage.dashboard"
@@ -214,7 +212,7 @@ struct StorageDashboardView: View {
                 GridRow {
                     Text("Storage class")
                         .font(.caption.weight(.semibold))
-                    Text("Exact bytes")
+                    Text("Size")
                         .font(.caption.weight(.semibold))
                     Text("Files")
                         .font(.caption.weight(.semibold))
@@ -222,10 +220,8 @@ struct StorageDashboardView: View {
                 Divider().gridCellColumns(3)
                 GridRow {
                     Text("Total").bold()
-                    Text(
-                        exactBytes(
-                            report.totalByteCount
-                        )
+                    storageSize(
+                        report.totalByteCount
                     )
                     .bold()
                     Text(
@@ -242,10 +238,8 @@ struct StorageDashboardView: View {
                 ) { usage in
                     GridRow {
                         Text(label(usage.category))
-                        Text(
-                            exactBytes(
-                                usage.byteCount
-                            )
+                        storageSize(
+                            usage.byteCount
                         )
                         Text(
                             String(usage.fileCount)
@@ -391,10 +385,9 @@ struct StorageDashboardView: View {
                 .font(.caption.monospaced())
                 .textSelection(.enabled)
             }
-            LabeledContent(
-                "Exact size",
-                value: exactBytes(item.byteSize)
-            )
+            LabeledContent("Size") {
+                storageSize(item.byteSize)
+            }
             LabeledContent(
                 "Classification",
                 value:
@@ -581,10 +574,26 @@ struct StorageDashboardView: View {
         }
     }
 
-    private func exactBytes(
+    private func storageSize(
         _ value: UInt64
-    ) -> String {
-        "\(value) bytes"
+    ) -> some View {
+        let readable =
+            StorageDashboardPresentation
+            .readableByteCount(
+                value,
+                locale: locale
+            )
+        let exact =
+            StorageDashboardPresentation
+            .exactByteCount(
+                value,
+                locale: locale
+            )
+        return Text(readable)
+            .help("Exact size: \(exact)")
+            .accessibilityValue(
+                "Exact size: \(exact)"
+            )
     }
 
     private func trashIdentifier(
