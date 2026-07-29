@@ -49,10 +49,11 @@ automatic updater, or deployment is part of this source-release milestone. The
 local development package is not a supported download and is never attached to
 the GitHub Release.
 
-## Current formal-test candidate: application version 0.4.0
+## Completed milestone: v0.4.0 formal-testing baseline
 
-- Prepared application version `0.4.0` build `4` as the v4 pre-Beta functional
-  baseline for formal software testing.
+- Published application version `0.4.0` build `4` as the source-only
+  `v0.4.0` GitHub Release and the v4 pre-Beta functional baseline for formal
+  software testing.
 - Added capability-based task routing, explicit Record Only, Sensitive Meeting
   local-only enforcement, optional Keychain-backed remote STT, and a separate
   text-only Codex subscription route.
@@ -64,10 +65,10 @@ the GitHub Release.
 - Kept billing/licensing disabled, the website typed handoff disconnected, and
   updates unconfigured.
 
-This candidate is intentionally a local ad-hoc DEVELOPMENT package and a draft
-Pull Request for testing. It is not a tagged `v0.4.0` source Release, a signed
-or notarized app, an updater, a deployment, or public binary distribution. U1
-visual redesign remains separately gated.
+The GitHub Release contains source only and zero maintainer-uploaded assets.
+The exact-tag local DEVELOPMENT package remains ad-hoc signed and is not a
+signed or notarized app, an updater, a deployment, or public binary
+distribution. U1 visual redesign remains separately gated.
 
 ## Candidate milestone: public project presentation
 
@@ -107,6 +108,9 @@ accessibility review, and separate release authorization.
 
 ## Persistent priorities
 
+- Close each future large functional or architecture round with a distinct
+  Semantic Versioning Release after protected-`main` gates pass and the
+  maintainer authorizes that exact scope; use patch releases for focused fixes.
 - Diplomatic accuracy and restrained claims.
 - Exact evidence traceability and immutable revisions.
 - Local-first privacy, bounded providers, and explicit user control.

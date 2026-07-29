@@ -40,12 +40,14 @@ BlueMinutes is not affiliated with, sponsored by, or endorsed by the United
 Nations, any United Nations entity, or any government.
 
 Application version `0.4.0` (build `4`) is the formal software-testing
-candidate for the current v4 pre-Beta functional round. It adds capability-
-based task routing, independent local/remote/record-only speech-to-text,
-bounded Codex subscription text intelligence, recording lifecycle recovery,
-transcript navigation, and truthful release-service state while preserving the
-existing UI language. It is not a tagged GitHub Release or a distributable app
-download; the latest public source Release remains `v0.3.0`.
+baseline for the current v4 pre-Beta functional round and is published as the
+source-only GitHub Release `v0.4.0`. It adds capability-based task routing,
+independent local/remote/record-only speech-to-text, bounded Codex subscription
+text intelligence, recording lifecycle recovery, transcript navigation, and
+truthful release-service state while preserving the existing UI language. The
+Release contains only GitHub-generated source archives; no maintainer-uploaded
+app bundle, installer, or updater is provided. The local development package
+remains ad-hoc signed and is not a distributable app download.
 
 ## Product preview
 
@@ -390,7 +392,7 @@ there and retain their legacy compatibility identifiers.
   confirmation can still be mistaken.
 - There is no cloud synchronization, HTTP API, remote MCP, or remote-control
   path. The bounded external inference routes described above are the only
-  provider expansion in this candidate.
+  provider expansion in this release baseline.
 
 See the [Roadmap](ROADMAP.md) and
 [MVP acceptance record](docs/MVP_ACCEPTANCE.md) for current scope and deferred

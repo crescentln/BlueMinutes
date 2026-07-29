@@ -6,13 +6,13 @@ internal_compatibility_name: MeetingBuddy
 controller_version: "1.1"
 master_spec_version: "1.1"
 current_task: "v4-prebeta"
-current_status: ready_for_formal_software_testing
+current_status: source_release_authorized_pending_exact_remote_gates
 active_v4_prebeta_work:
   title: "BlueMinutes v4 public-Beta functional readiness"
   authorization_date: "2026-07-28"
   candidate_version: "0.4.0"
   candidate_build: "4"
-  candidate_distribution: "local ad-hoc DEVELOPMENT formal-test package only; no tag, GitHub Release, notarization, installation, upload, or public distribution"
+  candidate_distribution: "source-only GitHub Release authorized after exact PR #62 and protected-main gates, with zero uploaded assets; the local ad-hoc DEVELOPMENT formal-test package remains separate, unnotarized, uninstalled, and unauthorized for public binary distribution"
   tracking_issue: "Issue #60 at https://github.com/crescentln/BlueMinutes/issues/60"
   rollback_anchor: "77a4deca11190587c557e081667fb6c0e64a0f4a"
   local_branch: "codex/60-v4-codex-transport"
@@ -21,10 +21,10 @@ active_v4_prebeta_work:
   ui_boundary: "current pages, components, colors, typography, layout language, accessibility and visual regression are reused; full visual makeover and design-system restyling remain U1 and require separate user approval"
   website_boundary: "the separately developed site remains disconnected; the app exposes only a default-disabled typed handoff with no live endpoint"
   commercial_boundary: "BillingMode.disabled for Beta/1.0; no production Stripe/licensing, trial, paywall, device limit, checkout, or licensing network dependency"
-  distribution_boundary: "no bundled Codex runtime, Developer ID signing, notarization, public binary upload, website deployment, update-feed deployment, or production release"
+  distribution_boundary: "no bundled Codex runtime, Developer ID signing, notarization, public binary upload, website deployment, update-feed deployment, or distributable application release"
   architecture_decision: "docs/adr/ADR-0019-v4-provider-routing-codex-and-release-gates.md"
   audit_directory: "docs/prebeta-audit"
-  foundation_status: "the bounded routing, brand, release-guard, ADR, and audit foundation was reviewed in PR #61 and rebase-merged at 2026-07-28T16:51:24Z as protected main 77a4deca11190587c557e081667fb6c0e64a0f4a; the self-relative Issue #60 candidate commit containing this ledger carries the later functional implementation, has passed the local formal-test-candidate gates, and remains subject to remote CI, Pull Request review, and explicit merge gates"
+  foundation_status: "the bounded routing, brand, release-guard, ADR, and audit foundation was reviewed in PR #61 and rebase-merged at 2026-07-28T16:51:24Z as protected main 77a4deca11190587c557e081667fb6c0e64a0f4a; the self-relative Issue #60 candidate commit containing this ledger carries the later functional implementation, has passed the local formal-test-candidate gates, and is authorized for a source-only v0.4.0 Release after exact PR #62 and protected-main gates"
   functional_status: "the self-relative Issue #60 candidate commit containing this ledger implements the bounded Codex text vertical slice, independent local/record-only/OpenAI STT, Keychain BYOK and routing UI, meeting route snapshots, recording-to-canonical handoff, app-owned recording lifecycle, New Meeting coordinator, transcript outline/search, truthful About composition, fixed content-free Apple Unified Logging, and a fail-closed sanitized diagnostics copy; CI-shaped warnings-as-errors shards cover 538 discovered tests, a fresh one-pass warnings-as-errors Release build passes, and an independent final read-only review reports no current P0/P1, while remote CI/review, sustained real-device matrices, complete outbound-network proof, and explicit residual product decisions remain open"
   visual_baseline:
     candidate: "GitHub Actions run 30408544276, evidence job 90439382718, exact source 82b1abc1b921b37c730e54c699574272c54e8f0e"
@@ -35,6 +35,14 @@ active_v4_prebeta_work:
     scope: "only authorized v4 functional additions are accepted; U1 remains deferred and all thresholds remain maximum channel delta 0, changed-pixel ratio 0, and luminance SSIM 1"
     calibration: "GitHub Actions run 30409045361, evidence job 90440892621, exact source 82b1abc1b921b37c730e54c699574272c54e8f0e"
     determinism: "three fresh processes times 50 cases times five captures equals 750 frames and 1,500 within-process pair comparisons; every frame hash matched within and across processes and the reviewed candidate; all differences were zero"
+  source_release_plan:
+    version: "v0.4.0"
+    distribution_scope: "regular GitHub source Release; GitHub-generated source archives and zero maintainer-uploaded assets"
+    status: "authorized_pending_pr_62_merge_exact_new_main_gates_tag_and_release"
+    pull_request: "PR #62 at https://github.com/crescentln/BlueMinutes/pull/62"
+    release_notes: "docs/RELEASE_NOTES_0.4.0.md"
+    local_package_boundary: "rebuild the ignored BlueMinutes-0.4.0-development set from the exact annotated tag for local formal testing only; never attach, upload, install, or advertise it as a supported download"
+    future_release_cadence: "future large functional or architecture rounds should close with distinct Semantic Versioning Releases after protected-main gates and exact maintainer authorization; focused fixes may use patch releases"
 authorized_post_mvp_work:
   task: "public GitHub source publication and long-term maintenance foundation"
   status: "v0.3.0_published_exact_tag_local_development_package_verified_post_release_ledger_pr_59_merged"
@@ -452,7 +460,7 @@ open_P1_decisions:
   - "Sparkle versus another signed distribution update mechanism remains gated on Developer ID, notarization, appcast ownership, clean-machine and rollback proof"
 known_out_of_scope_findings:
   - "the final Slice I current-head actual-app import path is proven with synthetic local media, but the Transcript transition automation bridge terminated before producing current-head transition evidence; an earlier unchanged-path Transcript hands-on sequence remains bounded evidence, and current-head VoiceOver spoken wording plus live Reduce Transparency, Differentiate Without Color, and Reduce Motion toggle-and-restore observations remain unverified"
-  - "the v0.3.0 candidate produces only an ignored local ad-hoc development package and is intended for a source-only GitHub Release with zero uploaded assets after all gates pass; Developer ID and Team ID signing, notarization and stapling, public binary upload or distribution, installation, automatic update, deployment, schema or dependency changes, and provider or network expansion remain separate future gates"
+  - "the v0.4.0 formal-test baseline has an authorized source-only GitHub Release with zero uploaded assets; its ignored local ad-hoc development package remains separate. Developer ID and Team ID signing, notarization and stapling, public binary upload or distribution, installation, automatic update, deployment, schema or dependency changes, and provider or network expansion remain separate future gates"
   - "Phase 1 Change Group 2 intentionally adds no enabled Research capability, conditional feature branch, persistence, migration, ObjectStore implementation, provider or connector, network route, production resolver, Research service/executor, Setup Guide, Settings, Conversation/Chat UI, artifact UI, task registration, automation, CLI, MCP, export, or user-data behavior; all later work remains separately gated"
   - "Task 011 release classification is INTERNAL ALPHA: Developer ID, Team ID, notarization/stapling, affirmative Gatekeeper distribution approval, clean-machine install/update/rollback, final distribution icon/localization review, manual VoiceOver/keyboard/contrast/reduced-motion review, and intended-OS live TCC/capture interruption evidence are incomplete"
   - "current-version application reopen is proven for a cold copied workspace, but an actual older binary rollback and clean-machine restore are untested; compact verification summaries are preserved without full raw test transcripts"
@@ -477,6 +485,6 @@ known_out_of_scope_findings:
   - "UN Web TV page/player stability, written media-use authority, and original-versus-interpretation track mapping remain unproved; automatic media/track acquisition remains rejected"
   - "intended-identity macOS 15/current-OS TCC behavior, live application/microphone selection, physical device/source changes, native process kill/long capture, sleep, and sudden power loss remain manual release-proof gaps"
   - "Developer ID provisioning, Gatekeeper/notarization, update-path review, and clean-machine release validation remain unsatisfied external-release gates outside this local-development and source-release acceptance"
-next_eligible_task: "use the self-relative Issue #60 0.4.0 build-4 candidate commit containing this ledger as the formal software-testing baseline and execute the intended-device audio, lifecycle, performance, accessibility, and outbound-network matrix. Hold whole-system/external-device switching, macOS 15 local STT policy, immutable UN/official-record ingestion, complete export expansion, App Sandbox/bundled Codex runtime, Sparkle/signing/notarization, website connection, and publication at their explicit architecture, hardware, privacy, or distribution gates. Do not start U1, production billing, website deployment, bundled runtime, Developer ID/notarization, or public binary distribution"
-last_updated_at: "2026-07-29T00:02:12Z"
+next_eligible_task: "publish the exact protected-main v0.4.0 source-only baseline under the recorded authorization, then use that exact tag as the formal software-testing baseline for the intended-device audio, lifecycle, performance, accessibility, and outbound-network matrix. Hold whole-system/external-device switching, macOS 15 local STT policy, immutable UN/official-record ingestion, complete export expansion, App Sandbox/bundled Codex runtime, Sparkle/signing/notarization, website connection, and public binary distribution at their explicit architecture, hardware, privacy, or distribution gates. Do not start U1, production billing, website deployment, bundled runtime, Developer ID/notarization, or public binary distribution"
+last_updated_at: "2026-07-29T00:47:57Z"
 ```

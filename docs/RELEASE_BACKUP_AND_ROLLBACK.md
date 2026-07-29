@@ -1,6 +1,7 @@
 # Release Backup and Rollback
 
-Status: 0.4 formal-test procedure with retained v0.3 and Task 011 evidence
+Status: v0.4 source-release formal-test procedure with retained v0.3 and Task
+011 evidence
 Applies to: a user-selected BlueMinutes workspace
 Safety rule: preserve the newer workspace; restore into a distinct empty path
 
@@ -56,14 +57,14 @@ Do not treat a copy as a backup until the verifier prints
 
 The update policy remains manual. Automatic updates are unapproved.
 
-For the untagged 0.4.0 local formal-test development release set:
+For the exact-tag 0.4.0 local formal-test development release set:
 
 1. Run `script/verify_release_candidate.sh` against
    `dist/BlueMinutes-0.4.0-development/` in `development` mode.
 2. Confirm the schema-v2 `release-manifest.json` reports
    `classification: DEVELOPMENT`, `distribution_authorized: false`, version
-   `0.4.0`, build `4`, the expected exact clean Git head/tree, an empty
-   `source.git_tag`, and the reviewed ad-hoc signature boundary.
+   `0.4.0`, build `4`, the expected exact clean Git head/tree, exact annotated
+   `source.git_tag` value `v0.4.0`, and the reviewed ad-hoc signature boundary.
 3. Retain `release-manifest.json`, `source-files.sha256`, and the ZIP digest
    together with `BlueMinutes.app` and
    `BlueMinutes-0.4.0-development.zip`.
@@ -75,8 +76,9 @@ For the untagged 0.4.0 local formal-test development release set:
    update.
 
 The 0.4.0 development archive is ad-hoc signed and not notarized. It is
-approved only for local formal testing on the build Mac. No `v0.4.0` tag or
-GitHub Release is part of this procedure.
+approved only for local formal testing on the build Mac. The `v0.4.0` GitHub
+Release is source-only with zero maintainer-uploaded assets; this development
+archive is not attached to it.
 
 ### 0.4 application-support and credential boundary
 

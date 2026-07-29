@@ -22,6 +22,11 @@ attaches no application binary and states that boundary clearly.
 - For each substantial milestone, move those entries into a dated version and
   publish matching release notes after protected-`main` CI passes and the
   maintainer authorizes the exact release.
+- After `v0.4.0`, do not leave a completed large functional or architecture
+  round only on a topic branch: close it with a distinct Semantic Versioning
+  Release after the protected-`main` gates and exact release authorization
+  pass. Focused fixes may use a patch release or accumulate under
+  `Unreleased`.
 - Do not treat a source release as authorization for a signed app, installer,
   updater, deployment, or other binary distribution.
 
