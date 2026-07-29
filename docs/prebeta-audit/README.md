@@ -1,7 +1,8 @@
 # BlueMinutes 0.4.0 v4 Pre-Beta Audit
 
-Status: Local formal-software-test candidate ready; draft Pull Request review,
-merge, publication, and distribution gates remain open
+Status: Candidate audit complete; the exact protected-main source is promoted
+through the separately authorized source-only `v0.4.0` Release. Binary
+distribution gates remain open
 Candidate version: `0.4.0` build `4`
 Foundation rollback anchor: `b41ae589e40ce9811a64c389899bc9639f8188d2`
 Current functional base: `77a4deca11190587c557e081667fb6c0e64a0f4a`

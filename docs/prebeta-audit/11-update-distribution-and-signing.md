@@ -2,13 +2,12 @@
 
 ## Current truth
 
-BlueMinutes `v0.3.0` remains the latest source-only GitHub Release with zero
-maintainer-uploaded app assets. Application version `0.4.0` build `4` is the
-current local formal-test candidate, and the staging path produces only an
-ad-hoc-signed DEVELOPMENT bundle. No `v0.4.0` tag or GitHub Release is created
-by this phase. Developer ID, Team ID, hardened-runtime distribution signature,
-notarization/stapling, Gatekeeper, clean-machine installation, and public
-binary distribution are not closed.
+BlueMinutes `v0.4.0` is the source-only GitHub Release used as the formal
+software-testing baseline, with zero maintainer-uploaded app assets.
+Application version `0.4.0` build `4` still stages only an ad-hoc-signed
+DEVELOPMENT bundle. The source tag and Release do not close Developer ID, Team
+ID, hardened-runtime distribution signature, notarization/stapling,
+Gatekeeper, clean-machine installation, or public binary distribution.
 
 ADR-0002 selects an eventual independent Developer ID direction but keeps
 updates manual until the distribution path is proven.

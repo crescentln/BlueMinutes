@@ -1,19 +1,22 @@
-# BlueMinutes 0.4.0 — v4 Formal Software-Test Candidate
+# BlueMinutes v0.4.0 — Formal Software-Testing Baseline
 
-- Candidate prepared: 2026-07-28
+- Released: 2026-07-28
 - Application version: `0.4.0` (build `4`)
-- Source state: untagged branch and draft Pull Request candidate
-- Distribution scope: local ad-hoc DEVELOPMENT package for testing on the
-  build Mac only
+- Source state: protected `main`, annotated tag `v0.4.0`, and regular GitHub
+  source Release
+- Distribution scope: source code only; zero maintainer-uploaded assets. The
+  local ad-hoc DEVELOPMENT package remains separate and is retained only for
+  testing on the build Mac
 
 BlueMinutes 0.4.0 closes the bounded functional implementation round defined by
 the v4 pre-Beta brief. It preserves the existing native UI language while
 adding the routing, provider, lifecycle, transcript, diagnostics, and brand
 work needed to begin structured software testing.
 
-This is not a public-Beta distribution claim. The latest public GitHub source
-Release remains `v0.3.0`; this phase creates no `v0.4.0` tag, GitHub Release,
-uploaded binary, deployment, installation channel, or update feed.
+This is a source release and formal-testing baseline, not a public-Beta
+application distribution claim. The GitHub Release contains only
+GitHub-generated source archives. It includes no uploaded app bundle, installer,
+update payload, deployment, installation channel, or update feed.
 
 ## Functional highlights
 
@@ -87,8 +90,8 @@ The ignored local release set contains:
 - `source-files.sha256`
 - `release-manifest.json`
 
-The schema-v2 manifest binds version `0.4.0` build `4` to the exact clean Git
-head and tree, the absent optional exact tag, complete tracked-source inventory,
+The schema-v2 manifest binds version `0.4.0` build `4` to the exact clean
+annotated tag `v0.4.0`, Git head and tree, complete tracked-source inventory,
 resolved dependency digest, toolchain, app/archive digests, and signature
 classification. It records `classification: DEVELOPMENT` and
 `distribution_authorized: false`; `distribution` verification must reject this
@@ -150,8 +153,8 @@ silent fallback, or persistent outbound authorization.
   and clean-machine rollback as separate later gates.
 
 Full U1 visual redesign, production billing/licensing, website connection or
-deployment, a bundled Codex runtime, public binary distribution, and release
-publication remain outside this candidate.
+deployment, a bundled Codex runtime, and public binary distribution remain
+outside this release.
 
 See [CHANGELOG.md](../CHANGELOG.md), the
 [v4 pre-Beta audit](prebeta-audit/README.md), and

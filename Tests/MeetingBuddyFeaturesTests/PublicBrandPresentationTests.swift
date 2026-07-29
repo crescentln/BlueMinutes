@@ -107,9 +107,10 @@ struct PublicBrandPresentationTests {
         )
         #expect(
             readme.contains(
-                "the latest public source Release remains `v0.3.0`"
+                "source-only GitHub Release `v0.4.0`"
             )
         )
+        #expect(!readme.contains("latest public source Release remains `v0.3.0`"))
         #expect(
             normalizedReadme.contains(
                 "Every related capability remains disabled by default"
@@ -134,14 +135,15 @@ struct PublicBrandPresentationTests {
         let changelog = try source("CHANGELOG.md")
         #expect(
             changelog.contains(
-                "Target application candidate: `0.4.0` (build `4`)"
+                "## [0.4.0] - 2026-07-28"
             )
         )
         #expect(
             changelog.contains(
-                "The latest public source Release remains `v0.3.0`"
+                "The GitHub `v0.4.0` Release is source-only"
             )
         )
+        #expect(!changelog.contains("latest public source Release remains `v0.3.0`"))
         #expect(changelog.contains("## [0.3.0] - 2026-07-28"))
         #expect(changelog.contains("## [0.2.0] - 2026-07-23"))
         #expect(changelog.contains("## [0.1.0] - 2026-07-22"))
@@ -164,12 +166,24 @@ struct PublicBrandPresentationTests {
         )
         #expect(
             roadmap.contains(
-                "Current formal-test candidate: application version 0.4.0"
+                "Completed milestone: v0.4.0 formal-testing baseline"
             )
         )
         #expect(
             roadmap.contains(
-                "Prepared application version `0.4.0` build `4`"
+                "Published application version `0.4.0` build `4`"
+            )
+        )
+        #expect(
+            roadmap.contains(
+                "Close each future large functional or architecture round with a distinct"
+            )
+        )
+
+        let releaseChecklist = try source("docs/RELEASE_CHECKLIST.md")
+        #expect(
+            releaseChecklist.contains(
+                "After `v0.4.0`, do not leave a completed large functional or architecture"
             )
         )
 
@@ -186,6 +200,12 @@ struct PublicBrandPresentationTests {
             )
         )
         #expect(executionLedger.contains("candidate_build: \"4\""))
+        #expect(executionLedger.contains("version: \"v0.4.0\""))
+        #expect(
+            executionLedger.contains(
+                "status: \"authorized_pending_pr_62_merge_exact_new_main_gates_tag_and_release\""
+            )
+        )
         #expect(executionLedger.contains("current_task: \"v4-prebeta\""))
         #expect(
             executionLedger.contains(
@@ -209,12 +229,12 @@ struct PublicBrandPresentationTests {
             .joined(separator: " ")
         #expect(
             currentReleaseNotes.contains(
-                "# BlueMinutes 0.4.0 — v4 Formal Software-Test Candidate"
+                "# BlueMinutes v0.4.0 — Formal Software-Testing Baseline"
             )
         )
         #expect(
             currentReleaseNotes.contains(
-                "Source state: untagged branch and draft Pull Request candidate"
+                "Source state: protected `main`, annotated tag `v0.4.0`"
             )
         )
         #expect(
@@ -229,7 +249,7 @@ struct PublicBrandPresentationTests {
         )
         #expect(
             currentReleaseNotes.contains(
-                "The latest public GitHub source\nRelease remains `v0.3.0`"
+                "The GitHub Release contains only\nGitHub-generated source archives"
             )
         )
 

@@ -6,8 +6,11 @@ All notable project changes are documented here. The format follows
 
 ## [Unreleased]
 
-Target application candidate: `0.4.0` (build `4`). This is not yet a tagged
-GitHub Release.
+Notable changes after `v0.4.0` will be recorded here.
+
+## [0.4.0] - 2026-07-28
+
+Formal software-testing baseline for the v4 pre-Beta functional round.
 
 ### Added
 
@@ -79,13 +82,14 @@ GitHub Release.
   route requires macOS 26 and installed local assets; that support-policy gap
   remains a formal-test decision.
 
-### Candidate scope
+### Release scope
 
-- `BlueMinutes-0.4.0-development` is an ad-hoc, Hardened Runtime local package
-  for formal testing on the build Mac only.
-- This task does not create a `v0.4.0` tag or GitHub Release, attach a binary,
-  merge the Pull Request, deploy the website, notarize, install, or authorize
-  public distribution. The latest public source Release remains `v0.3.0`.
+- The GitHub `v0.4.0` Release is source-only with zero maintainer-uploaded
+  assets.
+- `BlueMinutes-0.4.0-development` is rebuilt from the exact annotated tag as an
+  ad-hoc, Hardened Runtime local package for formal testing on the build Mac
+  only. It is not notarized, installed, uploaded, attached to the GitHub
+  Release, or authorized for public binary distribution.
 
 ## [0.3.0] - 2026-07-28
 
@@ -272,7 +276,8 @@ Internal validation milestone only; no Git tag or GitHub Release was created.
 - Installed Apple-model tests remain opt-in and synthetic-only.
 - The internal alpha is not authorized for public binary distribution.
 
-[Unreleased]: https://github.com/crescentln/BlueMinutes/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/crescentln/BlueMinutes/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/crescentln/BlueMinutes/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/crescentln/BlueMinutes/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/crescentln/BlueMinutes/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/crescentln/BlueMinutes/releases/tag/v0.1.0
